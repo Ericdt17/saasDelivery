@@ -1,0 +1,40 @@
+{
+  "name": "wwebjs-bot",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "api": "node src/api/server.js",
+    "api:dev": "nodemon src/api/server.js",
+    "seed": "node src/api/seed-deliveries.js",
+    "insert-deliveries": "node src/api/insert-deliveries.js",
+    "view": "node src/view-deliveries.js",
+    "view:all": "node src/view-all-deliveries.js",
+    "report": "node src/daily-report.js",
+    "report:date": "node src/daily-report.js --date",
+    "report:send": "node src/send-report.js",
+    "send": "node src/send-message.js",
+    "test-send": "node src/test-send.js",
+    "list-groups": "node src/list-groups.js",
+    "test": "node src/test/scenarios.test.js",
+    "test:db": "node src/test-db-connection.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "better-sqlite3": "^12.5.0",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^5.2.1",
+    "pg": "^8.11.3",
+    "qrcode": "^1.5.4",
+    "qrcode-terminal": "^0.12.0",
+    "whatsapp-web.js": "^1.34.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.11"
+  }
+}

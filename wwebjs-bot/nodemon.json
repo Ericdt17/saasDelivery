@@ -1,0 +1,11 @@
+{
+  "watch": ["src"],
+  "ext": "js,json",
+  "ignore": ["node_modules", "auth", "data", "*.log", "qr-code.png"],
+  "delay": 1000
+}
+
+
+
+
+

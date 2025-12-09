@@ -1,0 +1,48 @@
+/**
+ * Stats API Service
+ * Functions for interacting with the stats API endpoints
+ */
+
+import { apiGet } from './api';
+import { API_ENDPOINTS } from '@/lib/api-config';
+import type { BackendStats, FrontendStats } from '@/types/stats';
+
+// Re-export types for backward compatibility
+export type { BackendStats, FrontendStats };
+
+/**
+ * Get daily statistics
+ * @param date - Optional date string (YYYY-MM-DD format). If not provided, returns today's stats
+ */
+export async function getDailyStats(date?: string): Promise<FrontendStats> {
+  const params = date ? { date } : undefined;
+  const response = await apiGet<BackendStats>(API_ENDPOINTS.STATS_DAILY, params);
+  
+  if (!response.data) {
+    throw new Error('No stats data returned from API');
+  }
+
+  const stats = response.data;
+  
+  // Calculate total amount due (collected + remaining)
+  const montantTotal = (stats.total_collected || 0) + (stats.total_remaining || 0);
+  
+  // For expeditions, we'll need to count deliveries with carrier field
+  // Since the stats endpoint doesn't provide this, we'll set it to 0 for now
+  // This can be enhanced later by making an additional API call if needed
+  const expeditions = 0;
+  
+  return {
+    totalLivraisons: stats.total || 0,
+    livreesReussies: stats.delivered || 0,
+    echecs: stats.failed || 0,
+    enCours: stats.pending || 0,
+    pickups: stats.pickup || 0,
+    expeditions: expeditions,
+    montantTotal: montantTotal,
+    montantEncaisse: stats.total_collected || 0,
+    montantRestant: stats.total_remaining || 0,
+    chiffreAffaires: stats.total_collected || 0, // Same as montantEncaisse
+  };
+}
+

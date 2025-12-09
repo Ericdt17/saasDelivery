@@ -1,0 +1,22 @@
+# Dependencies
+node_modules/
+
+# Environment variables
+.env
+
+# WhatsApp session/auth data
+auth/
+
+# Database
+data/
+
+# Logs
+*.log
+
+# QR Code images
+qr-code.png
+
+# OS files
+.DS_Store
+Thumbs.db
+
