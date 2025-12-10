@@ -18,19 +18,19 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { 
-  Building2, 
-  Upload, 
-  Users, 
-  Clock, 
-  Download, 
-  Key, 
-  Bell, 
+import {
+  Building2,
+  Upload,
+  Users,
+  Clock,
+  Download,
+  Key,
+  Bell,
   Shield,
   Save,
   Trash2,
   Plus,
-  Truck
+  Truck,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 
@@ -46,19 +46,26 @@ const Parametres = () => {
     });
   };
 
-  const mockUsers = [
-    { id: 1, name: "Marie Kouassi", role: "Administrateur", email: "marie@livrexpress.ci" },
-    { id: 2, name: "Jean Konan", role: "Gestionnaire", email: "jean@livrexpress.ci" },
-    { id: 3, name: "Aya Diallo", role: "Livreur", email: "aya@livrexpress.ci" },
-    { id: 4, name: "Konan Brou", role: "Livreur", email: "konan@livrexpress.ci" },
-  ];
+  // TODO: Replace with API call to fetch users
+  // const { data: users, isLoading } = useQuery({
+  //   queryKey: ['users'],
+  //   queryFn: () => getUsers(),
+  // });
+  const users: Array<{
+    id: number;
+    name: string;
+    role: string;
+    email: string;
+  }> = [];
 
   return (
     <div className="space-y-6 pb-8">
       {/* Header */}
       <div>
         <h1 className="text-2xl md:text-3xl font-bold">Paramètres</h1>
-        <p className="text-muted-foreground">Configurez les paramètres de votre agence</p>
+        <p className="text-muted-foreground">
+          Configurez les paramètres de votre agence
+        </p>
       </div>
 
       <div className="grid lg:grid-cols-3 gap-6">
@@ -78,7 +85,7 @@ const Parametres = () => {
             <CardContent className="space-y-4">
               <div>
                 <label className="text-sm font-medium">Nom de l'agence</label>
-                <Input 
+                <Input
                   value={agencyName}
                   onChange={(e) => setAgencyName(e.target.value)}
                   className="mt-1"
@@ -103,7 +110,7 @@ const Parametres = () => {
               </div>
               <div>
                 <label className="text-sm font-medium">Adresse</label>
-                <Textarea 
+                <Textarea
                   placeholder="Adresse complète de l'agence"
                   className="mt-1"
                   defaultValue="Cocody, Riviera Faya, Abidjan, Côte d'Ivoire"
@@ -116,7 +123,10 @@ const Parametres = () => {
                 </div>
                 <div>
                   <label className="text-sm font-medium">Email</label>
-                  <Input defaultValue="contact@livrexpress.ci" className="mt-1" />
+                  <Input
+                    defaultValue="contact@livrexpress.ci"
+                    className="mt-1"
+                  />
                 </div>
               </div>
             </CardContent>
@@ -142,40 +152,60 @@ const Parametres = () => {
               </div>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3">
-                {mockUsers.map((user) => (
-                  <div 
-                    key={user.id}
-                    className="flex items-center justify-between p-3 rounded-lg bg-muted/50"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                        <span className="font-semibold text-primary">
-                          {user.name.split(' ').map(n => n[0]).join('')}
+              {users.length === 0 ? (
+                <div className="text-center py-8">
+                  <Users className="w-12 h-12 mx-auto text-muted-foreground mb-3 opacity-50" />
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Aucun utilisateur configuré
+                  </p>
+                  <Button size="sm" variant="outline" className="gap-2">
+                    <Plus className="w-4 h-4" />
+                    Ajouter le premier utilisateur
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {users.map((user) => (
+                    <div
+                      key={user.id}
+                      className="flex items-center justify-between p-3 rounded-lg bg-muted/50"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                          <span className="font-semibold text-primary">
+                            {user.name
+                              .split(" ")
+                              .map((n) => n[0])
+                              .join("")}
+                          </span>
+                        </div>
+                        <div>
+                          <p className="font-medium">{user.name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {user.email}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`text-xs px-2 py-1 rounded-full ${
+                            user.role === "Administrateur"
+                              ? "bg-primary/15 text-primary"
+                              : user.role === "Gestionnaire"
+                                ? "bg-info/15 text-info"
+                                : "bg-muted text-muted-foreground"
+                          }`}
+                        >
+                          {user.role}
                         </span>
-                      </div>
-                      <div>
-                        <p className="font-medium">{user.name}</p>
-                        <p className="text-xs text-muted-foreground">{user.email}</p>
+                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                          <Trash2 className="w-4 h-4 text-muted-foreground" />
+                        </Button>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className={`text-xs px-2 py-1 rounded-full ${
-                        user.role === "Administrateur" 
-                          ? "bg-primary/15 text-primary" 
-                          : user.role === "Gestionnaire"
-                          ? "bg-info/15 text-info"
-                          : "bg-muted text-muted-foreground"
-                      }`}>
-                        {user.role}
-                      </span>
-                      <Button variant="ghost" size="icon" className="h-8 w-8">
-                        <Trash2 className="w-4 h-4 text-muted-foreground" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -198,7 +228,10 @@ const Parametres = () => {
                     Recevez un rapport quotidien par email
                   </p>
                 </div>
-                <Switch checked={notificationsEnabled} onCheckedChange={setNotificationsEnabled} />
+                <Switch
+                  checked={notificationsEnabled}
+                  onCheckedChange={setNotificationsEnabled}
+                />
               </div>
               <Separator />
               <div className="grid sm:grid-cols-2 gap-4">

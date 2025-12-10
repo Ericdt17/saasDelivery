@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { StatCard } from "@/components/ui/stat-card";
@@ -22,81 +22,55 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts";
-import { Search, Wallet, ArrowDownRight, CheckCircle, Clock, TrendingUp, AlertCircle, RefreshCw, Calendar } from "lucide-react";
+import {
+  PieChart,
+  Pie,
+  Cell,
+  ResponsiveContainer,
+  Legend,
+  Tooltip,
+} from "recharts";
+import {
+  Search,
+  Wallet,
+  ArrowDownRight,
+  CheckCircle,
+  Clock,
+  TrendingUp,
+  AlertCircle,
+  RefreshCw,
+  Calendar,
+} from "lucide-react";
 import { getDeliveries } from "@/services/deliveries";
 import { getDailyStats } from "@/services/stats";
 import { toast } from "sonner";
-
-// Helper to get date range for period
-const getDateRange = (period: "jour" | "semaine" | "mois") => {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  
-  switch (period) {
-    case "jour":
-      return {
-        startDate: today.toISOString().split('T')[0],
-        endDate: today.toISOString().split('T')[0],
-      };
-    case "semaine":
-      const weekStart = new Date(today);
-      weekStart.setDate(today.getDate() - today.getDay()); // Start of week (Sunday)
-      return {
-        startDate: weekStart.toISOString().split('T')[0],
-        endDate: today.toISOString().split('T')[0],
-      };
-    case "mois":
-      const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-      return {
-        startDate: monthStart.toISOString().split('T')[0],
-        endDate: today.toISOString().split('T')[0],
-      };
-  }
-};
-
-// Calculate stats from deliveries
-const calculateStatsFromDeliveries = (deliveries: any[]) => {
-  const encaisse = deliveries.reduce((sum, d) => sum + (d.montant_encaisse || 0), 0);
-  const restant = deliveries.reduce((sum, d) => sum + (d.restant || 0), 0);
-  
-  return {
-    totalLivraisons: deliveries.length,
-    livreesReussies: deliveries.filter(d => d.statut === "livré").length,
-    echecs: deliveries.filter(d => d.statut === "échec").length,
-    enCours: deliveries.filter(d => d.statut === "en_cours").length,
-    pickups: deliveries.filter(d => d.statut === "pickup").length,
-    expeditions: deliveries.filter(d => d.statut === "expedition").length,
-    montantEncaisse: encaisse,
-    montantRestant: restant,
-    chiffreAffaires: encaisse + restant,
-  };
-};
+import { getDateRangeLocal, formatDateLocal } from "@/lib/date-utils";
+import { calculateStatsFromDeliveries } from "@/lib/stats-utils";
 
 const formatCurrency = (value: number) => {
-  return new Intl.NumberFormat('fr-FR').format(value) + " FCFA";
+  return new Intl.NumberFormat("fr-FR").format(value) + " FCFA";
 };
 
 const formatDate = (dateString: string) => {
-  return new Date(dateString).toLocaleDateString('fr-FR', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
+  return new Date(dateString).toLocaleDateString("fr-FR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
   });
 };
 
 const typeLabels = {
   partiel: "Partiel",
   complet: "Complet",
-  en_attente: "En attente"
+  en_attente: "En attente",
 };
 
 const typeBadgeStyles = {
   partiel: "bg-warning/15 text-warning",
   complet: "bg-success/15 text-success",
-  en_attente: "bg-muted text-muted-foreground"
+  en_attente: "bg-muted text-muted-foreground",
 };
 
 // Payment type derived from delivery payment status
@@ -120,54 +94,74 @@ const Paiements = () => {
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [period, setPeriod] = useState<"jour" | "semaine" | "mois">("jour");
-  
-  const dateRange = useMemo(() => getDateRange(period), [period]);
+
+  const dateRange = useMemo(() => getDateRangeLocal(period), [period]);
 
   // Fetch stats for today (for day view)
-  const { 
-    data: dailyStats, 
+  const {
+    data: dailyStats,
     isLoading: isLoadingDailyStats,
     isError: isErrorDailyStats,
     error: dailyStatsError,
-    refetch: refetchDailyStats 
+    refetch: refetchDailyStats,
   } = useQuery({
-    queryKey: ['dailyStats', dateRange.startDate],
+    queryKey: ["dailyStats", dateRange.startDate],
     queryFn: () => getDailyStats(dateRange.startDate),
     enabled: period === "jour",
     retry: 2,
     refetchOnWindowFocus: false,
-    onError: (error) => {
-      toast.error('Erreur lors du chargement des statistiques', {
-        description: error instanceof Error ? error.message : 'Une erreur est survenue'
-      });
-    }
   });
 
+  // Handle errors with useEffect
+  useEffect(() => {
+    if (isErrorDailyStats && dailyStatsError) {
+      toast.error("Erreur lors du chargement des statistiques", {
+        description:
+          dailyStatsError instanceof Error
+            ? dailyStatsError.message
+            : "Une erreur est survenue",
+      });
+    }
+  }, [isErrorDailyStats, dailyStatsError]);
+
   // Fetch deliveries for all periods (needed for payments list)
-  const { 
-    data: deliveriesData, 
+  const {
+    data: deliveriesData,
     isLoading: isLoadingDeliveries,
     isError: isErrorDeliveries,
     error: deliveriesError,
-    refetch: refetchDeliveries 
+    refetch: refetchDeliveries,
   } = useQuery({
-    queryKey: ['deliveries', 'payments', dateRange.startDate, dateRange.endDate],
-    queryFn: () => getDeliveries({ 
-      page: 1, 
-      limit: 1000, 
-      startDate: dateRange.startDate,
-      endDate: dateRange.endDate,
-      sortBy: 'created_at', 
-      sortOrder: 'DESC' 
-    }),
+    queryKey: [
+      "deliveries",
+      "payments",
+      dateRange.startDate,
+      dateRange.endDate,
+    ],
+    queryFn: () =>
+      getDeliveries({
+        page: 1,
+        limit: 1000,
+        startDate: dateRange.startDate,
+        endDate: dateRange.endDate,
+        sortBy: "created_at",
+        sortOrder: "DESC",
+      }),
     retry: 2,
     refetchOnWindowFocus: false,
-    onError: (error) => {
-      toast.error('Erreur lors du chargement des livraisons', {
-        description: error instanceof Error ? error.message : 'Une erreur est survenue'
+  });
+
+  // Handle errors with useEffect
+  useEffect(() => {
+    if (isErrorDeliveries && deliveriesError) {
+      toast.error("Erreur lors du chargement des livraisons", {
+        description:
+          deliveriesError instanceof Error
+            ? deliveriesError.message
+            : "Une erreur est survenue",
       });
     }
-  });
+  }, [isErrorDeliveries, deliveriesError]);
 
   // Calculate current stats based on period
   const stats = useMemo(() => {
@@ -198,33 +192,36 @@ const Paiements = () => {
         montantRestant: 0,
         chiffreAffaires: 0,
       };
-    } else if (period !== "jour" && deliveriesData) {
-      return calculateStatsFromDeliveries(deliveriesData.deliveries);
+    } else {
+      // For semaine/mois, use deliveries data
+      if (deliveriesData?.deliveries) {
+        return calculateStatsFromDeliveries(deliveriesData.deliveries);
+      }
+      return {
+        totalLivraisons: 0,
+        livreesReussies: 0,
+        echecs: 0,
+        enCours: 0,
+        pickups: 0,
+        expeditions: 0,
+        montantEncaisse: 0,
+        montantRestant: 0,
+        chiffreAffaires: 0,
+      };
     }
-    return {
-      totalLivraisons: 0,
-      livreesReussies: 0,
-      echecs: 0,
-      enCours: 0,
-      pickups: 0,
-      expeditions: 0,
-      montantEncaisse: 0,
-      montantRestant: 0,
-      chiffreAffaires: 0,
-    };
   }, [period, dailyStats, deliveriesData]);
 
-  const isLoading = (period === "jour" ? isLoadingDailyStats : isLoadingDeliveries);
-  const isError = (period === "jour" ? isErrorDailyStats : isErrorDeliveries);
-  const error = (period === "jour" ? dailyStatsError : deliveriesError);
-  const refetch = (period === "jour" ? refetchDailyStats : refetchDeliveries);
+  const isLoading =
+    period === "jour" ? isLoadingDailyStats : isLoadingDeliveries;
+  const isError = period === "jour" ? isErrorDailyStats : isErrorDeliveries;
+  const error = period === "jour" ? dailyStatsError : deliveriesError;
+  const refetch = period === "jour" ? refetchDailyStats : refetchDeliveries;
 
   const periodLabels = {
     jour: "Aujourd'hui",
     semaine: "Cette semaine",
-    mois: "Ce mois"
+    mois: "Ce mois",
   };
-
 
   // Derive payment data from deliveries for current period
   const payments: PaymentData[] = useMemo(() => {
@@ -234,45 +231,50 @@ const Paiements = () => {
         return [];
       }
     }
-    
+
     if (!deliveriesData?.deliveries) return [];
-    
+
     // Filter deliveries by the selected period date range (strictly)
-    const deliveriesToUse = deliveriesData.deliveries.filter(d => {
+    const deliveriesToUse = deliveriesData.deliveries.filter((d) => {
       if (!d.date_creation) return false;
-      
+
       // Parse date and normalize to YYYY-MM-DD
       let deliveryDate: Date;
-      if (typeof d.date_creation === 'string') {
+      if (typeof d.date_creation === "string") {
         deliveryDate = new Date(d.date_creation);
       } else {
         deliveryDate = d.date_creation;
       }
-      
+
       if (isNaN(deliveryDate.getTime())) return false;
-      
+
       deliveryDate.setHours(0, 0, 0, 0);
-      const deliveryDateStr = deliveryDate.toISOString().split('T')[0];
-      
+      const deliveryDateStr = formatDateLocal(deliveryDate);
+
       // For day view, must match exactly
       if (period === "jour") {
         return deliveryDateStr === dateRange.startDate;
       }
-      
+
       // For week/month, use range
-      return deliveryDateStr >= dateRange.startDate && deliveryDateStr <= dateRange.endDate;
+      return (
+        deliveryDateStr >= dateRange.startDate &&
+        deliveryDateStr <= dateRange.endDate
+      );
     });
-    
+
     if (!deliveriesToUse || deliveriesToUse.length === 0) return [];
-    
+
     return deliveriesToUse
-      .filter(d => (d.montant_encaisse || 0) > 0) // Only deliveries with payments
-      .map(d => {
-        const type: PaymentType = 
-          (d.restant || 0) === 0 ? "complet" : 
-          (d.montant_encaisse || 0) > 0 ? "partiel" : 
-          "en_attente";
-        
+      .filter((d) => (d.montant_encaisse || 0) > 0) // Only deliveries with payments
+      .map((d) => {
+        const type: PaymentType =
+          (d.restant || 0) === 0
+            ? "complet"
+            : (d.montant_encaisse || 0) > 0
+              ? "partiel"
+              : "en_attente";
+
         return {
           id: d.id,
           livraison_id: d.id,
@@ -292,7 +294,7 @@ const Paiements = () => {
   // Filter payments
   const filteredPaiements = useMemo(() => {
     return payments.filter((p) => {
-      const matchSearch = 
+      const matchSearch =
         p.telephone.toLowerCase().includes(search.toLowerCase()) ||
         p.mode_paiement.toLowerCase().includes(search.toLowerCase());
       const matchType = typeFilter === "all" || p.type === typeFilter;
@@ -304,29 +306,29 @@ const Paiements = () => {
   const totalPartiels = useMemo(() => {
     if (!payments || payments.length === 0) return 0;
     return payments
-      .filter(p => p.type === "partiel")
+      .filter((p) => p.type === "partiel")
       .reduce((acc, p) => acc + (p.montant || 0), 0);
-  }, [payments, period, dateRange]);
+  }, [payments]);
 
   const totalComplets = useMemo(() => {
     if (!payments || payments.length === 0) return 0;
     return payments
-      .filter(p => p.type === "complet")
+      .filter((p) => p.type === "complet")
       .reduce((acc, p) => acc + (p.montant || 0), 0);
-  }, [payments, period, dateRange]);
+  }, [payments]);
 
   const pieData = useMemo(() => {
     if (!stats) return [];
-    
+
     const encaisse = stats.montantEncaisse || 0;
     const restant = stats.montantRestant || 0;
-    
+
     // Only show pie chart if there's data
     if (encaisse === 0 && restant === 0) return [];
-    
+
     return [
       { name: "Encaissé", value: encaisse, color: "hsl(var(--success))" },
-      { name: "Reste", value: restant, color: "hsl(var(--warning))" }
+      { name: "Reste", value: restant, color: "hsl(var(--warning))" },
     ];
   }, [stats]);
 
@@ -357,22 +359,26 @@ const Paiements = () => {
       <div className="space-y-6 pb-8">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold">Paiements</h1>
-          <p className="text-muted-foreground">Suivi des encaissements et paiements</p>
+          <p className="text-muted-foreground">
+            Suivi des encaissements et paiements
+          </p>
         </div>
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
           <AlertTitle>Erreur de chargement</AlertTitle>
           <AlertDescription className="mt-2">
             <p className="mb-3">
-              {statsError instanceof Error ? statsError.message : 
-               deliveriesError instanceof Error ? deliveriesError.message :
-               'Impossible de charger les données'}
+              {dailyStatsError instanceof Error
+                ? dailyStatsError.message
+                : deliveriesError instanceof Error
+                  ? deliveriesError.message
+                  : "Impossible de charger les données"}
             </p>
-            <Button 
-              variant="outline" 
-              size="sm" 
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => {
-                refetchStats();
+                refetchDailyStats();
                 refetchDeliveries();
               }}
               className="gap-2"
@@ -391,11 +397,17 @@ const Paiements = () => {
       {/* Header */}
       <div>
         <h1 className="text-2xl md:text-3xl font-bold">Paiements</h1>
-        <p className="text-muted-foreground">Suivi des encaissements et paiements — {periodLabels[period]}</p>
+        <p className="text-muted-foreground">
+          Suivi des encaissements et paiements — {periodLabels[period]}
+        </p>
       </div>
 
       {/* Period Tabs */}
-      <Tabs value={period} onValueChange={(v) => setPeriod(v as typeof period)} className="w-full">
+      <Tabs
+        value={period}
+        onValueChange={(v) => setPeriod(v as typeof period)}
+        className="w-full"
+      >
         <TabsList className="grid w-full max-w-md grid-cols-3">
           <TabsTrigger value="jour" className="gap-2">
             <Calendar className="w-4 h-4" />
@@ -434,11 +446,13 @@ const Paiements = () => {
               <AlertTitle>Erreur de chargement</AlertTitle>
               <AlertDescription className="mt-2">
                 <p className="mb-3">
-                  {error instanceof Error ? error.message : 'Impossible de charger les données'}
+                  {error instanceof Error
+                    ? error.message
+                    : "Impossible de charger les données"}
                 </p>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
+                <Button
+                  variant="outline"
+                  size="sm"
                   onClick={() => refetch()}
                   className="gap-2"
                 >
@@ -484,8 +498,10 @@ const Paiements = () => {
               <div className="grid lg:grid-cols-3 gap-6">
                 {/* Pie Chart */}
                 <div className="stat-card">
-                  <h3 className="text-lg font-semibold mb-4">Répartition — {periodLabels[period]}</h3>
-                  {pieData.length > 0 && pieData.some(d => d.value > 0) ? (
+                  <h3 className="text-lg font-semibold mb-4">
+                    Répartition — {periodLabels[period]}
+                  </h3>
+                  {pieData.length > 0 && pieData.some((d) => d.value > 0) ? (
                     <>
                       <div className="h-[250px]">
                         <ResponsiveContainer width="100%" height="100%">
@@ -500,20 +516,27 @@ const Paiements = () => {
                               dataKey="value"
                             >
                               {pieData.map((entry, index) => (
-                                <Cell key={`cell-${index}`} fill={entry.color} />
+                                <Cell
+                                  key={`cell-${index}`}
+                                  fill={entry.color}
+                                />
                               ))}
                             </Pie>
-                            <Tooltip 
-                              formatter={(value: number) => formatCurrency(value)}
-                              contentStyle={{ 
-                                backgroundColor: "hsl(var(--card))", 
+                            <Tooltip
+                              formatter={(value: number) =>
+                                formatCurrency(value)
+                              }
+                              contentStyle={{
+                                backgroundColor: "hsl(var(--card))",
                                 border: "1px solid hsl(var(--border))",
-                                borderRadius: "8px"
+                                borderRadius: "8px",
                               }}
                             />
-                            <Legend 
+                            <Legend
                               verticalAlign="bottom"
-                              formatter={(value) => <span className="text-sm">{value}</span>}
+                              formatter={(value) => (
+                                <span className="text-sm">{value}</span>
+                              )}
                             />
                           </PieChart>
                         </ResponsiveContainer>
@@ -521,11 +544,21 @@ const Paiements = () => {
                       {stats && (
                         <div className="mt-4 p-3 rounded-lg bg-muted/50">
                           <div className="flex items-center justify-between">
-                            <span className="text-sm text-muted-foreground">Taux d'encaissement</span>
+                            <span className="text-sm text-muted-foreground">
+                              Taux d'encaissement
+                            </span>
                             <span className="font-bold text-primary">
-                              {(stats.montantEncaisse || 0) + (stats.montantRestant || 0) > 0
-                                ? Math.round(((stats.montantEncaisse || 0) / ((stats.montantEncaisse || 0) + (stats.montantRestant || 0))) * 100)
-                                : 0}%
+                              {(stats.montantEncaisse || 0) +
+                                (stats.montantRestant || 0) >
+                              0
+                                ? Math.round(
+                                    ((stats.montantEncaisse || 0) /
+                                      ((stats.montantEncaisse || 0) +
+                                        (stats.montantRestant || 0))) *
+                                      100
+                                  )
+                                : 0}
+                              %
                             </span>
                           </div>
                         </div>
@@ -541,7 +574,9 @@ const Paiements = () => {
                 {/* Payments Table */}
                 <div className="lg:col-span-2 stat-card overflow-hidden p-0">
                   <div className="p-4 border-b border-border">
-                    <h3 className="text-lg font-semibold mb-4">Liste des paiements</h3>
+                    <h3 className="text-lg font-semibold mb-4">
+                      Liste des paiements
+                    </h3>
                     <div className="flex flex-col sm:flex-row gap-3">
                       <div className="relative flex-1">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -569,8 +604,12 @@ const Paiements = () => {
                     <Table>
                       <TableHeader>
                         <TableRow className="bg-muted/50">
-                          <TableHead className="font-semibold">Client</TableHead>
-                          <TableHead className="font-semibold text-right">Montant</TableHead>
+                          <TableHead className="font-semibold">
+                            Client
+                          </TableHead>
+                          <TableHead className="font-semibold text-right">
+                            Montant
+                          </TableHead>
                           <TableHead className="font-semibold">Mode</TableHead>
                           <TableHead className="font-semibold">Type</TableHead>
                           <TableHead className="font-semibold">Date</TableHead>
@@ -579,16 +618,21 @@ const Paiements = () => {
                       <TableBody>
                         {filteredPaiements.length === 0 ? (
                           <TableRow>
-                            <TableCell colSpan={5} className="p-8 text-center text-muted-foreground">
+                            <TableCell
+                              colSpan={5}
+                              className="p-8 text-center text-muted-foreground"
+                            >
                               Aucun paiement trouvé
                             </TableCell>
                           </TableRow>
                         ) : (
                           filteredPaiements.map((paiement) => (
-                            <TableRow 
-                              key={paiement.id} 
+                            <TableRow
+                              key={paiement.id}
                               className="hover:bg-muted/50 cursor-pointer"
-                              onClick={() => navigate(`/livraisons/${paiement.livraison_id}`)}
+                              onClick={() =>
+                                navigate(`/livraisons/${paiement.livraison_id}`)
+                              }
                             >
                               <TableCell className="font-medium">
                                 {paiement.telephone}
@@ -598,7 +642,9 @@ const Paiements = () => {
                               </TableCell>
                               <TableCell>{paiement.mode_paiement}</TableCell>
                               <TableCell>
-                                <span className={`status-badge ${typeBadgeStyles[paiement.type]}`}>
+                                <span
+                                  className={`status-badge ${typeBadgeStyles[paiement.type]}`}
+                                >
                                   {typeLabels[paiement.type]}
                                 </span>
                               </TableCell>

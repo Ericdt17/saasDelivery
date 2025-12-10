@@ -3,8 +3,8 @@
  * Functions for interacting with the deliveries API endpoints
  */
 
-import { apiGet, apiPost, apiPut, ApiResponse, PaginationInfo } from './api';
-import { API_ENDPOINTS } from '@/lib/api-config';
+import { apiGet, apiPost, apiPut, ApiResponse, PaginationInfo } from "./api";
+import { API_ENDPOINTS } from "@/lib/api-config";
 import {
   transformDeliveryToFrontend,
   transformDeliveryToBackend,
@@ -15,7 +15,7 @@ import {
   type FrontendDelivery,
   type BackendHistory,
   type FrontendHistory,
-} from '@/lib/data-transform';
+} from "@/lib/data-transform";
 
 // Query parameters for getting deliveries
 export interface GetDeliveriesParams {
@@ -27,7 +27,7 @@ export interface GetDeliveriesParams {
   startDate?: string;
   endDate?: string;
   sortBy?: string;
-  sortOrder?: 'ASC' | 'DESC';
+  sortOrder?: "ASC" | "DESC";
 }
 
 // Response type for getDeliveries
@@ -57,10 +57,13 @@ export interface UpdateDeliveryRequest extends Partial<CreateDeliveryRequest> {}
 export async function getDeliveries(
   params?: GetDeliveriesParams
 ): Promise<GetDeliveriesResponse> {
-  const response = await apiGet<BackendDelivery[]>(API_ENDPOINTS.DELIVERIES, params);
-  
+  const response = await apiGet<BackendDelivery[]>(
+    API_ENDPOINTS.DELIVERIES,
+    params
+  );
+
   if (!response.data) {
-    throw new Error('No data returned from API');
+    throw new Error("No data returned from API");
   }
 
   const deliveries = transformDeliveriesToFrontend(response.data);
@@ -80,11 +83,15 @@ export async function getDeliveries(
 /**
  * Get a single delivery by ID
  */
-export async function getDeliveryById(id: number | string): Promise<FrontendDelivery> {
-  const response = await apiGet<BackendDelivery>(API_ENDPOINTS.DELIVERY_BY_ID(id));
-  
+export async function getDeliveryById(
+  id: number | string
+): Promise<FrontendDelivery> {
+  const response = await apiGet<BackendDelivery>(
+    API_ENDPOINTS.DELIVERY_BY_ID(id)
+  );
+
   if (!response.data) {
-    throw new Error('Delivery not found');
+    throw new Error("Delivery not found");
   }
 
   return transformDeliveryToFrontend(response.data);
@@ -96,10 +103,13 @@ export async function getDeliveryById(id: number | string): Promise<FrontendDeli
 export async function createDelivery(
   data: CreateDeliveryRequest
 ): Promise<FrontendDelivery> {
-  const response = await apiPost<BackendDelivery>(API_ENDPOINTS.DELIVERIES, data);
-  
+  const response = await apiPost<BackendDelivery>(
+    API_ENDPOINTS.DELIVERIES,
+    data
+  );
+
   if (!response.data) {
-    throw new Error('Failed to create delivery');
+    throw new Error("Failed to create delivery");
   }
 
   return transformDeliveryToFrontend(response.data);
@@ -116,9 +126,9 @@ export async function updateDelivery(
     API_ENDPOINTS.DELIVERY_BY_ID(id),
     data
   );
-  
+
   if (!response.data) {
-    throw new Error('Failed to update delivery');
+    throw new Error("Failed to update delivery");
   }
 
   return transformDeliveryToFrontend(response.data);
@@ -130,8 +140,10 @@ export async function updateDelivery(
 export async function getDeliveryHistory(
   id: number | string
 ): Promise<FrontendHistory[]> {
-  const response = await apiGet<BackendHistory[]>(API_ENDPOINTS.DELIVERY_HISTORY(id));
-  
+  const response = await apiGet<BackendHistory[]>(
+    API_ENDPOINTS.DELIVERY_HISTORY(id)
+  );
+
   if (!response.data) {
     return [];
   }
@@ -149,7 +161,11 @@ export async function createDeliveriesBulk(
   failed: number;
   results: {
     success: Array<{ index: number; id: number; data: FrontendDelivery }>;
-    failed: Array<{ index: number; data: CreateDeliveryRequest; error: string }>;
+    failed: Array<{
+      index: number;
+      data: CreateDeliveryRequest;
+      error: string;
+    }>;
   };
 }> {
   const response = await apiPost<{
@@ -157,12 +173,16 @@ export async function createDeliveriesBulk(
     failed: number;
     results: {
       success: Array<{ index: number; id: number; data: BackendDelivery }>;
-      failed: Array<{ index: number; data: CreateDeliveryRequest; error: string }>;
+      failed: Array<{
+        index: number;
+        data: CreateDeliveryRequest;
+        error: string;
+      }>;
     };
   }>(API_ENDPOINTS.DELIVERIES_BULK, { deliveries });
 
   if (!response.data) {
-    throw new Error('Failed to create deliveries');
+    throw new Error("Failed to create deliveries");
   }
 
   // Transform successful deliveries
@@ -181,5 +201,3 @@ export async function createDeliveriesBulk(
     },
   };
 }
-
-

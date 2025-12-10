@@ -14,7 +14,7 @@ export type {
   BackendStatus,
   ModificationType,
   FrontendModification,
-} from '@/types/delivery';
+} from "@/types/delivery";
 
 // Import types for use in this file
 import type {
@@ -23,21 +23,22 @@ import type {
   FrontendDelivery,
   FrontendHistory,
   StatutLivraison,
-} from '@/types/delivery';
+} from "@/types/delivery";
 
 /**
  * Map backend status to frontend status
  */
 function mapStatusToFrontend(backendStatus: string): StatutLivraison {
   const statusMap: Record<string, StatutLivraison> = {
-    'pending': 'en_cours',
-    'delivered': 'livré',
-    'failed': 'échec',
-    'pickup': 'pickup',
-    'expedition': 'expedition',
+    pending: "en_cours",
+    delivered: "livré",
+    failed: "échec",
+    pickup: "pickup",
+    expedition: "expedition",
+    cancelled: "annulé",
   };
-  
-  return statusMap[backendStatus.toLowerCase()] || 'en_cours';
+
+  return statusMap[backendStatus.toLowerCase()] || "en_cours";
 }
 
 /**
@@ -45,14 +46,15 @@ function mapStatusToFrontend(backendStatus: string): StatutLivraison {
  */
 export function mapStatusToBackend(frontendStatus: StatutLivraison): string {
   const statusMap: Record<StatutLivraison, string> = {
-    'en_cours': 'pending',
-    'livré': 'delivered',
-    'échec': 'failed',
-    'pickup': 'pickup',
-    'expedition': 'expedition',
+    en_cours: "pending",
+    livré: "delivered",
+    échec: "failed",
+    pickup: "pickup",
+    expedition: "expedition",
+    annulé: "cancelled",
   };
-  
-  return statusMap[frontendStatus] || 'pending';
+
+  return statusMap[frontendStatus] || "pending";
 }
 
 /**
@@ -63,37 +65,46 @@ export function mapStatusToBackend(frontendStatus: StatutLivraison): string {
  */
 function deriveType(backendDelivery: BackendDelivery): TypeLivraison {
   const status = backendDelivery.status.toLowerCase();
-  
-  if (status === 'expedition' || (backendDelivery.carrier && status !== 'pending' && status !== 'delivered' && status !== 'failed')) {
-    return 'expedition';
+
+  if (
+    status === "expedition" ||
+    (backendDelivery.carrier &&
+      status !== "pending" &&
+      status !== "delivered" &&
+      status !== "failed" &&
+      status !== "cancelled")
+  ) {
+    return "expedition";
   }
-  
-  if (status === 'pickup') {
-    return 'pickup';
+
+  if (status === "pickup") {
+    return "pickup";
   }
-  
-  return 'livraison';
+
+  return "livraison";
 }
 
 /**
  * Transform backend delivery to frontend format
  */
-export function transformDeliveryToFrontend(backend: BackendDelivery): FrontendDelivery {
+export function transformDeliveryToFrontend(
+  backend: BackendDelivery
+): FrontendDelivery {
   const restant = Math.max(0, backend.amount_due - backend.amount_paid);
-  
+
   return {
     id: backend.id,
-    telephone: backend.phone || '',
-    quartier: backend.quartier || '',
-    produits: backend.items || '',
+    telephone: backend.phone || "",
+    quartier: backend.quartier || "",
+    produits: backend.items || "",
     montant_total: backend.amount_due || 0,
     montant_encaisse: backend.amount_paid || 0,
     restant: restant,
     statut: mapStatusToFrontend(backend.status),
     type: deriveType(backend),
-    instructions: backend.notes || '',
-    date_creation: backend.created_at || '',
-    date_mise_a_jour: backend.updated_at || backend.created_at || '',
+    instructions: backend.notes || "",
+    date_creation: backend.created_at || "",
+    date_mise_a_jour: backend.updated_at || backend.created_at || "",
     carrier: backend.carrier || null, // Preserve carrier field
   };
 }
@@ -101,68 +112,75 @@ export function transformDeliveryToFrontend(backend: BackendDelivery): FrontendD
 /**
  * Transform frontend delivery to backend format (for create/update)
  */
-export function transformDeliveryToBackend(frontend: Partial<FrontendDelivery>): Partial<BackendDelivery> {
+export function transformDeliveryToBackend(
+  frontend: Partial<FrontendDelivery>
+): Partial<BackendDelivery> {
   const backend: Partial<BackendDelivery> = {};
-  
+
   if (frontend.telephone !== undefined) {
     backend.phone = frontend.telephone;
   }
-  
+
   if (frontend.produits !== undefined) {
     backend.items = frontend.produits;
   }
-  
+
   if (frontend.montant_total !== undefined) {
     backend.amount_due = frontend.montant_total;
   }
-  
+
   if (frontend.montant_encaisse !== undefined) {
     backend.amount_paid = frontend.montant_encaisse;
   }
-  
+
   if (frontend.statut !== undefined) {
     backend.status = mapStatusToBackend(frontend.statut);
   }
-  
+
   if (frontend.quartier !== undefined) {
     backend.quartier = frontend.quartier;
   }
-  
+
   if (frontend.instructions !== undefined) {
     backend.notes = frontend.instructions;
   }
-  
+
   // If type is expedition, we might want to set carrier
   // For now, we'll leave carrier as-is if not provided
   // This can be enhanced later if needed
-  
+
   return backend;
 }
 
 /**
  * Transform backend history to frontend format
  */
-export function transformHistoryToFrontend(backend: BackendHistory): FrontendHistory {
+export function transformHistoryToFrontend(
+  backend: BackendHistory
+): FrontendHistory {
   return {
     id: backend.id,
     livraison_id: backend.delivery_id,
-    action: backend.action || '',
-    details: backend.details || '',
-    date: backend.created_at || '',
+    action: backend.action || "",
+    details: backend.details || "",
+    date: backend.created_at || "",
   };
 }
 
 /**
  * Transform array of backend deliveries to frontend format
  */
-export function transformDeliveriesToFrontend(backends: BackendDelivery[]): FrontendDelivery[] {
+export function transformDeliveriesToFrontend(
+  backends: BackendDelivery[]
+): FrontendDelivery[] {
   return backends.map(transformDeliveryToFrontend);
 }
 
 /**
  * Transform array of backend history to frontend format
  */
-export function transformHistoriesToFrontend(backends: BackendHistory[]): FrontendHistory[] {
+export function transformHistoriesToFrontend(
+  backends: BackendHistory[]
+): FrontendHistory[] {
   return backends.map(transformHistoryToFrontend);
 }
-

@@ -11,7 +11,13 @@
 /**
  * Delivery status values used in the frontend (French)
  */
-export type StatutLivraison = "en_cours" | "livré" | "échec" | "pickup" | "expedition";
+export type StatutLivraison =
+  | "en_cours"
+  | "livré"
+  | "échec"
+  | "pickup"
+  | "expedition"
+  | "annulé";
 
 /**
  * Delivery type values
@@ -21,17 +27,23 @@ export type TypeLivraison = "livraison" | "pickup" | "expedition";
 /**
  * Backend delivery status values (English)
  */
-export type BackendStatus = "pending" | "delivered" | "failed" | "pickup" | "expedition";
+export type BackendStatus =
+  | "pending"
+  | "delivered"
+  | "failed"
+  | "pickup"
+  | "expedition"
+  | "cancelled";
 
 /**
  * Modification type values
  */
-export type ModificationType = 
-  | "numero" 
-  | "montant" 
-  | "produits" 
-  | "quartier" 
-  | "ajout_produit" 
+export type ModificationType =
+  | "numero"
+  | "montant"
+  | "produits"
+  | "quartier"
+  | "ajout_produit"
   | "suppression_produit"
   | "statut"
   | "notes"
@@ -166,7 +178,7 @@ export interface GetDeliveriesParams {
   startDate?: string; // YYYY-MM-DD format
   endDate?: string; // YYYY-MM-DD format
   sortBy?: string;
-  sortOrder?: 'ASC' | 'DESC';
+  sortOrder?: "ASC" | "DESC";
 }
 
 /**
@@ -190,9 +202,7 @@ export interface SearchDeliveriesResponse {
 // Re-export PaginationInfo from api types
 // ============================================================================
 
-import type { PaginationInfo } from './api';
+import type { PaginationInfo } from "./api";
 
 // Re-export for convenience
 export type { PaginationInfo };
-
-

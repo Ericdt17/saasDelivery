@@ -1,18 +1,18 @@
 import { useState, useMemo } from "react";
-import { 
-  Package, 
-  CheckCircle, 
-  XCircle, 
-  Clock, 
-  ShoppingBag, 
-  Truck, 
-  Wallet, 
+import {
+  Package,
+  CheckCircle,
+  XCircle,
+  Clock,
+  ShoppingBag,
+  Truck,
+  Wallet,
   TrendingUp,
   ArrowDownRight,
   ArrowUpRight,
   AlertCircle,
   RefreshCw,
-  Calendar
+  Calendar,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { StatCard } from "@/components/ui/stat-card";
@@ -26,143 +26,131 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getDailyStats } from "@/services/stats";
 import { getDeliveries } from "@/services/deliveries";
 import { toast } from "sonner";
+import { getDateRangeLocal } from "@/lib/date-utils";
+import { calculateStatsFromDeliveries } from "@/lib/stats-utils";
 
 const formatCurrency = (value: number) => {
-  return new Intl.NumberFormat('fr-FR').format(value) + " F";
-};
-
-// Helper to get date range for period
-const getDateRange = (period: "jour" | "semaine" | "mois") => {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  
-  switch (period) {
-    case "jour":
-      return {
-        startDate: today.toISOString().split('T')[0],
-        endDate: today.toISOString().split('T')[0],
-      };
-    case "semaine":
-      const weekStart = new Date(today);
-      weekStart.setDate(today.getDate() - today.getDay()); // Start of week (Sunday)
-      return {
-        startDate: weekStart.toISOString().split('T')[0],
-        endDate: today.toISOString().split('T')[0],
-      };
-    case "mois":
-      const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-      return {
-        startDate: monthStart.toISOString().split('T')[0],
-        endDate: today.toISOString().split('T')[0],
-      };
-  }
-};
-
-// Calculate stats from deliveries (similar to reports page)
-const calculateStatsFromDeliveries = (deliveries: any[]) => {
-  const total = deliveries.length;
-  const livrees = deliveries.filter(d => d.statut === "livré").length;
-  const echecs = deliveries.filter(d => d.statut === "échec").length;
-  const pickups = deliveries.filter(d => d.statut === "pickup").length;
-  const expeditions = deliveries.filter(d => d.statut === "expedition").length;
-  const enCours = deliveries.filter(d => d.statut === "en_cours").length;
-  const encaisse = deliveries.reduce((sum, d) => sum + (d.montant_encaisse || 0), 0);
-  const restant = deliveries.reduce((sum, d) => sum + (d.restant || 0), 0);
-  
-  return {
-    totalLivraisons: total,
-    livreesReussies: livrees,
-    echecs,
-    enCours,
-    pickups,
-    expeditions,
-    montantEncaisse: encaisse,
-    montantRestant: restant,
-    chiffreAffaires: encaisse + restant,
-  };
+  return new Intl.NumberFormat("fr-FR").format(value) + " F";
 };
 
 const Index = () => {
   const [period, setPeriod] = useState<"jour" | "semaine" | "mois">("jour");
-  
-  const dateRange = useMemo(() => getDateRange(period), [period]);
+
+  const dateRange = useMemo(() => getDateRangeLocal(period), [period]);
 
   // Fetch stats for today (for day view)
-  const { 
-    data: dailyStats, 
+  const {
+    data: dailyStats,
     isLoading: isLoadingDailyStats,
     isError: isErrorDailyStats,
     error: dailyStatsError,
-    refetch: refetchDailyStats 
+    refetch: refetchDailyStats,
   } = useQuery({
-    queryKey: ['dailyStats', dateRange.startDate],
+    queryKey: ["dailyStats", dateRange.startDate],
     queryFn: () => getDailyStats(dateRange.startDate),
     enabled: period === "jour",
     retry: 2,
     refetchOnWindowFocus: false,
     onError: (error) => {
-      toast.error('Erreur lors du chargement des statistiques', {
-        description: error instanceof Error ? error.message : 'Une erreur est survenue'
+      toast.error("Erreur lors du chargement des statistiques", {
+        description:
+          error instanceof Error ? error.message : "Une erreur est survenue",
       });
-    }
+    },
   });
 
   // Fetch deliveries for week/month periods
-  const { 
-    data: deliveriesData, 
+  const {
+    data: deliveriesData,
     isLoading: isLoadingDeliveries,
     isError: isErrorDeliveries,
     error: deliveriesError,
-    refetch: refetchDeliveries 
+    refetch: refetchDeliveries,
   } = useQuery({
-    queryKey: ['deliveries', 'dashboard', dateRange.startDate, dateRange.endDate],
-    queryFn: () => getDeliveries({ 
-      page: 1, 
-      limit: 1000, 
-      startDate: dateRange.startDate,
-      endDate: dateRange.endDate,
-      sortBy: 'created_at', 
-      sortOrder: 'DESC' 
-    }),
+    queryKey: [
+      "deliveries",
+      "dashboard",
+      dateRange.startDate,
+      dateRange.endDate,
+    ],
+    queryFn: () =>
+      getDeliveries({
+        page: 1,
+        limit: 1000,
+        startDate: dateRange.startDate,
+        endDate: dateRange.endDate,
+        sortBy: "created_at",
+        sortOrder: "DESC",
+      }),
     enabled: period !== "jour",
     retry: 2,
     refetchOnWindowFocus: false,
     onError: (error) => {
-      toast.error('Erreur lors du chargement des livraisons', {
-        description: error instanceof Error ? error.message : 'Une erreur est survenue'
+      toast.error("Erreur lors du chargement des livraisons", {
+        description:
+          error instanceof Error ? error.message : "Une erreur est survenue",
       });
-    }
+    },
   });
 
   // Calculate current data based on period
   const stats = useMemo(() => {
-    if (period === "jour" && dailyStats) {
+    if (period === "jour") {
+      if (dailyStats) {
+        return {
+          totalLivraisons: dailyStats.totalLivraisons,
+          livreesReussies: dailyStats.livreesReussies,
+          echecs: dailyStats.echecs,
+          enCours: dailyStats.enCours,
+          pickups: dailyStats.pickups,
+          expeditions: dailyStats.expeditions,
+          montantEncaisse: dailyStats.montantEncaisse,
+          montantRestant: dailyStats.montantRestant,
+          chiffreAffaires: dailyStats.chiffreAffaires,
+        };
+      }
+      // Jour sans dailyStats -> valeurs neutres (pas de fallback livraisons)
       return {
-        totalLivraisons: dailyStats.totalLivraisons,
-        livreesReussies: dailyStats.livreesReussies,
-        echecs: dailyStats.echecs,
-        enCours: dailyStats.enCours,
-        pickups: dailyStats.pickups,
-        expeditions: dailyStats.expeditions,
-        montantEncaisse: dailyStats.montantEncaisse,
-        montantRestant: dailyStats.montantRestant,
-        chiffreAffaires: dailyStats.chiffreAffaires,
+        totalLivraisons: 0,
+        livreesReussies: 0,
+        echecs: 0,
+        enCours: 0,
+        pickups: 0,
+        expeditions: 0,
+        montantEncaisse: 0,
+        montantRestant: 0,
+        chiffreAffaires: 0,
       };
-    } else if (period !== "jour" && deliveriesData) {
+    }
+
+    if (period !== "jour" && deliveriesData) {
       return calculateStatsFromDeliveries(deliveriesData.deliveries);
     }
-    return null;
+
+    // Semaine/Mois sans données -> valeurs neutres
+    return {
+      totalLivraisons: 0,
+      livreesReussies: 0,
+      echecs: 0,
+      enCours: 0,
+      pickups: 0,
+      expeditions: 0,
+      montantEncaisse: 0,
+      montantRestant: 0,
+      chiffreAffaires: 0,
+    };
   }, [period, dailyStats, deliveriesData]);
 
-  const isLoading = (period === "jour" ? isLoadingDailyStats : isLoadingDeliveries);
-  const isError = (period === "jour" ? isErrorDailyStats : isErrorDeliveries);
-  const error = (period === "jour" ? dailyStatsError : deliveriesError);
-  const refetch = (period === "jour" ? refetchDailyStats : refetchDeliveries);
+  const isLoading =
+    period === "jour" ? isLoadingDailyStats : isLoadingDeliveries;
+  const isError = period === "jour" ? isErrorDailyStats : isErrorDeliveries;
+  const error = period === "jour" ? dailyStatsError : deliveriesError;
+  const refetch = period === "jour" ? refetchDailyStats : refetchDeliveries;
 
   const periodLabels = {
     jour: "Aujourd'hui",
     semaine: "Cette semaine",
-    mois: "Ce mois"
+    mois: "Ce mois",
   };
 
   // Loading state
@@ -173,11 +161,12 @@ const Index = () => {
         <div className="flex flex-col gap-1">
           <h1 className="text-2xl md:text-3xl font-bold">Tableau de bord</h1>
           <p className="text-muted-foreground">
-            Vue d'ensemble des livraisons du jour — {new Date().toLocaleDateString('fr-FR', { 
-              weekday: 'long', 
-              year: 'numeric', 
-              month: 'long', 
-              day: 'numeric' 
+            Vue d'ensemble des livraisons du jour —{" "}
+            {new Date().toLocaleDateString("fr-FR", {
+              weekday: "long",
+              year: "numeric",
+              month: "long",
+              day: "numeric",
             })}
           </p>
         </div>
@@ -204,11 +193,12 @@ const Index = () => {
         <div className="flex flex-col gap-1">
           <h1 className="text-2xl md:text-3xl font-bold">Tableau de bord</h1>
           <p className="text-muted-foreground">
-            Vue d'ensemble des livraisons du jour — {new Date().toLocaleDateString('fr-FR', { 
-              weekday: 'long', 
-              year: 'numeric', 
-              month: 'long', 
-              day: 'numeric' 
+            Vue d'ensemble des livraisons du jour —{" "}
+            {new Date().toLocaleDateString("fr-FR", {
+              weekday: "long",
+              year: "numeric",
+              month: "long",
+              day: "numeric",
             })}
           </p>
         </div>
@@ -218,11 +208,13 @@ const Index = () => {
           <AlertTitle>Erreur de chargement</AlertTitle>
           <AlertDescription className="mt-2">
             <p className="mb-3">
-              {error instanceof Error ? error.message : 'Impossible de charger les statistiques'}
+              {error instanceof Error
+                ? error.message
+                : "Impossible de charger les statistiques"}
             </p>
-            <Button 
-              variant="outline" 
-              size="sm" 
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => refetch()}
               className="gap-2"
             >
@@ -246,7 +238,11 @@ const Index = () => {
       </div>
 
       {/* Period Tabs */}
-      <Tabs value={period} onValueChange={(v) => setPeriod(v as typeof period)} className="w-full">
+      <Tabs
+        value={period}
+        onValueChange={(v) => setPeriod(v as typeof period)}
+        className="w-full"
+      >
         <TabsList className="grid w-full max-w-md grid-cols-3">
           <TabsTrigger value="jour" className="gap-2">
             <Calendar className="w-4 h-4" />
@@ -285,11 +281,13 @@ const Index = () => {
               <AlertTitle>Erreur de chargement</AlertTitle>
               <AlertDescription className="mt-2">
                 <p className="mb-3">
-                  {error instanceof Error ? error.message : 'Impossible de charger les données'}
+                  {error instanceof Error
+                    ? error.message
+                    : "Impossible de charger les données"}
                 </p>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
+                <Button
+                  variant="outline"
+                  size="sm"
                   onClick={() => refetch()}
                   className="gap-2"
                 >
