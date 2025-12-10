@@ -1,0 +1,30 @@
+# Local Development Environment Variables
+# Copy these to a .env file in the wwebjs-bot directory for local development
+# The .env file is gitignored, so it won't be committed
+
+# Database Configuration
+# For local development, use SQLite (default) - keeps your test data separate
+DB_TYPE=sqlite
+DB_PATH=./data/bot.db
+
+# For PostgreSQL (if you want to test with Postgres locally instead)
+# Uncomment and configure these instead:
+# DB_TYPE=postgres
+# DATABASE_URL=postgresql://user:password@localhost:5432/deliverybot
+
+# API Configuration
+API_PORT=3000
+NODE_ENV=development
+
+# CORS Configuration (for local frontend)
+ALLOWED_ORIGINS=http://localhost:8080,http://localhost:5173
+
+# Time Zone
+TIME_ZONE=UTC
+
+# WhatsApp Bot Configuration (optional)
+GROUP_ID=
+REPORT_TIME=20:00
+REPORT_ENABLED=false
+SEND_CONFIRMATIONS=false
+

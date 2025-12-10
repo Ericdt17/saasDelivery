@@ -18,7 +18,9 @@
     "test-send": "node src/test-send.js",
     "list-groups": "node src/list-groups.js",
     "test": "node src/test/scenarios.test.js",
-    "test:db": "node src/test-db-connection.js"
+    "test:db": "node src/test-db-connection.js",
+    "test:dual-db": "node src/test-dual-db.js",
+    "test:postgres": "node src/test-postgres.js"
   },
   "keywords": [],
   "author": "",

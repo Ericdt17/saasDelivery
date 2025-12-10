@@ -6,7 +6,8 @@ const searchRouter = require('./routes/search');
 const errorHandler = require('./middleware/errorHandler');
 
 const app = express();
-const PORT = process.env.API_PORT || 3000;
+// Use Render's PORT env var (standard), fallback to API_PORT for local dev
+const PORT = process.env.PORT || process.env.API_PORT || 3000;
 
 // Middleware
 // CORS configuration - allow requests from frontend
