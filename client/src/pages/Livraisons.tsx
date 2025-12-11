@@ -6,6 +6,7 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Select,
@@ -31,9 +32,10 @@ import {
   PaginationPrevious,
   PaginationEllipsis,
 } from "@/components/ui/pagination";
-import { Search, Eye, Edit, CreditCard, Plus, AlertCircle, RefreshCw, ChevronLeft, ChevronRight } from "lucide-react";
+import { Search, Eye, Edit, CreditCard, Plus, AlertCircle, RefreshCw, ChevronLeft, ChevronRight, Users } from "lucide-react";
 import { getDeliveries, type GetDeliveriesParams } from "@/services/deliveries";
 import { searchDeliveries } from "@/services/search";
+import { getGroups } from "@/services/groups";
 import { mapStatusToBackend } from "@/lib/data-transform";
 import { toast } from "sonner";
 
@@ -76,8 +78,26 @@ const Livraisons = () => {
   const [statutFilter, setStatutFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [quartierFilter, setQuartierFilter] = useState<string>("all");
+  const [groupFilter, setGroupFilter] = useState<string>("all");
   const [page, setPage] = useState(1);
   const limit = 20;
+
+  // Fetch groups for filter dropdown
+  const { data: groups = [] } = useQuery({
+    queryKey: ["groups"],
+    queryFn: getGroups,
+  });
+
+  // Create a map of group_id to group_name for quick lookup
+  const groupMap = useMemo(() => {
+    const map = new Map<number, string>();
+    groups.forEach((group) => {
+      if (group.id) {
+        map.set(group.id, group.name);
+      }
+    });
+    return map;
+  }, [groups]);
 
   // Build API params
   const apiParams: GetDeliveriesParams = useMemo(() => {
@@ -94,6 +114,11 @@ const Livraisons = () => {
       params.status = backendStatus;
     }
 
+    // Group filter
+    if (groupFilter !== "all") {
+      params.group_id = parseInt(groupFilter);
+    }
+
     // If search is provided and it looks like a phone number, use phone filter
     // Otherwise, we'll use search API
     if (search && /^[\d\s\+\-]+$/.test(search.trim())) {
@@ -101,7 +126,7 @@ const Livraisons = () => {
     }
 
     return params;
-  }, [page, statutFilter, search]);
+  }, [page, statutFilter, search, groupFilter]);
 
   // Fetch deliveries
   const { 
@@ -247,6 +272,26 @@ const Livraisons = () => {
                 ))}
               </SelectContent>
             </Select>
+
+            <Select 
+              value={groupFilter} 
+              onValueChange={(value) => {
+                setGroupFilter(value);
+                handleFilterChange();
+              }}
+            >
+              <SelectTrigger className="w-[160px]">
+                <SelectValue placeholder="Groupe" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tous les groupes</SelectItem>
+                {groups.map((group) => (
+                  <SelectItem key={group.id} value={group.id.toString()}>
+                    {group.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
       </div>
@@ -282,6 +327,7 @@ const Livraisons = () => {
                 <TableHead className="font-semibold">Téléphone</TableHead>
                 <TableHead className="font-semibold hidden md:table-cell">Produits</TableHead>
                 <TableHead className="font-semibold hidden lg:table-cell">Quartier</TableHead>
+                <TableHead className="font-semibold hidden xl:table-cell">Groupe</TableHead>
                 <TableHead className="font-semibold text-right">Montant</TableHead>
                 <TableHead className="font-semibold text-right hidden sm:table-cell">Encaissé</TableHead>
                 <TableHead className="font-semibold text-right hidden sm:table-cell">Reste</TableHead>
@@ -297,6 +343,7 @@ const Livraisons = () => {
                     <TableCell><Skeleton className="h-4 w-24" /></TableCell>
                     <TableCell className="hidden md:table-cell"><Skeleton className="h-4 w-32" /></TableCell>
                     <TableCell className="hidden lg:table-cell"><Skeleton className="h-4 w-20" /></TableCell>
+                    <TableCell className="hidden xl:table-cell"><Skeleton className="h-4 w-24" /></TableCell>
                     <TableCell className="text-right"><Skeleton className="h-4 w-16 ml-auto" /></TableCell>
                     <TableCell className="text-right hidden sm:table-cell"><Skeleton className="h-4 w-16 ml-auto" /></TableCell>
                     <TableCell className="text-right hidden sm:table-cell"><Skeleton className="h-4 w-16 ml-auto" /></TableCell>
@@ -307,7 +354,7 @@ const Livraisons = () => {
                 ))
               ) : filteredLivraisons.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="p-8 text-center text-muted-foreground">
+                  <TableCell colSpan={10} className="p-8 text-center text-muted-foreground">
                     Aucune livraison trouvée
                   </TableCell>
                 </TableRow>
@@ -323,6 +370,16 @@ const Livraisons = () => {
                       {livraison.produits}
                     </TableCell>
                     <TableCell className="hidden lg:table-cell">{livraison.quartier}</TableCell>
+                    <TableCell className="hidden xl:table-cell">
+                      {livraison.group_id && groupMap.has(livraison.group_id) ? (
+                        <Badge variant="outline" className="gap-1">
+                          <Users className="h-3 w-3" />
+                          {groupMap.get(livraison.group_id)}
+                        </Badge>
+                      ) : (
+                        <span className="text-muted-foreground text-sm">-</span>
+                      )}
+                    </TableCell>
                     <TableCell className="text-right font-medium">
                       {formatCurrency(livraison.montant_total)}
                     </TableCell>

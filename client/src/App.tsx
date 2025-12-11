@@ -2,10 +2,12 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { Routes, Route } from "react-router-dom";
 import { ErrorBoundary } from "@/components/errors/ErrorBoundary";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
+import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { handleError } from "@/lib/error-handler";
+import Login from "./pages/Login";
 import Index from "./pages/Index";
 import Livraisons from "./pages/Livraisons";
 import LivraisonDetails from "./pages/LivraisonDetails";
@@ -14,6 +16,8 @@ import Rapports from "./pages/Rapports";
 import Expeditions from "./pages/Expeditions";
 import Modifications from "./pages/Modifications";
 import Parametres from "./pages/Parametres";
+import Agencies from "./pages/Agencies";
+import Groups from "./pages/Groups";
 import NotFound from "./pages/NotFound";
 
 // Configure QueryClient with better error handling
@@ -67,26 +71,38 @@ const App = () => (
       <TooltipProvider>
         <Toaster />
         <Sonner />
-        <BrowserRouter
-          future={{
-            v7_startTransition: true,
-            v7_relativeSplatPath: true,
-          }}
-        >
-          <Routes>
-            <Route element={<DashboardLayout />}>
-              <Route path="/" element={<Index />} />
-              <Route path="/livraisons" element={<Livraisons />} />
-              <Route path="/livraisons/:id" element={<LivraisonDetails />} />
-              <Route path="/paiements" element={<Paiements />} />
-              <Route path="/rapports" element={<Rapports />} />
-              <Route path="/expeditions" element={<Expeditions />} />
-              <Route path="/modifications" element={<Modifications />} />
-              <Route path="/parametres" element={<Parametres />} />
-            </Route>
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </BrowserRouter>
+        <Routes>
+          {/* Public route */}
+          <Route path="/login" element={<Login />} />
+          
+          {/* Protected routes */}
+          <Route
+            element={
+              <ProtectedRoute>
+                <DashboardLayout />
+              </ProtectedRoute>
+            }
+          >
+            <Route path="/" element={<Index />} />
+            <Route path="/livraisons" element={<Livraisons />} />
+            <Route path="/livraisons/:id" element={<LivraisonDetails />} />
+            <Route path="/groupes" element={<Groups />} />
+            <Route
+              path="/agences"
+              element={
+                <ProtectedRoute requireSuperAdmin>
+                  <Agencies />
+                </ProtectedRoute>
+              }
+            />
+            <Route path="/paiements" element={<Paiements />} />
+            <Route path="/rapports" element={<Rapports />} />
+            <Route path="/expeditions" element={<Expeditions />} />
+            <Route path="/modifications" element={<Modifications />} />
+            <Route path="/parametres" element={<Parametres />} />
+          </Route>
+          <Route path="*" element={<NotFound />} />
+        </Routes>
       </TooltipProvider>
     </QueryClientProvider>
   </ErrorBoundary>

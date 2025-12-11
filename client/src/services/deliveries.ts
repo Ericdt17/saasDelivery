@@ -28,6 +28,7 @@ export interface GetDeliveriesParams {
   endDate?: string;
   sortBy?: string;
   sortOrder?: "ASC" | "DESC";
+  group_id?: number | null;
 }
 
 // Response type for getDeliveries

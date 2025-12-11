@@ -15,6 +15,7 @@ import {
   Calendar,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
+import { useAuth } from "@/contexts/AuthContext";
 import { StatCard } from "@/components/ui/stat-card";
 import { PerformanceChart } from "@/components/dashboard/PerformanceChart";
 import { EncaissementsChart } from "@/components/dashboard/EncaissementsChart";
@@ -34,11 +35,13 @@ const formatCurrency = (value: number) => {
 };
 
 const Index = () => {
+  const { user, isSuperAdmin } = useAuth();
   const [period, setPeriod] = useState<"jour" | "semaine" | "mois">("jour");
 
   const dateRange = useMemo(() => getDateRangeLocal(period), [period]);
 
   // Fetch stats for today (for day view)
+  // Stats are automatically filtered by agency_id on backend
   const {
     data: dailyStats,
     isLoading: isLoadingDailyStats,
@@ -47,7 +50,7 @@ const Index = () => {
     refetch: refetchDailyStats,
   } = useQuery({
     queryKey: ["dailyStats", dateRange.startDate],
-    queryFn: () => getDailyStats(dateRange.startDate),
+    queryFn: () => getDailyStats(dateRange.startDate, null),
     enabled: period === "jour",
     retry: 2,
     refetchOnWindowFocus: false,
@@ -233,7 +236,11 @@ const Index = () => {
       <div className="flex flex-col gap-1">
         <h1 className="text-2xl md:text-3xl font-bold">Tableau de bord</h1>
         <p className="text-muted-foreground">
-          Vue d'ensemble des livraisons — {periodLabels[period]}
+          {isSuperAdmin
+            ? "Vue d'ensemble de toutes les agences"
+            : `Vue d'ensemble de votre agence${user?.name ? ` - ${user.name}` : ""}`}
+          {" — "}
+          {periodLabels[period]}
         </p>
       </div>
 

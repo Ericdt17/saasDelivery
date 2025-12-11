@@ -13,10 +13,16 @@ export type { BackendStats, FrontendStats };
 /**
  * Get daily statistics
  * @param date - Optional date string (YYYY-MM-DD format). If not provided, returns today's stats
+ * @param group_id - Optional group ID to filter stats by group
  */
-export async function getDailyStats(date?: string): Promise<FrontendStats> {
-  const params = date ? { date } : undefined;
-  const response = await apiGet<BackendStats>(API_ENDPOINTS.STATS_DAILY, params);
+export async function getDailyStats(date?: string, group_id?: number | null): Promise<FrontendStats> {
+  const params: Record<string, string | number> = {};
+  if (date) params.date = date;
+  if (group_id) params.group_id = group_id;
+  const response = await apiGet<BackendStats>(
+    API_ENDPOINTS.STATS_DAILY,
+    Object.keys(params).length > 0 ? params : undefined
+  );
   
   if (!response.data) {
     throw new Error('No stats data returned from API');

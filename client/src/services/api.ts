@@ -27,6 +27,13 @@ async function apiRequest<T>(
     ...fetchOptions.headers,
   };
 
+  // Add authentication token if available
+  // Get token from localStorage to avoid circular dependency
+  const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
   // Create abort controller for timeout
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeout);

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   LayoutDashboard,
   Package,
@@ -12,7 +13,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Menu,
-  X
+  Building2,
+  Users,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -21,11 +23,14 @@ interface NavItem {
   title: string;
   href: string;
   icon: React.ElementType;
+  requireSuperAdmin?: boolean;
 }
 
-const navItems: NavItem[] = [
+const allNavItems: NavItem[] = [
   { title: "Tableau de bord", href: "/", icon: LayoutDashboard },
   { title: "Livraisons", href: "/livraisons", icon: Package },
+  { title: "Groupes", href: "/groupes", icon: Users },
+  { title: "Agences", href: "/agences", icon: Building2, requireSuperAdmin: true },
   { title: "Paiements", href: "/paiements", icon: CreditCard },
   { title: "Rapports", href: "/rapports", icon: FileText },
   { title: "Expéditions", href: "/expeditions", icon: Truck },
@@ -37,6 +42,12 @@ export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const location = useLocation();
+  const { isSuperAdmin } = useAuth();
+
+  // Filter nav items based on role
+  const navItems = allNavItems.filter(
+    (item) => !item.requireSuperAdmin || isSuperAdmin
+  );
 
   const SidebarContent = ({ isMobile = false }: { isMobile?: boolean }) => (
     <div className="flex flex-col h-full">

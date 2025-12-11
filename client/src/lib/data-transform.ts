@@ -105,7 +105,9 @@ export function transformDeliveryToFrontend(
     instructions: backend.notes || "",
     date_creation: backend.created_at || "",
     date_mise_a_jour: backend.updated_at || backend.created_at || "",
-    carrier: backend.carrier || null, // Preserve carrier field
+    carrier: backend.carrier || null,
+    group_id: backend.group_id || null,
+    agency_id: backend.agency_id || null,
   };
 }
 

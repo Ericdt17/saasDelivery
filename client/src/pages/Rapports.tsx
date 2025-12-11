@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useAuth } from "@/contexts/AuthContext";
 import { StatCard } from "@/components/ui/stat-card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -40,11 +41,13 @@ const formatCurrency = (value: number) => {
 };
 
 const Rapports = () => {
+  const { user, isSuperAdmin } = useAuth();
   const [period, setPeriod] = useState<"jour" | "semaine" | "mois">("jour");
 
   const dateRange = useMemo(() => getDateRangeLocal(period), [period]);
 
   // Fetch stats for today (for day view)
+  // Stats are automatically filtered by agency_id on backend
   const {
     data: dailyStats,
     isLoading: isLoadingDailyStats,
@@ -53,7 +56,7 @@ const Rapports = () => {
     refetch: refetchDailyStats,
   } = useQuery({
     queryKey: ["dailyStats", dateRange.startDate],
-    queryFn: () => getDailyStats(dateRange.startDate),
+    queryFn: () => getDailyStats(dateRange.startDate, null),
     enabled: period === "jour",
     retry: 2,
     refetchOnWindowFocus: false,

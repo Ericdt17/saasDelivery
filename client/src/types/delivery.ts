@@ -67,6 +67,8 @@ export interface BackendDelivery {
   quartier?: string | null;
   notes?: string | null;
   carrier?: string | null;
+  group_id?: number | null;
+  agency_id?: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -134,6 +136,9 @@ export interface FrontendDelivery {
   date_creation: string;
   date_mise_a_jour: string;
   carrier?: string | null;
+  group_id?: number | null;
+  group_name?: string | null;
+  agency_id?: number | null;
 }
 
 /**
@@ -179,6 +184,7 @@ export interface GetDeliveriesParams {
   endDate?: string; // YYYY-MM-DD format
   sortBy?: string;
   sortOrder?: "ASC" | "DESC";
+  group_id?: number | null;
 }
 
 /**

@@ -3,7 +3,7 @@
  * Centralized functions for calculating statistics from deliveries data
  */
 
-import type { FrontendDelivery } from '@/types/delivery';
+import type { FrontendDelivery } from "@/types/delivery";
 
 /**
  * Statistics result structure
@@ -36,7 +36,7 @@ export function calculateStatsFromDeliveries(
     (d) => d.statut === "expedition"
   ).length;
   const enCours = deliveries.filter((d) => d.statut === "en_cours").length;
-  
+
   const encaisse = deliveries.reduce(
     (sum, d) => sum + (d.montant_encaisse || 0),
     0
@@ -55,4 +55,5 @@ export function calculateStatsFromDeliveries(
     chiffreAffaires: encaisse + restant,
   };
 }
+
 
