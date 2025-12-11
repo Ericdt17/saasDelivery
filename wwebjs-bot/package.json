@@ -25,7 +25,10 @@
     "test:system:verbose": "node src/scripts/test-system.js --verbose",
     "seed:admin": "node src/scripts/seed-super-admin.js",
     "check:agencies": "node src/scripts/check-active-agencies.js",
-    "migrate:postgres": "node src/scripts/migrate-postgresql-schema.js"
+    "migrate:postgres": "node src/scripts/migrate-postgresql-schema.js",
+    "test:login": "node src/scripts/test-login.js",
+    "test:login:local": "node src/scripts/test-login.js http://localhost:3001",
+    "test:login:prod": "node src/scripts/test-login.js http://157.173.118.238"
   },
   "keywords": [],
   "author": "",

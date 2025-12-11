@@ -27,7 +27,10 @@ router.post("/login", async (req, res, next) => {
       });
     }
 
-    // Find agency by email
+    // Normalize email (lowercase and trim) to match how it's stored in seed script
+    const normalizedEmail = email.trim().toLowerCase();
+
+    // Find agency by email (emails are stored as lowercase in seed script)
     const findAgencyQuery = adapter.type === "postgres"
       ? `SELECT id, name, email, password_hash, role, is_active 
          FROM agencies 
@@ -36,7 +39,7 @@ router.post("/login", async (req, res, next) => {
          FROM agencies 
          WHERE email = ? LIMIT 1`;
 
-    const agencies = await adapter.query(findAgencyQuery, [email]);
+    const agencies = await adapter.query(findAgencyQuery, [normalizedEmail]);
     const agency = adapter.type === "postgres" ? (agencies[0] || null) : (agencies || null);
 
     if (!agency) {
