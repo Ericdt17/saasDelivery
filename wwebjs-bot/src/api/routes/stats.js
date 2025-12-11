@@ -1,6 +1,15 @@
 const express = require("express");
 const router = express.Router();
+const { authenticateToken } = require("../middleware/auth");
 const { getDeliveryStats } = require("../../db");
+
+// Optional authentication - if token provided, use it for filtering
+router.use((req, res, next) => {
+  if (req.headers.authorization) {
+    return authenticateToken(req, res, next);
+  }
+  next();
+});
 
 /**
  * Validate and normalize date string (YYYY-MM-DD format)
@@ -32,7 +41,15 @@ function validateDate(dateString) {
 // GET /api/v1/stats/daily - Get daily statistics
 router.get("/daily", async (req, res, next) => {
   try {
-    const { date } = req.query;
+    const { date, group_id } = req.query;
+
+    // Debug: Log user info
+    console.log("[Stats API] User info:", {
+      userId: req.user?.userId,
+      agencyId: req.user?.agencyId,
+      role: req.user?.role,
+      email: req.user?.email,
+    });
 
     // Validate and normalize date if provided
     const normalizedDate = date ? validateDate(date) : null;
@@ -45,7 +62,25 @@ router.get("/daily", async (req, res, next) => {
       });
     }
 
-    const stats = await getDeliveryStats(normalizedDate);
+    // Auto-filter by agency_id for agency admins (unless super admin)
+    let agency_id = null;
+    if (req.user && req.user.role !== "super_admin") {
+      // Use agencyId from token, or fallback to userId if agencyId is not set
+      agency_id = req.user.agencyId !== null && req.user.agencyId !== undefined 
+        ? req.user.agencyId 
+        : req.user.userId;
+      
+      console.log("[Stats API] Using agencyId:", agency_id);
+    }
+
+    const stats = await getDeliveryStats(
+      normalizedDate,
+      agency_id,
+      group_id ? parseInt(group_id) : null
+    );
+    
+    console.log("[Stats API] Stats result:", stats);
+    
     const responseDate =
       normalizedDate || new Date().toISOString().split("T")[0];
 
@@ -53,8 +88,11 @@ router.get("/daily", async (req, res, next) => {
       success: true,
       data: stats,
       date: responseDate,
+      agency_id: agency_id,
+      group_id: group_id ? parseInt(group_id) : null,
     });
   } catch (error) {
+    console.error("[Stats API] Error:", error);
     next(error);
   }
 });

@@ -74,12 +74,15 @@ function createPostgresQueries(pool) {
       quartier,
       notes,
       carrier,
+      agency_id,
+      group_id,
+      whatsapp_message_id,
     } = data;
 
     const res = await query(
       `INSERT INTO deliveries 
-        (phone, customer_name, items, amount_due, amount_paid, status, quartier, notes, carrier)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        (phone, customer_name, items, amount_due, amount_paid, status, quartier, notes, carrier, agency_id, group_id, whatsapp_message_id)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
         RETURNING id`,
       [
         phone,
@@ -91,10 +94,13 @@ function createPostgresQueries(pool) {
         quartier,
         notes,
         carrier,
+        agency_id || null,
+        group_id || null,
+        whatsapp_message_id || null,
       ]
     );
 
-    const deliveryId = res.id || res.lastInsertRowid;
+    const deliveryId = res.id || res[0]?.id || res.lastInsertRowid;
     await saveHistory({
       delivery_id: deliveryId,
       action: "created",
@@ -243,6 +249,8 @@ function createPostgresQueries(pool) {
       endDate = null,
       sortBy = "created_at",
       sortOrder = "DESC",
+      agency_id = null,
+      group_id = null,
     } = options;
 
     const allowedSortFields = [
@@ -254,7 +262,9 @@ function createPostgresQueries(pool) {
       "amount_due",
       "amount_paid",
     ];
-    const safeSortBy = allowedSortFields.includes(sortBy) ? sortBy : "created_at";
+    const safeSortBy = allowedSortFields.includes(sortBy)
+      ? sortBy
+      : "created_at";
     const safeSortOrder = sortOrder.toUpperCase() === "ASC" ? "ASC" : "DESC";
 
     const conditions = [];
@@ -284,7 +294,17 @@ function createPostgresQueries(pool) {
       conditions.push(`phone LIKE ${addParam(`%${phone}%`)}`);
     }
 
-    const whereClause = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+    if (agency_id !== null) {
+      conditions.push(`agency_id = ${addParam(agency_id)}`);
+    }
+
+    if (group_id !== null) {
+      conditions.push(`group_id = ${addParam(group_id)}`);
+    }
+
+    const whereClause = conditions.length
+      ? `WHERE ${conditions.join(" AND ")}`
+      : "";
     const offset = (page - 1) * limit;
 
     const countSql = `SELECT COUNT(*) as total FROM deliveries ${whereClause}`;
@@ -292,7 +312,10 @@ function createPostgresQueries(pool) {
       limit
     )} OFFSET ${addParam(offset)}`;
 
-    const countResult = await query(countSql, params.slice(0, params.length - 2));
+    const countResult = await query(
+      countSql,
+      params.slice(0, params.length - 2)
+    );
     const total = Array.isArray(countResult)
       ? countResult[0]?.total || 0
       : countResult?.total || 0;
@@ -312,41 +335,50 @@ function createPostgresQueries(pool) {
     };
   }
 
-  async function getDailyStats(date = null) {
+  async function getDailyStats(date = null, agency_id = null, group_id = null) {
     const tzExpr = `created_at AT TIME ZONE '${TIME_ZONE}'`;
     let sql;
     let params = [];
+    const conditions = [];
+    let paramIndex = 1;
 
+    const addParam = (value) => {
+      params.push(value);
+      return `$${paramIndex++}`;
+    };
+
+    // Date condition
     if (date) {
-      sql = `
-        SELECT 
-          COUNT(*) as total,
-          COALESCE(SUM(CASE WHEN status = 'delivered' THEN 1 ELSE 0 END), 0) as delivered,
-          COALESCE(SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END), 0) as failed,
-          COALESCE(SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END), 0) as pending,
-          COALESCE(SUM(CASE WHEN status = 'pickup' THEN 1 ELSE 0 END), 0) as pickup,
-          COALESCE(SUM(amount_paid), 0) as total_collected,
-          COALESCE(SUM(amount_due - amount_paid), 0) as total_remaining,
-          COALESCE(SUM(amount_due), 0) as total_due
-        FROM deliveries
-        WHERE (${tzExpr})::date = $1::date
-      `;
-      params = [date];
+      conditions.push(`(${tzExpr})::date = ${addParam(date)}::date`);
     } else {
-      sql = `
-        SELECT 
-          COUNT(*) as total,
-          COALESCE(SUM(CASE WHEN status = 'delivered' THEN 1 ELSE 0 END), 0) as delivered,
-          COALESCE(SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END), 0) as failed,
-          COALESCE(SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END), 0) as pending,
-          COALESCE(SUM(CASE WHEN status = 'pickup' THEN 1 ELSE 0 END), 0) as pickup,
-          COALESCE(SUM(amount_paid), 0) as total_collected,
-          COALESCE(SUM(amount_due - amount_paid), 0) as total_remaining,
-          COALESCE(SUM(amount_due), 0) as total_due
-        FROM deliveries
-        WHERE (${tzExpr})::date = CURRENT_DATE
-      `;
+      conditions.push(`(${tzExpr})::date = CURRENT_DATE`);
     }
+
+    // Agency filter
+    if (agency_id !== null) {
+      conditions.push(`agency_id = ${addParam(agency_id)}`);
+    }
+
+    // Group filter
+    if (group_id !== null) {
+      conditions.push(`group_id = ${addParam(group_id)}`);
+    }
+
+    const whereClause = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+
+    sql = `
+      SELECT 
+        COUNT(*) as total,
+        COALESCE(SUM(CASE WHEN status = 'delivered' THEN 1 ELSE 0 END), 0) as delivered,
+        COALESCE(SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END), 0) as failed,
+        COALESCE(SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END), 0) as pending,
+        COALESCE(SUM(CASE WHEN status = 'pickup' THEN 1 ELSE 0 END), 0) as pickup,
+        COALESCE(SUM(amount_paid), 0) as total_collected,
+        COALESCE(SUM(amount_due - amount_paid), 0) as total_remaining,
+        COALESCE(SUM(amount_due), 0) as total_due
+      FROM deliveries
+      ${whereClause}
+    `;
 
     const result = await query(sql, params);
     const stats = Array.isArray(result) ? result[0] : result;
@@ -378,6 +410,189 @@ function createPostgresQueries(pool) {
     );
   }
 
+  // ============================================
+  // Agency Queries
+  // ============================================
+
+  async function createAgency({
+    name,
+    email,
+    password_hash,
+    role = "agency",
+    is_active = true,
+  }) {
+    const result = await query(
+      `INSERT INTO agencies (name, email, password_hash, role, is_active) 
+       VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+      [name, email, password_hash, role, is_active]
+    );
+    return result.id || result[0]?.id;
+  }
+
+  async function getAgencyById(id) {
+    const result = await query(
+      `SELECT id, name, email, role, is_active, created_at, updated_at 
+       FROM agencies 
+       WHERE id = $1 LIMIT 1`,
+      [id]
+    );
+    return result[0] || null;
+  }
+
+  async function getAgencyByEmail(email) {
+    const result = await query(
+      `SELECT id, name, email, password_hash, role, is_active, created_at, updated_at 
+       FROM agencies 
+       WHERE email = $1 LIMIT 1`,
+      [email]
+    );
+    return result[0] || null;
+  }
+
+  async function getAllAgencies() {
+    return await query(
+      `SELECT id, name, email, role, is_active, created_at, updated_at 
+       FROM agencies 
+       ORDER BY created_at DESC`
+    );
+  }
+
+  async function updateAgency(
+    id,
+    { name, email, password_hash, role, is_active }
+  ) {
+    const updates = [];
+    const params = [];
+    let paramIndex = 1;
+
+    if (name !== undefined) {
+      updates.push(`name = $${paramIndex++}`);
+      params.push(name);
+    }
+    if (email !== undefined) {
+      updates.push(`email = $${paramIndex++}`);
+      params.push(email);
+    }
+    if (password_hash !== undefined) {
+      updates.push(`password_hash = $${paramIndex++}`);
+      params.push(password_hash);
+    }
+    if (role !== undefined) {
+      updates.push(`role = $${paramIndex++}`);
+      params.push(role);
+    }
+    if (is_active !== undefined) {
+      updates.push(`is_active = $${paramIndex++}`);
+      params.push(is_active);
+    }
+
+    if (updates.length === 0) {
+      return { changes: 0 };
+    }
+
+    updates.push(`updated_at = CURRENT_TIMESTAMP`);
+    params.push(id);
+
+    const result = await query(
+      `UPDATE agencies SET ${updates.join(", ")} WHERE id = $${paramIndex}`,
+      params
+    );
+    return { changes: result.changes || 0 };
+  }
+
+  async function deleteAgency(id) {
+    // Soft delete: set is_active = false
+    return await updateAgency(id, { is_active: false });
+  }
+
+  // ============================================
+  // Group Queries
+  // ============================================
+
+  async function createGroup({
+    agency_id,
+    whatsapp_group_id,
+    name,
+    is_active = true,
+  }) {
+    const result = await query(
+      `INSERT INTO groups (agency_id, whatsapp_group_id, name, is_active) 
+       VALUES ($1, $2, $3, $4) RETURNING id`,
+      [agency_id, whatsapp_group_id, name, is_active]
+    );
+    return result.id || result[0]?.id;
+  }
+
+  async function getGroupById(id) {
+    const result = await query(
+      `SELECT g.id, g.agency_id, g.whatsapp_group_id, g.name, g.is_active, 
+              g.created_at, g.updated_at,
+              a.name as agency_name
+       FROM groups g
+       LEFT JOIN agencies a ON g.agency_id = a.id
+       WHERE g.id = $1 LIMIT 1`,
+      [id]
+    );
+    return result[0] || null;
+  }
+
+  async function getGroupsByAgency(agency_id) {
+    return await query(
+      `SELECT g.id, g.agency_id, g.whatsapp_group_id, g.name, g.is_active, 
+              g.created_at, g.updated_at,
+              a.name as agency_name
+       FROM groups g
+       LEFT JOIN agencies a ON g.agency_id = a.id
+       WHERE g.agency_id = $1
+       ORDER BY g.created_at DESC`,
+      [agency_id]
+    );
+  }
+
+  async function getAllGroups() {
+    return await query(
+      `SELECT g.id, g.agency_id, g.whatsapp_group_id, g.name, g.is_active, 
+              g.created_at, g.updated_at,
+              a.name as agency_name
+       FROM groups g
+       LEFT JOIN agencies a ON g.agency_id = a.id
+       ORDER BY g.created_at DESC`
+    );
+  }
+
+  async function updateGroup(id, { name, is_active }) {
+    const updates = [];
+    const params = [];
+    let paramIndex = 1;
+
+    if (name !== undefined) {
+      updates.push(`name = $${paramIndex++}`);
+      params.push(name);
+    }
+    if (is_active !== undefined) {
+      updates.push(`is_active = $${paramIndex++}`);
+      params.push(is_active);
+    }
+
+    if (updates.length === 0) {
+      return { changes: 0 };
+    }
+
+    updates.push(`updated_at = CURRENT_TIMESTAMP`);
+    params.push(id);
+
+    const result = await query(
+      `UPDATE groups SET ${updates.join(", ")} WHERE id = $${paramIndex}`,
+      params
+    );
+    return { changes: result.changes || 0 };
+  }
+
+  async function deleteGroup(id) {
+    // Soft delete: set is_active = false
+    return await updateGroup(id, { is_active: false });
+  }
+
   return {
     type: "postgres",
     query,
@@ -386,6 +601,7 @@ function createPostgresQueries(pool) {
     updateDelivery,
     findDeliveryByPhone,
     findDeliveryByPhoneForUpdate,
+    findDeliveryByMessageId,
     getDeliveryById,
     getDeliveryHistory,
     getTodayDeliveries,
@@ -393,6 +609,20 @@ function createPostgresQueries(pool) {
     getDailyStats,
     searchDeliveries,
     saveHistory,
+    // Agency queries
+    createAgency,
+    getAgencyById,
+    getAgencyByEmail,
+    getAllAgencies,
+    updateAgency,
+    deleteAgency,
+    // Group queries
+    createGroup,
+    getGroupById,
+    getGroupsByAgency,
+    getAllGroups,
+    updateGroup,
+    deleteGroup,
     close: async () => pool.end(),
     getRawDb: () => pool,
     TIME_ZONE,
@@ -400,4 +630,3 @@ function createPostgresQueries(pool) {
 }
 
 module.exports = createPostgresQueries;
-

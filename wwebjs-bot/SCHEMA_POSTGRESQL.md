@@ -87,3 +87,5 @@ Ou via l'interface Render:
 - Les index utilisent `CREATE INDEX IF NOT EXISTS` pour éviter les erreurs si ils existent déjà
 - La table `delivery_history` a une contrainte `ON DELETE CASCADE` - si une livraison est supprimée, son historique est aussi supprimé
 
+
+

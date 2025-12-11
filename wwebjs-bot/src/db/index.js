@@ -54,6 +54,7 @@ const api = {
   getTodayDeliveries: queries.getTodayDeliveries,
   findDeliveryByPhone: queries.findDeliveryByPhone,
   findDeliveryByPhoneForUpdate: queries.findDeliveryByPhoneForUpdate,
+  findDeliveryByMessageId: queries.findDeliveryByMessageId,
   searchDeliveries: queries.searchDeliveries,
   saveHistory: queries.saveHistory,
   addHistory: (deliveryId, action, details, actor = "bot") => {
@@ -65,6 +66,20 @@ const api = {
       actor,
     });
   },
+  // Agency queries
+  createAgency: queries.createAgency,
+  getAgencyById: queries.getAgencyById,
+  getAgencyByEmail: queries.getAgencyByEmail,
+  getAllAgencies: queries.getAllAgencies,
+  updateAgency: queries.updateAgency,
+  deleteAgency: queries.deleteAgency,
+  // Group queries
+  createGroup: queries.createGroup,
+  getGroupById: queries.getGroupById,
+  getGroupsByAgency: queries.getGroupsByAgency,
+  getAllGroups: queries.getAllGroups,
+  updateGroup: queries.updateGroup,
+  deleteGroup: queries.deleteGroup,
   close: queries.close,
   getRawDb: queries.getRawDb,
 };

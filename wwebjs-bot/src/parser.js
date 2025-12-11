@@ -82,9 +82,7 @@ function extractAmount(text) {
   const matches = cleaned.match(pattern2);
   if (matches) {
     // Get the largest number (likely the amount)
-    const amounts = matches.map((m) =>
-      parseFloat(m.replace(/[.,]/g, ""))
-    );
+    const amounts = matches.map((m) => parseFloat(m.replace(/[.,]/g, "")));
     return Math.max(...amounts);
   }
 
@@ -94,7 +92,9 @@ function extractAmount(text) {
     // Filter out phone numbers (9 digits starting with 6)
     const amounts = numbers
       .map((n) => parseInt(n))
-      .filter((n) => !(n.toString().startsWith("6") && n.toString().length === 9))
+      .filter(
+        (n) => !(n.toString().startsWith("6") && n.toString().length === 9)
+      )
       .filter((n) => n > 100); // Amounts should be > 100 FCFA
 
     if (amounts.length > 0) {
@@ -185,6 +185,125 @@ function extractCustomerName(text) {
 }
 
 /**
+ * Parse Alternative format: Quartier first, products in middle, amount and phone at end
+ * Format:
+ *   Line 1: Quartier (Bessengue)
+ *   Line 2-N: Items/products (one per line)
+ *   Line N-1: Amount (14000 or 14k)
+ *   Line N: Phone number (651 07 35 74 or 651073574)
+ */
+function parseAlternativeFormat(text) {
+  const lines = text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+
+  // Need at least 4 lines (quartier + 1 product + amount + phone)
+  if (lines.length < 4) {
+    return {
+      valid: false,
+      error: `Format alternatif invalide: Besoin d'au moins 4 lignes, reçu ${lines.length}`,
+    };
+  }
+
+  // Line 1: Quartier (usually a location name, not a number)
+  const quartierLine = lines[0];
+  const quartier = quartierLine.trim();
+
+  // Check if first line looks like a quartier (not a number, not a phone)
+  const isQuartier =
+    !/^\d+$/.test(quartier) && !/^6\d{8,9}$/.test(quartier.replace(/\s/g, ""));
+  if (!isQuartier) {
+    return {
+      valid: false,
+      error: `Format alternatif: La première ligne devrait être un quartier, reçu: "${quartierLine}"`,
+    };
+  }
+
+  // Last line: Phone number
+  const phoneLine = lines[lines.length - 1];
+  let phone = phoneLine.replace(/[\s\-\.]/g, ""); // Remove spaces and separators
+
+  // Check if it's a valid phone number
+  if (!phone.startsWith("6") || phone.length < 8) {
+    return {
+      valid: false,
+      error: `Format alternatif: La dernière ligne devrait être un numéro de téléphone, reçu: "${phoneLine}"`,
+    };
+  }
+
+  // Normalize phone (replace x with 0, pad to 9 digits if needed)
+  phone = phone.replace(/x/gi, "0");
+  if (phone.length !== 9) {
+    if (phone.length === 8) {
+      phone = phone.padEnd(9, "0");
+    } else {
+      return {
+        valid: false,
+        error: `Format alternatif: Numéro invalide: "${phoneLine}" - Doit avoir 8-9 chiffres`,
+      };
+    }
+  }
+
+  // Second to last line: Amount
+  const amountLine = lines[lines.length - 2];
+  let amount = null;
+
+  // Try to extract amount
+  const amountMatch = amountLine.match(/(\d+(?:\.\d+)?)\s*k?/i);
+  if (amountMatch) {
+    const num = parseFloat(amountMatch[1]);
+    if (amountLine.toLowerCase().includes("k")) {
+      amount = num * 1000;
+    } else {
+      amount = num;
+    }
+  } else {
+    // Try to find any number in the line
+    const numbers = amountLine.match(/\d+/g);
+    if (numbers) {
+      const amounts = numbers.map((n) => parseInt(n)).filter((n) => n > 100);
+      if (amounts.length > 0) {
+        amount = Math.max(...amounts);
+      }
+    }
+  }
+
+  if (!amount || amount < 100) {
+    return {
+      valid: false,
+      error: `Format alternatif: Montant invalide: "${amountLine}" - Doit être un montant valide (ex: 15k, 15000)`,
+    };
+  }
+
+  // Lines 2 to N-2: Items/products (combine all product lines)
+  const productLines = lines.slice(1, lines.length - 2);
+  const items = productLines.join(", ").trim();
+
+  if (!items || items.length < 2) {
+    return {
+      valid: false,
+      error: `Format alternatif: Produits invalides - Doit contenir au moins un produit`,
+    };
+  }
+
+  // Check for carrier in any line (optional)
+  const carrier = extractCarrier(text);
+
+  return {
+    valid: true,
+    phone,
+    items,
+    amount_due: amount,
+    quartier,
+    carrier,
+    customer_name: null,
+    hasPhone: true,
+    hasAmount: true,
+  };
+}
+
+/**
  * Parse Option 3 format: Compact Structured
  * Format:
  *   Line 1: Phone number (6xx123456)
@@ -203,7 +322,8 @@ function parseCompactStructuredFormat(text) {
     return {
       valid: false,
       error: `Format invalide: Besoin de 4 lignes, reçu ${lines.length}`,
-      expectedFormat: "Ligne 1: Numéro\nLigne 2: Produits\nLigne 3: Montant\nLigne 4: Quartier",
+      expectedFormat:
+        "Ligne 1: Numéro\nLigne 2: Produits\nLigne 3: Montant\nLigne 4: Quartier",
     };
   }
 
@@ -237,7 +357,7 @@ function parseCompactStructuredFormat(text) {
   // Line 3: Amount
   const amountLine = lines[2];
   let amount = null;
-  
+
   // Try to extract amount
   const amountMatch = amountLine.match(/(\d+(?:\.\d+)?)\s*k?/i);
   if (amountMatch) {
@@ -293,17 +413,42 @@ function parseCompactStructuredFormat(text) {
 
 /**
  * Main parser function - extracts all delivery info from a message
- * Tries Option 3 format first, then falls back to flexible parsing
+ * Tries Alternative format first, then Option 3 format, then falls back to flexible parsing
  */
 function parseDeliveryMessage(text) {
-  // First, try Option 3: Compact Structured format
+  const lines = text.split("\n").filter((line) => line.trim().length > 0);
+
+  // First, try Alternative format (quartier first, products in middle, amount and phone at end)
+  // This format has 4+ lines and the first line is a quartier (not a number)
+  if (lines.length >= 4) {
+    const firstLine = lines[0].trim();
+    const lastLine = lines[lines.length - 1].trim();
+
+    // Check if it looks like alternative format:
+    // - First line is not a number and not a phone
+    // - Last line looks like a phone number
+    const firstLineIsQuartier =
+      !/^\d+$/.test(firstLine) &&
+      !/^6\d{8,9}$/.test(firstLine.replace(/\s/g, ""));
+    const lastLineIsPhone = /^6[\d\sx]{7,10}$/i.test(
+      lastLine.replace(/[\s\-\.]/g, "")
+    );
+
+    if (firstLineIsQuartier && lastLineIsPhone) {
+      const altResult = parseAlternativeFormat(text);
+      if (altResult.valid) {
+        return altResult;
+      }
+    }
+  }
+
+  // Second, try Option 3: Compact Structured format
   const compactResult = parseCompactStructuredFormat(text);
   if (compactResult.valid) {
     return compactResult;
   }
 
   // If not valid compact format, check if it's close (has 4+ lines)
-  const lines = text.split("\n").filter((line) => line.trim().length > 0);
   if (lines.length >= 4) {
     // It looks like compact format but has errors
     return {
@@ -326,7 +471,7 @@ function parseDeliveryMessage(text) {
   }
   if (amount) {
     items = items.replace(new RegExp(amount.toString(), "gi"), "");
-    items = items.replace(new RegExp((amount / 1000) + "k", "gi"), "");
+    items = items.replace(new RegExp(amount / 1000 + "k", "gi"), "");
   }
   if (quartier) {
     items = items.replace(new RegExp(quartier, "gi"), "");
@@ -388,13 +533,13 @@ function isDeliveryMessage(text) {
     return false;
   }
 
-  // Check if it follows Option 3 format (4 lines)
+  // Check if it follows a structured format (4+ lines)
   const lines = text.split("\n").filter((line) => line.trim().length > 0);
-  
-  // If it has 4+ lines, it's likely Option 3 format
+
+  // If it has 4+ lines, try to parse it (could be Option 3 or Alternative format)
   if (lines.length >= 4) {
     const parsed = parseDeliveryMessage(text);
-    return parsed.valid === true; // Only return true if valid Option 3 format
+    return parsed.valid === true; // Return true if valid structured format
   }
 
   // Fallback: check for phone or amount (flexible format)
@@ -411,4 +556,3 @@ module.exports = {
   extractCarrier,
   extractCustomerName,
 };
-

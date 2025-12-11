@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { authenticateToken } = require('../middleware/auth');
 const {
   getAllDeliveries,
   getDeliveryById,
@@ -7,6 +8,15 @@ const {
   updateDelivery,
   getDeliveryHistory,
 } = require('../../db');
+
+// All routes require authentication (optional for backward compatibility)
+router.use((req, res, next) => {
+  // If Authorization header is present, authenticate
+  if (req.headers.authorization) {
+    return authenticateToken(req, res, next);
+  }
+  next();
+});
 
 // GET /api/v1/deliveries - List all deliveries with pagination and filters
 router.get('/', async (req, res, next) => {
@@ -21,7 +31,17 @@ router.get('/', async (req, res, next) => {
       endDate,
       sortBy = 'created_at',
       sortOrder = 'DESC',
+      group_id,
     } = req.query;
+
+    // Auto-filter by agency_id for agency admins (unless super admin)
+    let agency_id = null;
+    if (req.user && req.user.role !== 'super_admin') {
+      // Use agencyId from token, or fallback to userId if agencyId is not set
+      agency_id = req.user.agencyId !== null && req.user.agencyId !== undefined 
+        ? req.user.agencyId 
+        : req.user.userId;
+    }
 
     const result = await getAllDeliveries({
       page: parseInt(page),
@@ -33,6 +53,8 @@ router.get('/', async (req, res, next) => {
       endDate,
       sortBy,
       sortOrder,
+      agency_id,
+      group_id: group_id ? parseInt(group_id) : null,
     });
 
     res.json({
