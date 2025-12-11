@@ -47,7 +47,18 @@ async function seedSuperAdmin() {
     console.log(`💾 Database type: ${db.adapter.type}\n`);
 
     // Check if super admin already exists by email
-    const existingByEmail = await db.getAgencyByEmail(email);
+    let existingByEmail;
+    try {
+      existingByEmail = await db.getAgencyByEmail(email);
+    } catch (dbError) {
+      if (dbError.message && (dbError.message.includes("does not exist") || dbError.message.includes("relation") || dbError.code === "42P01")) {
+        console.error("\n❌ Error: The 'agencies' table does not exist in your database.");
+        console.error("   Please run the migration first:");
+        console.error("   npm run migrate:postgres\n");
+        throw new Error("Database tables not initialized. Run migration first.");
+      }
+      throw dbError;
+    }
     if (existingByEmail) {
       console.log("✅ Super admin already exists!");
       console.log(`   ID: ${existingByEmail.id}`);
@@ -116,6 +127,7 @@ async function seedSuperAdmin() {
     console.log(`   ID: ${agencyId}`);
     console.log(`   Name: ${name}`);
     console.log(`   Email: ${email}`);
+    console.log(`   Password: ${password}`);
     console.log(`   Role: super_admin`);
     console.log(`   Status: Active`);
     console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");

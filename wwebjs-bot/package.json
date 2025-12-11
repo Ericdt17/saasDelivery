@@ -24,7 +24,8 @@
     "test:system": "node src/scripts/test-system.js",
     "test:system:verbose": "node src/scripts/test-system.js --verbose",
     "seed:admin": "node src/scripts/seed-super-admin.js",
-    "check:agencies": "node src/scripts/check-active-agencies.js"
+    "check:agencies": "node src/scripts/check-active-agencies.js",
+    "migrate:postgres": "node src/scripts/migrate-postgresql-schema.js"
   },
   "keywords": [],
   "author": "",

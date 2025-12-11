@@ -172,6 +172,9 @@ function createSqliteQueries(db) {
       "quartier",
       "notes",
       "carrier",
+      "agency_id",
+      "group_id",
+      "whatsapp_message_id",
     ];
 
     const fields = [];

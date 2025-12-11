@@ -168,6 +168,9 @@ function createPostgresQueries(pool) {
       "quartier",
       "notes",
       "carrier",
+      "agency_id",
+      "group_id",
+      "whatsapp_message_id",
     ];
 
     const fields = [];
@@ -215,6 +218,13 @@ function createPostgresQueries(pool) {
     return query(
       "SELECT * FROM deliveries WHERE phone = $1 ORDER BY created_at DESC LIMIT 1",
       [phone]
+    );
+  }
+
+  async function findDeliveryByMessageId(whatsappMessageId) {
+    return query(
+      "SELECT * FROM deliveries WHERE whatsapp_message_id = $1 ORDER BY created_at DESC LIMIT 1",
+      [whatsappMessageId]
     );
   }
 
@@ -446,7 +456,8 @@ function createPostgresQueries(pool) {
        WHERE email = $1 LIMIT 1`,
       [email]
     );
-    return result[0] || null;
+    // query() already returns result.rows[0] || null for LIMIT 1 queries
+    return result;
   }
 
   async function getAllAgencies() {
