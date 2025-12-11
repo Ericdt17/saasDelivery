@@ -1,6 +1,6 @@
 /**
  * Seed Super Admin Script
- * Creates the initial super admin account if one doesn't exist
+ * Creates a super admin account. Allows multiple super admins with different emails.
  * 
  * Usage:
  *   node src/scripts/seed-super-admin.js
@@ -60,7 +60,7 @@ async function seedSuperAdmin() {
       throw dbError;
     }
     if (existingByEmail) {
-      console.log("✅ Super admin already exists!");
+      console.log("⚠️  User with this email already exists!");
       console.log(`   ID: ${existingByEmail.id}`);
       console.log(`   Name: ${existingByEmail.name}`);
       console.log(`   Email: ${existingByEmail.email}`);
@@ -72,28 +72,15 @@ async function seedSuperAdmin() {
         console.log("   You may want to update the role manually.");
       }
       
+      console.log("\n💡 To create a new super admin, use a different email address.");
+      console.log("💡 To reset the password for this user, use: node src/scripts/reset-password.js");
+      
       await db.close();
       process.exit(0);
     }
 
-    // Check if any super admin exists
-    const allAgencies = await db.getAllAgencies();
-    const existingSuperAdmin = allAgencies.find(
-      (agency) => agency.role === "super_admin"
-    );
-
-    if (existingSuperAdmin) {
-      console.log("✅ A super admin already exists in the database!");
-      console.log(`   ID: ${existingSuperAdmin.id}`);
-      console.log(`   Name: ${existingSuperAdmin.name}`);
-      console.log(`   Email: ${existingSuperAdmin.email}`);
-      console.log("\n💡 If you want to create another super admin, use a different email.");
-      await db.close();
-      process.exit(0);
-    }
-
-    // No super admin exists, create one
-    console.log("📝 No super admin found. Creating new super admin account...\n");
+    // Create new super admin account
+    console.log("📝 Creating new super admin account...\n");
 
     // Validate inputs
     if (!email || !email.includes("@")) {
