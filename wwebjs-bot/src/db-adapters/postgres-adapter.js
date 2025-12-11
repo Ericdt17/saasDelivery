@@ -71,6 +71,34 @@ class PostgresAdapter {
       // Test connection first
       await this.testConnection();
 
+      // Create agencies table
+      await this.query(`
+        CREATE TABLE IF NOT EXISTS agencies (
+          id SERIAL PRIMARY KEY,
+          name VARCHAR(255) NOT NULL,
+          email VARCHAR(255) UNIQUE NOT NULL,
+          password_hash VARCHAR(255) NOT NULL,
+          role VARCHAR(50) DEFAULT 'agency',
+          is_active BOOLEAN DEFAULT true,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
+      // Create groups table
+      await this.query(`
+        CREATE TABLE IF NOT EXISTS groups (
+          id SERIAL PRIMARY KEY,
+          agency_id INTEGER NOT NULL,
+          whatsapp_group_id VARCHAR(255) UNIQUE,
+          name VARCHAR(255) NOT NULL,
+          is_active BOOLEAN DEFAULT true,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (agency_id) REFERENCES agencies(id) ON DELETE CASCADE
+        )
+      `);
+
       // Create deliveries table
       await this.query(`
         CREATE TABLE IF NOT EXISTS deliveries (
@@ -84,10 +112,25 @@ class PostgresAdapter {
           quartier VARCHAR(255),
           notes TEXT,
           carrier VARCHAR(255),
+          group_id INTEGER,
+          agency_id INTEGER,
+          whatsapp_message_id VARCHAR(255),
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE SET NULL,
+          FOREIGN KEY (agency_id) REFERENCES agencies(id) ON DELETE SET NULL
         )
       `);
+
+      // Add whatsapp_message_id column if it doesn't exist (for existing databases)
+      try {
+        await this.query(`
+          ALTER TABLE deliveries 
+          ADD COLUMN IF NOT EXISTS whatsapp_message_id VARCHAR(255)
+        `);
+      } catch (err) {
+        // Column might already exist, ignore error
+      }
 
       // Create history table
       await this.query(`
@@ -97,10 +140,97 @@ class PostgresAdapter {
           action VARCHAR(50) NOT NULL,
           details TEXT,
           actor VARCHAR(100) DEFAULT 'bot',
+          agency_id INTEGER,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (delivery_id) REFERENCES deliveries(id) ON DELETE CASCADE
+          FOREIGN KEY (delivery_id) REFERENCES deliveries(id) ON DELETE CASCADE,
+          FOREIGN KEY (agency_id) REFERENCES agencies(id) ON DELETE SET NULL
         )
       `);
+
+      // Add columns to existing deliveries table if they don't exist
+      try {
+        await this.query(`
+          DO $$ 
+          BEGIN
+            IF NOT EXISTS (
+              SELECT 1 FROM information_schema.columns 
+              WHERE table_name = 'deliveries' AND column_name = 'group_id'
+            ) THEN
+              ALTER TABLE deliveries ADD COLUMN group_id INTEGER;
+            END IF;
+          END $$;
+        `);
+      } catch (err) {
+        // Ignore errors
+      }
+      try {
+        await this.query(`
+          DO $$ 
+          BEGIN
+            IF NOT EXISTS (
+              SELECT 1 FROM information_schema.columns 
+              WHERE table_name = 'deliveries' AND column_name = 'agency_id'
+            ) THEN
+              ALTER TABLE deliveries ADD COLUMN agency_id INTEGER;
+            END IF;
+          END $$;
+        `);
+      } catch (err) {
+        // Ignore errors
+      }
+
+      // Add column to existing delivery_history table if it doesn't exist
+      try {
+        await this.query(`
+          DO $$ 
+          BEGIN
+            IF NOT EXISTS (
+              SELECT 1 FROM information_schema.columns 
+              WHERE table_name = 'delivery_history' AND column_name = 'agency_id'
+            ) THEN
+              ALTER TABLE delivery_history ADD COLUMN agency_id INTEGER;
+            END IF;
+          END $$;
+        `);
+      } catch (err) {
+        // Ignore errors
+      }
+
+      // Add foreign key constraints if columns were just added
+      try {
+        await this.query(`
+          DO $$ 
+          BEGIN
+            IF NOT EXISTS (
+              SELECT 1 FROM information_schema.table_constraints 
+              WHERE table_name = 'deliveries' 
+              AND constraint_name = 'deliveries_group_id_fkey'
+            ) THEN
+              ALTER TABLE deliveries ADD CONSTRAINT deliveries_group_id_fkey 
+              FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE SET NULL;
+            END IF;
+          END $$;
+        `);
+      } catch (err) {
+        // Ignore errors
+      }
+      try {
+        await this.query(`
+          DO $$ 
+          BEGIN
+            IF NOT EXISTS (
+              SELECT 1 FROM information_schema.table_constraints 
+              WHERE table_name = 'deliveries' 
+              AND constraint_name = 'deliveries_agency_id_fkey'
+            ) THEN
+              ALTER TABLE deliveries ADD CONSTRAINT deliveries_agency_id_fkey 
+              FOREIGN KEY (agency_id) REFERENCES agencies(id) ON DELETE SET NULL;
+            END IF;
+          END $$;
+        `);
+      } catch (err) {
+        // Ignore errors
+      }
 
       // Create indexes (ignore errors if they already exist)
       try {
@@ -114,7 +244,25 @@ class PostgresAdapter {
           CREATE INDEX IF NOT EXISTS idx_deliveries_created_at ON deliveries(created_at)
         `);
         await this.query(`
+          CREATE INDEX IF NOT EXISTS idx_deliveries_group_id ON deliveries(group_id)
+        `);
+        await this.query(`
+          CREATE INDEX IF NOT EXISTS idx_deliveries_agency_id ON deliveries(agency_id)
+        `);
+        await this.query(`
+          CREATE INDEX IF NOT EXISTS idx_groups_agency_id ON groups(agency_id)
+        `);
+        await this.query(`
+          CREATE INDEX IF NOT EXISTS idx_groups_whatsapp_id ON groups(whatsapp_group_id)
+        `);
+        await this.query(`
+          CREATE INDEX IF NOT EXISTS idx_agencies_email ON agencies(email)
+        `);
+        await this.query(`
           CREATE INDEX IF NOT EXISTS idx_history_delivery_id ON delivery_history(delivery_id)
+        `);
+        await this.query(`
+          CREATE INDEX IF NOT EXISTS idx_history_agency_id ON delivery_history(agency_id)
         `);
       } catch (indexError) {
         // Indexes might already exist, that's OK

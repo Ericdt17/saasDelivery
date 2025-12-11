@@ -91,19 +91,22 @@ function extractAmountFromStatus(text) {
 
 /**
  * Detect and parse status update message
+ * @param {string} text - Message text to parse
+ * @param {boolean} isReply - If true, don't require phone number (for reply-based updates)
  * Returns: { type, phone, amount, details } or null
  */
-function parseStatusUpdate(text) {
+function parseStatusUpdate(text, isReply = false) {
   const lowerText = text.toLowerCase().trim();
 
-  // 1. DELIVERED - "Livré", "Livre", "Livrée" (match anywhere in message)
+  // 1. PAYMENT - "Livré", "Livre", "Livrée" (now treated as payment)
   // Check for "livré", "livre", or "livrée" anywhere in the message
   if (lowerText.includes("livré") || lowerText.includes("livre") || lowerText.match(/\blivr[ée]?\b/i)) {
     const phone = extractPhoneFromStatus(text);
+    const amount = extractAmountFromStatus(text);
     return {
-      type: "delivered",
+      type: "payment",
       phone: phone,
-      amount: null,
+      amount: amount, // Will be null if no amount specified, will use remaining amount in handler
       details: text,
     };
   }

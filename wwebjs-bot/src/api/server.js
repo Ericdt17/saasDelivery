@@ -3,6 +3,9 @@ const cors = require('cors');
 const deliveriesRouter = require('./routes/deliveries');
 const statsRouter = require('./routes/stats');
 const searchRouter = require('./routes/search');
+const authRouter = require('./routes/auth');
+const agenciesRouter = require('./routes/agencies');
+const groupsRouter = require('./routes/groups');
 const errorHandler = require('./middleware/errorHandler');
 
 const app = express();
@@ -10,7 +13,7 @@ const app = express();
 const PORT = process.env.PORT || process.env.API_PORT || 3000;
 
 // Middleware
-// CORS configuration - allow requests from frontend
+// CORS configuration - allow requests from frontend with authentication support
 const corsOptions = {
   origin: function (origin, callback) {
     // Allow requests with no origin (like mobile apps, Postman, or same-origin requests)
@@ -19,26 +22,57 @@ const corsOptions = {
     if (!origin || 
         origin.includes('localhost') || 
         origin.includes('127.0.0.1') ||
+        origin.includes('0.0.0.0') ||
         process.env.NODE_ENV !== 'production') {
       callback(null, true);
     } else {
       // In production, check against allowed origins from environment variable
       const allowedOrigins = process.env.ALLOWED_ORIGINS 
-        ? process.env.ALLOWED_ORIGINS.split(',')
+        ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
         : [];
-      if (allowedOrigins.includes(origin)) {
+      if (allowedOrigins.length === 0 || allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
+        console.warn(`⚠️  CORS blocked request from origin: ${origin}`);
         callback(new Error('Not allowed by CORS'));
       }
     }
   },
-  credentials: true, // Allow cookies/credentials
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true, // Allow cookies/credentials (required for authentication)
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: [
+    'Content-Type', 
+    'Authorization', 
+    'X-Requested-With',
+    'Accept',
+    'Origin'
+  ],
+  exposedHeaders: ['Authorization'], // Expose Authorization header to frontend
+  maxAge: 86400, // Cache preflight requests for 24 hours
+  optionsSuccessStatus: 200, // Some legacy browsers (IE11) choke on 204
 };
 
 app.use(cors(corsOptions)); // Enable CORS with configuration
+
+// Security headers middleware
+app.use((req, res, next) => {
+  // Prevent clickjacking
+  res.setHeader('X-Frame-Options', 'DENY');
+  // Prevent MIME type sniffing
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  // Enable XSS protection
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  // Referrer policy
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  // Content Security Policy (adjust as needed for your frontend)
+  if (process.env.NODE_ENV === 'production') {
+    res.setHeader(
+      'Content-Security-Policy',
+      "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'"
+    );
+  }
+  next();
+});
 
 // Enhanced JSON parser with better error handling
 app.use(express.json({
@@ -68,6 +102,9 @@ app.use((req, res, next) => {
 });
 
 // Routes
+app.use('/api/v1/auth', authRouter);
+app.use('/api/v1/agencies', agenciesRouter);
+app.use('/api/v1/groups', groupsRouter);
 app.use('/api/v1/deliveries', deliveriesRouter);
 app.use('/api/v1/stats', statsRouter);
 app.use('/api/v1/search', searchRouter);
@@ -104,6 +141,12 @@ if (require.main === module) {
   app.listen(PORT, () => {
     console.log(`\n🚀 API Server running on http://localhost:${PORT}`);
     console.log(`📋 Available endpoints:`);
+    console.log(`   POST   /api/v1/auth/login`);
+    console.log(`   POST   /api/v1/auth/logout`);
+    console.log(`   GET    /api/v1/auth/me`);
+    console.log(`   GET    /api/v1/agencies (super admin)`);
+    console.log(`   POST   /api/v1/agencies (super admin)`);
+    console.log(`   GET    /api/v1/groups`);
     console.log(`   GET    /api/v1/deliveries`);
     console.log(`   GET    /api/v1/deliveries/:id`);
     console.log(`   POST   /api/v1/deliveries`);

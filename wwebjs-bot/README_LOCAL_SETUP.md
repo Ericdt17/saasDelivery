@@ -89,3 +89,5 @@ But for development, SQLite is recommended - it's simpler and faster for local t
 - ✅ Render deployment uses PostgreSQL (configured in Render dashboard)
 - ✅ Both databases are independent - safe to test locally without affecting production
 
+
+

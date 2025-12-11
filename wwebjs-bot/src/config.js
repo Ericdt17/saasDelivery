@@ -28,4 +28,7 @@ module.exports = {
 
   // Message sending configuration
   SEND_CONFIRMATIONS: process.env.SEND_CONFIRMATIONS || "false", // Send confirmation messages to group when delivery created/updated
+
+  // Agency configuration for auto-group registration
+  DEFAULT_AGENCY_ID: process.env.DEFAULT_AGENCY_ID || null, // Default agency ID for auto-registered groups
 };
