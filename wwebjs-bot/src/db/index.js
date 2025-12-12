@@ -45,6 +45,7 @@ const api = {
   createDelivery: queries.insertDelivery, // backward compatibility
   bulkCreateDeliveries: queries.bulkCreateDeliveries,
   updateDelivery: queries.updateDelivery,
+  updateDeliveryByMessageId: queries.updateDeliveryByMessageId,
   getDeliveries: queries.getDeliveries,
   getAllDeliveries: queries.getDeliveries, // backward compatibility
   getDeliveryById: queries.getDeliveryById,
@@ -54,6 +55,7 @@ const api = {
   getTodayDeliveries: queries.getTodayDeliveries,
   findDeliveryByPhone: queries.findDeliveryByPhone,
   findDeliveryByPhoneForUpdate: queries.findDeliveryByPhoneForUpdate,
+  findDeliveryByMessageId: queries.findDeliveryByMessageId,
   searchDeliveries: queries.searchDeliveries,
   saveHistory: queries.saveHistory,
   addHistory: (deliveryId, action, details, actor = "bot") => {

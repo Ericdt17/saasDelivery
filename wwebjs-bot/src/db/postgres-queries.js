@@ -182,8 +182,15 @@ function createPostgresQueries(pool) {
           `Invalid field name: ${key}. Allowed fields: ${allowedFields.join(", ")}`
         );
       }
+      
+      // Round amount fields to 2 decimal places to ensure exact values
+      let processedValue = value;
+      if ((key === "amount_due" || key === "amount_paid") && value != null) {
+        processedValue = Math.round(parseFloat(value) * 100) / 100;
+      }
+      
       fields.push(`${key} = $${values.length + 1}`);
-      values.push(value);
+      values.push(processedValue);
     }
 
     if (!fields.length) {
@@ -226,6 +233,18 @@ function createPostgresQueries(pool) {
       "SELECT * FROM deliveries WHERE whatsapp_message_id = $1 ORDER BY created_at DESC LIMIT 1",
       [whatsappMessageId]
     );
+  }
+
+  async function updateDeliveryByMessageId(whatsappMessageId, updates = {}) {
+    // First find the delivery by message ID
+    const delivery = await findDeliveryByMessageId(whatsappMessageId);
+    
+    if (!delivery) {
+      throw new Error(`Delivery not found with whatsapp_message_id: ${whatsappMessageId}`);
+    }
+
+    // Use the existing updateDelivery function with the found ID
+    return await updateDelivery(delivery.id, updates);
   }
 
   async function getTodayDeliveries() {
@@ -610,6 +629,7 @@ function createPostgresQueries(pool) {
     insertDelivery,
     bulkCreateDeliveries,
     updateDelivery,
+    updateDeliveryByMessageId,
     findDeliveryByPhone,
     findDeliveryByPhoneForUpdate,
     findDeliveryByMessageId,

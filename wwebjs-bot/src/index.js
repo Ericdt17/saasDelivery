@@ -12,15 +12,17 @@ const {
   findDeliveryByPhoneForUpdate,
   findDeliveryByMessageId,
   updateDelivery,
+  updateDeliveryByMessageId,
   addHistory,
 } = require("./db");
 const { generateDailyReport } = require("./daily-report");
 const { getOrCreateGroup, getAgencyIdForGroup } = require("./utils/group-manager");
 
 // Create WhatsApp client with local auth (saves session)
+// Using ./auth-dev for local development to avoid conflicts with production session
 const client = new Client({
   authStrategy: new LocalAuth({
-    dataPath: "./auth",
+    dataPath: process.env.WHATSAPP_SESSION_PATH || "./auth-dev",
   }),
   puppeteer: {
     headless: true,
@@ -307,28 +309,33 @@ client.on("message", async (msg) => {
 
               case "payment":
                 // If amount is not specified, use the remaining amount due
-                let paymentAmount = statusData.amount;
+                // Convert to numbers to handle PostgreSQL DECIMAL types (returned as strings)
+                // Round to 2 decimal places to avoid floating point precision issues
+                const currentAmountPaid = Math.round((parseFloat(delivery.amount_paid) || 0) * 100) / 100;
+                const currentAmountDue = Math.round((parseFloat(delivery.amount_due) || 0) * 100) / 100;
+                
+                let paymentAmount = Math.round((parseFloat(statusData.amount) || 0) * 100) / 100;
                 if (!paymentAmount || paymentAmount === 0) {
-                  const remainingAmount = (delivery.amount_due || 0) - (delivery.amount_paid || 0);
-                  paymentAmount = remainingAmount > 0 ? remainingAmount : delivery.amount_due || 0;
+                  const remainingAmount = currentAmountDue - currentAmountPaid;
+                  paymentAmount = remainingAmount > 0 ? remainingAmount : currentAmountDue;
+                  paymentAmount = Math.round(paymentAmount * 100) / 100;
                   console.log(
                     `   💡 Montant non spécifié, utilisation du montant restant: ${paymentAmount} FCFA`
                   );
                 }
                 
-                const newAmountPaid =
-                  (delivery.amount_paid || 0) + paymentAmount;
+                const newAmountPaid = Math.round((currentAmountPaid + paymentAmount) * 100) / 100;
                 updateData.amount_paid = newAmountPaid;
                 historyAction = "payment_collected";
                 console.log(
                   `   💰 Paiement collecté: ${paymentAmount} FCFA`
                 );
                 console.log(
-                  `   💵 Total payé: ${newAmountPaid} FCFA / ${delivery.amount_due} FCFA`
+                  `   💵 Total payé: ${newAmountPaid} FCFA / ${currentAmountDue} FCFA`
                 );
 
                 // Auto-mark as delivered if fully paid
-                if (newAmountPaid >= delivery.amount_due) {
+                if (newAmountPaid >= currentAmountDue) {
                   updateData.status = "delivered";
                   console.log(
                     `   ✅ Livraison complètement payée - marquée comme LIVRÉE`
@@ -382,9 +389,23 @@ client.on("message", async (msg) => {
                 break;
             }
 
-            // Update delivery
+            // Update delivery - use updateDeliveryByMessageId if it's a reply
             if (Object.keys(updateData).length > 0) {
-              await updateDelivery(delivery.id, updateData);
+              if (deliveryFromReply && quotedMessage) {
+                // Use message ID for reply-based updates
+                const quotedIdSerialized = quotedMessage.id?._serialized;
+                if (quotedIdSerialized) {
+                  await updateDeliveryByMessageId(quotedIdSerialized, updateData);
+                  console.log(`   ✅ Mise à jour via message ID: ${quotedIdSerialized}`);
+                } else {
+                  // Fallback to delivery ID if message ID not available
+                  await updateDelivery(delivery.id, updateData);
+                }
+              } else {
+                // Use delivery ID for phone-based updates
+                await updateDelivery(delivery.id, updateData);
+              }
+              
               await addHistory(
                 delivery.id,
                 historyAction || statusData.type,
