@@ -69,7 +69,7 @@ Quand le bot reçoit un message, il affiche :
 
 ```env
 # Autres variables...
-DATABASE_URL=postgresql://...@dpg-d4u66kdactks73abkav0-a.../saas_delivery_db_dev
+DATABASE_URL=postgresql://user:password@host:5432/database
 DB_TYPE=postgres
 NODE_ENV=development
 
@@ -137,7 +137,7 @@ Le bot **ignorera** ce message.
 # Base de données
 NODE_ENV=development
 DB_TYPE=postgres
-DATABASE_URL=postgresql://saas_delivery_db_dev_user:****@dpg-d4u66kdactks73abkav0-a.oregon-postgres.render.com/saas_delivery_db_dev
+DATABASE_URL=postgresql://user:password@host:5432/database
 
 # Groupe WhatsApp (uniquement le groupe de test)
 GROUP_ID=120363123456789012@g.us

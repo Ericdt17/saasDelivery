@@ -36,7 +36,7 @@ Votre configuration `.env` locale reste la même :
 ```env
 NODE_ENV=development
 DB_TYPE=postgres
-DATABASE_URL=postgresql://...@dpg-d4u66kdactks73abkav0-a.../saas_delivery_db_dev
+DATABASE_URL=postgresql://user:password@host:5432/database
 GROUP_ID=null  # Ou un groupe spécifique si vous voulez
 REPORT_TIME=20:00
 REPORT_ENABLED=false

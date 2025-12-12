@@ -216,7 +216,7 @@ Si vous voyez les deux messages, **les deux bots sont actifs** ⚠️
 ```env
 NODE_ENV=development
 DB_TYPE=postgres
-DATABASE_URL=postgresql://...@dpg-d4u66kdactks73abkav0-a.../saas_delivery_db_dev
+DATABASE_URL=postgresql://user:password@host:5432/database
 GROUP_ID=12036398765432109876@g.us  # ← Groupe de TEST différent
 REPORT_TIME=20:00
 REPORT_ENABLED=false  # Désactiver les rapports en local

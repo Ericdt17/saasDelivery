@@ -43,7 +43,7 @@
 ```env
 NODE_ENV=development
 DB_TYPE=postgres  # ou sqlite
-DATABASE_URL=postgresql://...@dpg-d4u66kdactks73abkav0-a.../saas_delivery_db_dev
+DATABASE_URL=postgresql://user:password@host:5432/database
 GROUP_ID=null  # ou un ID spécifique
 REPORT_TIME=20:00
 REPORT_ENABLED=true
@@ -54,7 +54,7 @@ REPORT_ENABLED=true
 ```env
 NODE_ENV=production
 DB_TYPE=postgres
-DATABASE_URL=postgresql://...@dpg-XXXXX.../saas_delivery_db
+DATABASE_URL=postgresql://user:password@host:5432/database
 ALLOWED_ORIGINS=https://your-frontend.netlify.app
 TIME_ZONE=UTC
 PORT=10000  # Auto-défini par Render
