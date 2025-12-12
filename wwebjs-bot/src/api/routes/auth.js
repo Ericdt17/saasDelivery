@@ -40,13 +40,40 @@ router.post("/login", async (req, res, next) => {
          FROM agencies 
          WHERE email = ? LIMIT 1`;
 
-    const agency = await adapter.query(findAgencyQuery, [normalizedEmail]);
+    let agency;
+    try {
+      agency = await adapter.query(findAgencyQuery, [normalizedEmail]);
+    } catch (dbError) {
+      console.error("Database query error in login:", {
+        error: dbError.message,
+        stack: dbError.stack,
+        email: normalizedEmail,
+      });
+      return res.status(500).json({
+        success: false,
+        error: "Database error",
+        message: "Unable to verify credentials. Please try again later.",
+      });
+    }
 
     if (!agency) {
       return res.status(401).json({
         success: false,
         error: "Authentication failed",
         message: "Invalid email or password",
+      });
+    }
+
+    // Validate that password_hash exists
+    if (!agency.password_hash) {
+      console.error("Agency found but password_hash is missing:", {
+        agencyId: agency.id,
+        email: agency.email,
+      });
+      return res.status(500).json({
+        success: false,
+        error: "Account configuration error",
+        message: "Account is not properly configured. Please contact support.",
       });
     }
 
@@ -64,7 +91,21 @@ router.post("/login", async (req, res, next) => {
     }
 
     // Verify password
-    const isPasswordValid = await comparePassword(password, agency.password_hash);
+    let isPasswordValid;
+    try {
+      isPasswordValid = await comparePassword(password, agency.password_hash);
+    } catch (passwordError) {
+      console.error("Password comparison error:", {
+        error: passwordError.message,
+        stack: passwordError.stack,
+        agencyId: agency.id,
+      });
+      return res.status(500).json({
+        success: false,
+        error: "Authentication error",
+        message: "Unable to verify password. Please try again later.",
+      });
+    }
 
     if (!isPasswordValid) {
       return res.status(401).json({
@@ -75,13 +116,27 @@ router.post("/login", async (req, res, next) => {
     }
 
     // Generate JWT token
-    const token = generateToken({
-      id: agency.id,
-      userId: agency.id,
-      agencyId: agency.role === "super_admin" ? null : agency.id,
-      email: agency.email,
-      role: agency.role,
-    });
+    let token;
+    try {
+      token = generateToken({
+        id: agency.id,
+        userId: agency.id,
+        agencyId: agency.role === "super_admin" ? null : agency.id,
+        email: agency.email,
+        role: agency.role,
+      });
+    } catch (tokenError) {
+      console.error("Token generation error:", {
+        error: tokenError.message,
+        stack: tokenError.stack,
+        agencyId: agency.id,
+      });
+      return res.status(500).json({
+        success: false,
+        error: "Token generation error",
+        message: "Unable to create authentication token. Please try again later.",
+      });
+    }
 
     // Return success response (exclude password_hash)
     res.json({
@@ -98,6 +153,12 @@ router.post("/login", async (req, res, next) => {
       },
     });
   } catch (error) {
+    // Log unexpected errors with full context
+    console.error("Unexpected error in login route:", {
+      error: error.message,
+      stack: error.stack,
+      body: req.body ? { email: req.body.email } : null,
+    });
     next(error);
   }
 });
