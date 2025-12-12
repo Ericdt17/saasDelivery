@@ -54,7 +54,6 @@ const api = {
   getTodayDeliveries: queries.getTodayDeliveries,
   findDeliveryByPhone: queries.findDeliveryByPhone,
   findDeliveryByPhoneForUpdate: queries.findDeliveryByPhoneForUpdate,
-  findDeliveryByMessageId: queries.findDeliveryByMessageId,
   searchDeliveries: queries.searchDeliveries,
   saveHistory: queries.saveHistory,
   addHistory: (deliveryId, action, details, actor = "bot") => {

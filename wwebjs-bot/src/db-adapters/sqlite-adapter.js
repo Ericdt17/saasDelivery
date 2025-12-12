@@ -75,28 +75,12 @@ class SqliteAdapter {
         carrier TEXT,
         group_id INTEGER,
         agency_id INTEGER,
-        whatsapp_message_id TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE SET NULL,
         FOREIGN KEY (agency_id) REFERENCES agencies(id) ON DELETE SET NULL
       )
     `);
-
-    // Add whatsapp_message_id column if it doesn't exist (for existing databases)
-    try {
-      // Check if column exists first
-      const tableInfo = this.db.prepare("PRAGMA table_info(deliveries)").all();
-      const hasColumn = tableInfo.some(col => col.name === "whatsapp_message_id");
-      
-      if (!hasColumn) {
-        this.db.exec(`ALTER TABLE deliveries ADD COLUMN whatsapp_message_id TEXT`);
-        console.log("✅ Added whatsapp_message_id column to deliveries table");
-      }
-    } catch (err) {
-      // Column might already exist or other error, log it
-      console.log(`⚠️  Could not add whatsapp_message_id column: ${err.message}`);
-    }
 
     // Create history table
     this.db.exec(`

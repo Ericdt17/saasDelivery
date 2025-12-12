@@ -114,23 +114,12 @@ class PostgresAdapter {
           carrier VARCHAR(255),
           group_id INTEGER,
           agency_id INTEGER,
-          whatsapp_message_id VARCHAR(255),
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE SET NULL,
           FOREIGN KEY (agency_id) REFERENCES agencies(id) ON DELETE SET NULL
         )
       `);
-
-      // Add whatsapp_message_id column if it doesn't exist (for existing databases)
-      try {
-        await this.query(`
-          ALTER TABLE deliveries 
-          ADD COLUMN IF NOT EXISTS whatsapp_message_id VARCHAR(255)
-        `);
-      } catch (err) {
-        // Column might already exist, ignore error
-      }
 
       // Create history table
       await this.query(`
