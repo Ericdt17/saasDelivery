@@ -78,3 +78,4 @@ SELECT COUNT(*) as agencies_count FROM agencies;
 -- Check if groups table exists
 SELECT COUNT(*) as groups_count FROM groups;
 
+

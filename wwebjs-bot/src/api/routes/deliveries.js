@@ -9,14 +9,8 @@ const {
   getDeliveryHistory,
 } = require('../../db');
 
-// All routes require authentication (optional for backward compatibility)
-router.use((req, res, next) => {
-  // If Authorization header is present, authenticate
-  if (req.headers.authorization) {
-    return authenticateToken(req, res, next);
-  }
-  next();
-});
+// All routes require authentication (cookie-based or Authorization header)
+router.use(authenticateToken);
 
 // GET /api/v1/deliveries - List all deliveries with pagination and filters
 router.get('/', async (req, res, next) => {

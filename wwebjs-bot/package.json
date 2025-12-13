@@ -19,7 +19,12 @@
     "test": "node src/test/scenarios.test.js",
     "test:db": "node src/test-db-connection.js",
     "migrate": "node db/migrate.js",
-    "test:migrate": "node db/test-migration.js"
+    "migrate:prod": "node src/scripts/migrate-prod.js",
+    "test:migrate": "node db/test-migration.js",
+    "test:prod-setup": "node src/scripts/test-prod-migration.js",
+    "test:migration-prod": "node src/scripts/test-migration-prod.js",
+    "test:startup": "node src/scripts/test-startup-script.js",
+    "check-dev-migrations": "node src/scripts/check-dev-migrations.js"
   },
   "keywords": [],
   "author": "",
@@ -28,6 +33,7 @@
   "dependencies": {
     "bcrypt": "^5.1.1",
     "better-sqlite3": "^12.5.0",
+    "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "express": "^5.2.1",

@@ -1,8 +1,10 @@
+const path = require("path");
 const config = require("../config");
 const { createSqliteClient } = require("./sqlite");
 const { createPostgresPool } = require("./postgres");
 const createSqliteQueries = require("./sqlite-queries");
 const createPostgresQueries = require("./postgres-queries");
+const { runMigrations } = require("../../db/migrate");
 
 const hasDatabaseUrl = !!process.env.DATABASE_URL;
 const isProduction = process.env.NODE_ENV === "production";
@@ -12,24 +14,94 @@ let queries;
 let client;
 let dbType;
 
+console.log("\n" + "=".repeat(60));
+console.log("📊 DATABASE CONNECTION INITIALIZATION");
+console.log("=".repeat(60));
+const dbStartTime = Date.now();
+
+// Helper function to run migrations after database connection
+// Runs asynchronously without blocking module initialization
+function runDatabaseMigrations() {
+  // Run migrations in background (fire and forget)
+  // This ensures migrations run on startup without blocking the module export
+  setImmediate(async () => {
+    try {
+      console.log("\n🔄 Running database migrations...");
+      const migrationStartTime = Date.now();
+      
+      // Run migrations (will create schema_migrations table if needed)
+      await runMigrations();
+      
+      const migrationDuration = ((Date.now() - migrationStartTime) / 1000).toFixed(2);
+      console.log(`   ✅ Migrations completed (${migrationDuration}s)\n`);
+    } catch (error) {
+      // Log error but don't crash - allow app to start even if migrations fail
+      // This is important for production where migrations might need manual intervention
+      console.error("\n⚠️  Migration warning:", error.message);
+      console.error("   App will continue, but schema may be out of date.");
+      console.error("   Run 'npm run migrate' manually to fix.\n");
+    }
+  });
+}
+
 if (preferPostgres && hasDatabaseUrl) {
+  // Extract database info from connection string
+  const dbUrl = process.env.DATABASE_URL;
+  let dbInfo = "PostgreSQL (Remote)";
+  try {
+    const url = new URL(dbUrl);
+    const host = url.hostname;
+    const dbName = url.pathname.replace('/', '');
+    dbInfo = `PostgreSQL - ${dbName} @ ${host}`;
+  } catch (e) {
+    // If parsing fails, just show it's PostgreSQL
+  }
+  
+  console.log(`\n🗄️  DATABASE TYPE: ${dbInfo}`);
+  console.log("   Status: Connecting...");
   client = createPostgresPool();
   queries = createPostgresQueries(client);
   dbType = "postgres";
+  const dbDuration = ((Date.now() - dbStartTime) / 1000).toFixed(2);
+  console.log(`   ✅ Connection established (${dbDuration}s)`);
+  
+  // Run migrations for PostgreSQL (async, non-blocking)
+  runDatabaseMigrations();
 } else if (preferPostgres && !hasDatabaseUrl) {
   console.warn(
-    "⚠️ DATABASE_URL not set; falling back to SQLite for safety. Set DATABASE_URL for PostgreSQL."
+    "\n⚠️  DATABASE_URL not set; falling back to SQLite for safety."
   );
+  console.warn("   Set DATABASE_URL for PostgreSQL.");
+  const dbPath = config.DB_PATH || path.join(__dirname, "..", "data", "bot.db");
+  console.log(`\n🗄️  DATABASE TYPE: SQLite (Local)`);
+  console.log(`   Path: ${dbPath}`);
+  console.log("   Status: Initializing...");
   client = createSqliteClient();
   queries = createSqliteQueries(client);
   if (queries.initSchema) queries.initSchema();
   dbType = "sqlite";
+  const dbDuration = ((Date.now() - dbStartTime) / 1000).toFixed(2);
+  console.log(`   ✅ Initialized (${dbDuration}s)`);
+  
+  // Run migrations for SQLite (async, non-blocking)
+  runDatabaseMigrations();
 } else {
+  const dbPath = config.DB_PATH || path.join(__dirname, "..", "data", "bot.db");
+  console.log(`\n🗄️  DATABASE TYPE: SQLite (Local)`);
+  console.log(`   Path: ${dbPath}`);
+  console.log("   Status: Initializing...");
   client = createSqliteClient();
   queries = createSqliteQueries(client);
   if (queries.initSchema) queries.initSchema();
   dbType = "sqlite";
+  const dbDuration = ((Date.now() - dbStartTime) / 1000).toFixed(2);
+  console.log(`   ✅ Initialized (${dbDuration}s)`);
+  
+  // Run migrations for SQLite (async, non-blocking)
+  runDatabaseMigrations();
 }
+
+console.log("=".repeat(60) + "\n");
 
 const adapter = {
   type: dbType,

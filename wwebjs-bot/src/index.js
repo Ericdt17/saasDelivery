@@ -18,6 +18,10 @@ const {
 const { generateDailyReport } = require("./daily-report");
 const { getOrCreateGroup, getAgencyIdForGroup } = require("./utils/group-manager");
 
+// Log startup time
+const startupStartTime = Date.now();
+console.log("⏳ Initializing bot components...");
+
 // Create WhatsApp client with local auth (saves session)
 // Using ./auth-dev for local development to avoid conflicts with production session
 const client = new Client({
@@ -34,8 +38,35 @@ const client = new Client({
       "--no-first-run",
       "--no-zygote",
       "--single-process",
-      "--disable-gpu"
-    ]
+      "--disable-gpu",
+      "--disable-extensions",
+      "--disable-background-networking",
+      "--disable-background-timer-throttling",
+      "--disable-backgrounding-occluded-windows",
+      "--disable-breakpad",
+      "--disable-component-extensions-with-background-pages",
+      "--disable-features=TranslateUI",
+      "--disable-ipc-flooding-protection",
+      "--disable-renderer-backgrounding",
+      "--disable-sync",
+      "--force-color-profile=srgb",
+      "--metrics-recording-only",
+      "--mute-audio",
+      // Additional Windows-specific fixes
+      "--disable-web-security",
+      "--disable-features=VizDisplayCompositor"
+    ],
+    // Optimize startup
+    timeout: 60000, // 60 seconds timeout for browser launch
+    // Ignore default args that might cause issues
+    ignoreDefaultArgs: ['--disable-extensions'],
+  },
+  // Add restart on failure
+  restartOnAuthFail: true,
+  // Add web version cache
+  webVersionCache: {
+    type: 'remote',
+    remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2413.51-beta.html',
   }
 });
 
@@ -82,7 +113,9 @@ client.on("qr", async (qr) => {
 
 // When client is ready
 client.on("ready", () => {
+  const startupDuration = ((Date.now() - startupStartTime) / 1000).toFixed(1);
   console.log("\n✅ Bot is ready!");
+  console.log(`⏱️  Startup time: ${startupDuration} seconds`);
   console.log("📋 Listening for messages...\n");
   qrShown = false; // Reset for next time
 
@@ -607,8 +640,21 @@ process.on("uncaughtException", (error) => {
 });
 
 process.on("unhandledRejection", (reason, promise) => {
-  console.error("⚠️  Unhandled Rejection:", reason);
-  console.error("   Bot will continue running...\n");
+  // Filter out common Puppeteer errors that are harmless
+  const errorMessage = reason?.message || String(reason);
+  const isPuppeteerError = 
+    errorMessage.includes("Execution context was destroyed") ||
+    errorMessage.includes("Protocol error") ||
+    errorMessage.includes("Target closed");
+  
+  if (isPuppeteerError) {
+    // These are common Puppeteer/WhatsApp Web.js errors that don't affect functionality
+    console.warn("⚠️  Puppeteer warning (can be ignored):", errorMessage.substring(0, 100));
+    console.warn("   Bot will continue running normally...\n");
+  } else {
+    console.error("⚠️  Unhandled Rejection:", reason);
+    console.error("   Bot will continue running...\n");
+  }
 });
 
 // Daily report scheduler
@@ -678,5 +724,11 @@ function setupDailyReportScheduler() {
 
 
 // Initialize the client
+console.log("\n" + "=".repeat(60));
 console.log("🚀 Starting WhatsApp bot...");
+console.log("=".repeat(60));
+console.log("⏳ Initializing WhatsApp client...");
+console.log("💡 This may take 10-30 seconds (Puppeteer needs to start)");
+console.log("💡 First startup is slower (Chrome download if needed)");
+console.log("=".repeat(60) + "\n");
 client.initialize();

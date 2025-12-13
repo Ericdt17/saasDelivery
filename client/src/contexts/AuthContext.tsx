@@ -5,7 +5,6 @@ import {
   logout as logoutService,
   getCurrentUser,
   getUser,
-  getToken,
   type UserInfo,
 } from "@/services/auth";
 
@@ -39,19 +38,72 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (currentUser) {
             setUser(currentUser as UserInfo);
           } else {
-            logoutService();
+            // getCurrentUser() returned null - could be network error or no session
+            // Don't logout immediately - check if we have cached user first
+            const cachedUser = getUser();
+            if (cachedUser) {
+              // Use cached user for now, verify in background
+              setUser(cachedUser);
+              // Try to verify session in background
+              getCurrentUser()
+                .then((user) => {
+                  if (user) {
+                    setUser(user);
+                  }
+                })
+                .catch((error) => {
+                  // Network error or other error - keep cached user
+                  // Only logout on confirmed 401 errors
+                  if (error?.statusCode === 401 || error?.status === 401) {
+                    logoutService();
+                    setUser(null);
+                  }
+                  // Otherwise, keep cached user (might be temporary network issue)
+                });
+            } else {
+              // No cached user and no valid session - user is not logged in
+              setUser(null);
+            }
           }
         } catch (error: any) {
           console.error("Initial auth check failed or timed out:", error);
-          // Only logout if it's a real auth error (401), not a timeout
-          // Timeout (408) might be due to Render cold start - keep token for retry
-          if (error?.statusCode === 401 || (error instanceof Error && error.message.includes("401"))) {
-            logoutService();
+          // On error, use cached user info if available
+          const cachedUser = getUser();
+          if (cachedUser) {
+            setUser(cachedUser);
+            // Try to verify in background (don't logout on network errors)
+            getCurrentUser()
+              .then((user) => {
+                if (user) {
+                  setUser(user);
+                } else {
+                  // Only logout if we get a clear 401 (invalid session)
+                  // Don't logout on network errors or timeouts
+                  if (error?.statusCode === 401 || error?.status === 401) {
+                    logoutService();
+                    setUser(null);
+                  }
+                }
+              })
+              .catch(() => {
+                // Network error - keep cached user, don't logout
+              });
+          } else {
+            // No cached user - user is not logged in
+            // Only logout if it's a real auth error (401), not a timeout
+            // Timeout (408) might be due to Render cold start - keep token for retry
+            if (error?.statusCode === 401 || error?.status === 401) {
+              logoutService();
+            }
+            setUser(null);
           }
-          // For timeout errors, keep the token - user can retry manually
+        } finally {
+          setIsLoading(false);
         }
+      } else {
+        // No token - user is not logged in
+        setIsLoading(false);
       }
-      setIsLoading(false);
     };
 
     initAuth();
@@ -72,8 +124,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const logout = () => {
-    logoutService();
+  const logout = async () => {
+    await logoutService();
     setUser(null);
     navigate("/login");
   };

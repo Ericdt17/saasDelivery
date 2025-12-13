@@ -532,3 +532,4 @@ node src/scripts/reassign-group-to-agency.js <group_id> <agency_id>
 **Date de dernière mise à jour** : 2025-12-11
 **Version** : 1.0.0
 
+

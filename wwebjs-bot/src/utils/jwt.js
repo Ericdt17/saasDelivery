@@ -99,10 +99,24 @@ function extractTokenFromHeader(authHeader) {
   return null;
 }
 
+/**
+ * Extract token from cookies
+ * @param {Object} cookies - Request cookies object
+ * @param {string} cookieName - Name of the cookie (default: 'auth_token')
+ * @returns {string|null} - Extracted token or null
+ */
+function extractTokenFromCookie(cookies, cookieName = 'auth_token') {
+  if (!cookies || !cookies[cookieName]) {
+    return null;
+  }
+  return cookies[cookieName];
+}
+
 module.exports = {
   generateToken,
   verifyToken,
   extractTokenFromHeader,
+  extractTokenFromCookie,
   JWT_SECRET,
   JWT_EXPIRES_IN,
 };

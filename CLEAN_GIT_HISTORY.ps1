@@ -49,3 +49,4 @@ Write-Host "   2. Nettoyer: git gc --prune=now --aggressive" -ForegroundColor Ye
 Write-Host "   3. Force push: git push origin --force --all" -ForegroundColor Yellow
 Write-Host "   4. Force push tags: git push origin --force --tags" -ForegroundColor Yellow
 
+

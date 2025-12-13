@@ -350,3 +350,4 @@ The issue is probably **missing OPTIONS handling** in Nginx. Add the CORS prefli
 2. Share your current Nginx config: `sudo cat /etc/nginx/sites-available/saas-delivery`
 3. Share backend logs: `pm2 logs api --lines 50`
 
+
