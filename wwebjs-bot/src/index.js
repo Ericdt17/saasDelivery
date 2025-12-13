@@ -18,6 +18,10 @@ const {
 const { generateDailyReport } = require("./daily-report");
 const { getOrCreateGroup, getAgencyIdForGroup } = require("./utils/group-manager");
 
+// Log startup time
+const startupStartTime = Date.now();
+console.log("⏳ Initializing bot components...");
+
 // Create WhatsApp client with local auth (saves session)
 // Using ./auth-dev for local development to avoid conflicts with production session
 const client = new Client({
@@ -34,8 +38,23 @@ const client = new Client({
       "--no-first-run",
       "--no-zygote",
       "--single-process",
-      "--disable-gpu"
-    ]
+      "--disable-gpu",
+      "--disable-extensions",
+      "--disable-background-networking",
+      "--disable-background-timer-throttling",
+      "--disable-backgrounding-occluded-windows",
+      "--disable-breakpad",
+      "--disable-component-extensions-with-background-pages",
+      "--disable-features=TranslateUI",
+      "--disable-ipc-flooding-protection",
+      "--disable-renderer-backgrounding",
+      "--disable-sync",
+      "--force-color-profile=srgb",
+      "--metrics-recording-only",
+      "--mute-audio"
+    ],
+    // Optimize startup
+    timeout: 60000, // 60 seconds timeout for browser launch
   }
 });
 
@@ -82,7 +101,9 @@ client.on("qr", async (qr) => {
 
 // When client is ready
 client.on("ready", () => {
+  const startupDuration = ((Date.now() - startupStartTime) / 1000).toFixed(1);
   console.log("\n✅ Bot is ready!");
+  console.log(`⏱️  Startup time: ${startupDuration} seconds`);
   console.log("📋 Listening for messages...\n");
   qrShown = false; // Reset for next time
 
@@ -678,5 +699,11 @@ function setupDailyReportScheduler() {
 
 
 // Initialize the client
+console.log("\n" + "=".repeat(60));
 console.log("🚀 Starting WhatsApp bot...");
+console.log("=".repeat(60));
+console.log("⏳ Initializing WhatsApp client...");
+console.log("💡 This may take 10-30 seconds (Puppeteer needs to start)");
+console.log("💡 First startup is slower (Chrome download if needed)");
+console.log("=".repeat(60) + "\n");
 client.initialize();

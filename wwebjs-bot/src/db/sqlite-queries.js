@@ -29,6 +29,28 @@ function createSqliteQueries(db) {
 
   function initSchema() {
     db.exec(`
+      CREATE TABLE IF NOT EXISTS agencies (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        email TEXT UNIQUE NOT NULL,
+        password_hash TEXT NOT NULL,
+        role TEXT DEFAULT 'agency',
+        is_active INTEGER DEFAULT 1,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS groups (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        agency_id INTEGER NOT NULL,
+        whatsapp_group_id TEXT UNIQUE,
+        name TEXT NOT NULL,
+        is_active INTEGER DEFAULT 1,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (agency_id) REFERENCES agencies(id) ON DELETE CASCADE
+      );
+
       CREATE TABLE IF NOT EXISTS deliveries (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         phone TEXT NOT NULL,
@@ -40,8 +62,13 @@ function createSqliteQueries(db) {
         quartier TEXT,
         notes TEXT,
         carrier TEXT,
+        agency_id INTEGER,
+        group_id INTEGER,
+        whatsapp_message_id TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (agency_id) REFERENCES agencies(id) ON DELETE SET NULL,
+        FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE SET NULL
       );
 
       CREATE TABLE IF NOT EXISTS delivery_history (
@@ -54,9 +81,15 @@ function createSqliteQueries(db) {
         FOREIGN KEY (delivery_id) REFERENCES deliveries(id)
       );
 
+      CREATE INDEX IF NOT EXISTS idx_agencies_email ON agencies(email);
+      CREATE INDEX IF NOT EXISTS idx_groups_agency_id ON groups(agency_id);
+      CREATE INDEX IF NOT EXISTS idx_groups_whatsapp_id ON groups(whatsapp_group_id);
       CREATE INDEX IF NOT EXISTS idx_deliveries_phone ON deliveries(phone);
       CREATE INDEX IF NOT EXISTS idx_deliveries_status ON deliveries(status);
       CREATE INDEX IF NOT EXISTS idx_deliveries_created_at ON deliveries(created_at);
+      CREATE INDEX IF NOT EXISTS idx_deliveries_agency_id ON deliveries(agency_id);
+      CREATE INDEX IF NOT EXISTS idx_deliveries_group_id ON deliveries(group_id);
+      CREATE INDEX IF NOT EXISTS idx_deliveries_whatsapp_message_id ON deliveries(whatsapp_message_id);
       CREATE INDEX IF NOT EXISTS idx_history_delivery_id ON delivery_history(delivery_id);
     `);
   }

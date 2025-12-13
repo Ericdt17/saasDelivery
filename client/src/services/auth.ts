@@ -13,7 +13,6 @@ export interface LoginRequest {
 export interface LoginResponse {
   success: boolean;
   data: {
-    token: string;
     user: {
       id: number;
       name: string;
@@ -32,11 +31,11 @@ export interface UserInfo {
   agencyId: number | null;
 }
 
-const TOKEN_KEY = "auth_token";
 const USER_KEY = "auth_user";
 
 /**
  * Login with email and password
+ * JWT is now stored in HTTP-only cookie, not returned in response
  */
 export async function login(email: string, password: string): Promise<LoginResponse> {
   try {
@@ -46,8 +45,7 @@ export async function login(email: string, password: string): Promise<LoginRespo
     });
 
     if (response.success && response.data) {
-      // Store token and user info
-      localStorage.setItem(TOKEN_KEY, response.data.token);
+      // Store user info only (token is in HTTP-only cookie)
       localStorage.setItem(USER_KEY, JSON.stringify(response.data.user));
     }
 
@@ -63,22 +61,23 @@ export async function login(email: string, password: string): Promise<LoginRespo
 }
 
 /**
- * Logout - clear token and user info
+ * Logout - call backend to clear cookie, then clear local user info
  */
-export function logout(): void {
-  localStorage.removeItem(TOKEN_KEY);
-  localStorage.removeItem(USER_KEY);
+export async function logout(): Promise<void> {
+  try {
+    // Call backend logout endpoint to clear HTTP-only cookie
+    await apiPost("/api/v1/auth/logout");
+  } catch (error) {
+    // Even if backend call fails, clear local storage
+    console.error("Logout error:", error);
+  } finally {
+    // Clear local user info
+    localStorage.removeItem(USER_KEY);
+  }
 }
 
 /**
- * Get stored token
- */
-export function getToken(): string | null {
-  return localStorage.getItem(TOKEN_KEY);
-}
-
-/**
- * Get stored user info
+ * Get stored user info (for initial render, before API check)
  */
 export function getUser(): UserInfo | null {
   const userStr = localStorage.getItem(USER_KEY);
@@ -91,14 +90,8 @@ export function getUser(): UserInfo | null {
 }
 
 /**
- * Check if user is authenticated
- */
-export function isAuthenticated(): boolean {
-  return !!getToken();
-}
-
-/**
  * Get current user info from API
+ * This is the source of truth for authentication state
  */
 export async function getCurrentUser(): Promise<UserInfo | null> {
   try {
@@ -111,8 +104,8 @@ export async function getCurrentUser(): Promise<UserInfo | null> {
     }
     return null;
   } catch (error) {
-    // If token is invalid, clear it
-    logout();
+    // If authentication fails, clear local storage
+    localStorage.removeItem(USER_KEY);
     return null;
   }
 }

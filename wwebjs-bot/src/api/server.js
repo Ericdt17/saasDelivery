@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const cookieParser = require('cookie-parser');
 const deliveriesRouter = require('./routes/deliveries');
 const statsRouter = require('./routes/stats');
 const searchRouter = require('./routes/search');
@@ -42,6 +43,7 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions)); // Enable CORS with configuration
+app.use(cookieParser()); // Parse cookies
 
 // Enhanced JSON parser with better error handling
 app.use(express.json({

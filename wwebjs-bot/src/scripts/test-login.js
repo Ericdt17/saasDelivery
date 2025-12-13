@@ -52,10 +52,25 @@ async function testLogin(email, password, expectedStatus = 200, description = ''
       if (description) log(`   ${description}`, 'green');
       
       if (status === 200 && data.success) {
-        log(`   Token received: ${data.data?.token ? data.data.token.substring(0, 20) + '...' : 'MISSING'}`, 'green');
+        // Check for cookie-based auth (token should NOT be in response)
+        const hasTokenInResponse = data.data?.token;
+        const hasCookie = response.headers.get('set-cookie');
+        
+        if (hasTokenInResponse) {
+          log(`   ⚠️  WARNING: Token found in response body (should use HTTP-only cookies)`, 'yellow');
+        } else {
+          log(`   ✅ Token NOT in response (using HTTP-only cookie)`, 'green');
+        }
+        
+        if (hasCookie) {
+          log(`   ✅ Auth cookie set: ${hasCookie.includes('auth_token') ? 'auth_token' : 'cookie present'}`, 'green');
+        } else {
+          log(`   ⚠️  WARNING: No Set-Cookie header found`, 'yellow');
+        }
+        
         log(`   User: ${data.data?.user?.name} (${data.data?.user?.email})`, 'green');
         log(`   Role: ${data.data?.user?.role}`, 'green');
-        return { success: true, data };
+        return { success: true, data, response };
       } else if (status !== 200) {
         log(`   Error: ${data.error || data.message}`, 'yellow');
         return { success: true, data };
