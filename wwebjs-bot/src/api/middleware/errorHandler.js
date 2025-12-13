@@ -8,6 +8,12 @@ function errorHandler(err, req, res, next) {
     stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
   });
 
+  // Prevent "Cannot set headers after they are sent" error
+  // If headers were already sent (e.g., by JSON parser), don't try to send another response
+  if (res.headersSent) {
+    return next(err); // Let Express handle it or ignore
+  }
+
   // CORS errors
   if (err.message === 'Not allowed by CORS') {
     return res.status(403).json({
@@ -92,6 +98,11 @@ function errorHandler(err, req, res, next) {
   }
 
   // Default error
+  // Double-check headers weren't sent (defensive programming)
+  if (res.headersSent) {
+    return next(err);
+  }
+  
   const statusCode = err.status || err.statusCode || 500;
   res.status(statusCode).json({
     success: false,

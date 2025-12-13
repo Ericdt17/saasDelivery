@@ -179,3 +179,4 @@ ls wwebjs-bot/auth
 **Date de création** : 2025-12-12
 **Dernière mise à jour** : 2025-12-12
 
+

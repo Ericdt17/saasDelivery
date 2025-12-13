@@ -201,3 +201,4 @@ chmod +x test-render.sh
 
 The cookie authentication implementation is production-ready and correctly configured for cross-domain scenarios (Vercel frontend + Render backend).
 
+

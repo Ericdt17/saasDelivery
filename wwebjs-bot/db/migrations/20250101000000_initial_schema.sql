@@ -72,3 +72,4 @@ CREATE INDEX IF NOT EXISTS idx_agencies_email ON agencies(email);
 CREATE INDEX IF NOT EXISTS idx_history_delivery_id ON delivery_history(delivery_id);
 CREATE INDEX IF NOT EXISTS idx_history_agency_id ON delivery_history(agency_id);
 
+

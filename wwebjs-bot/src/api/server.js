@@ -46,19 +46,29 @@ app.use(cors(corsOptions)); // Enable CORS with configuration
 app.use(cookieParser()); // Parse cookies
 
 // Enhanced JSON parser with better error handling
+// Allow empty request bodies (e.g., for logout endpoint)
 app.use(express.json({
   limit: '10mb',
   strict: true,
   verify: (req, res, buf) => {
+    // Allow empty bodies - some endpoints (like logout) don't require a body
+    const bodyString = buf.toString().trim();
+    if (bodyString.length === 0) {
+      return; // Empty body is valid, skip JSON parsing
+    }
+    
     try {
-      JSON.parse(buf.toString());
+      JSON.parse(bodyString);
     } catch (e) {
-      res.status(400).json({
-        success: false,
-        error: 'Invalid JSON format',
-        message: e.message,
-        hint: 'Make sure you only paste the JSON object, no extra text before or after'
-      });
+      // Only send error if headers haven't been sent yet
+      if (!res.headersSent) {
+        res.status(400).json({
+          success: false,
+          error: 'Invalid JSON format',
+          message: e.message,
+          hint: 'Make sure you only paste the JSON object, no extra text before or after'
+        });
+      }
       throw new Error('Invalid JSON');
     }
   }
