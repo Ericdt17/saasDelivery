@@ -12,23 +12,34 @@ let queries;
 let client;
 let dbType;
 
+console.log("📊 Initializing database connection...");
+const dbStartTime = Date.now();
+
 if (preferPostgres && hasDatabaseUrl) {
+  console.log("   Using PostgreSQL...");
   client = createPostgresPool();
   queries = createPostgresQueries(client);
   dbType = "postgres";
+  const dbDuration = ((Date.now() - dbStartTime) / 1000).toFixed(2);
+  console.log(`   ✅ PostgreSQL pool created (${dbDuration}s)`);
 } else if (preferPostgres && !hasDatabaseUrl) {
   console.warn(
-    "⚠️ DATABASE_URL not set; falling back to SQLite for safety. Set DATABASE_URL for PostgreSQL."
+    "   ⚠️ DATABASE_URL not set; falling back to SQLite for safety. Set DATABASE_URL for PostgreSQL."
   );
   client = createSqliteClient();
   queries = createSqliteQueries(client);
   if (queries.initSchema) queries.initSchema();
   dbType = "sqlite";
+  const dbDuration = ((Date.now() - dbStartTime) / 1000).toFixed(2);
+  console.log(`   ✅ SQLite initialized (${dbDuration}s)`);
 } else {
+  console.log("   Using SQLite...");
   client = createSqliteClient();
   queries = createSqliteQueries(client);
   if (queries.initSchema) queries.initSchema();
   dbType = "sqlite";
+  const dbDuration = ((Date.now() - dbStartTime) / 1000).toFixed(2);
+  console.log(`   ✅ SQLite initialized (${dbDuration}s)`);
 }
 
 const adapter = {

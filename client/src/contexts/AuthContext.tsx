@@ -5,7 +5,6 @@ import {
   logout as logoutService,
   getCurrentUser,
   getUser,
-  getToken,
   type UserInfo,
 } from "@/services/auth";
 
@@ -28,25 +27,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Initialize auth state
   useEffect(() => {
     const initAuth = async () => {
-      const token = getToken();
-      if (token) {
-        try {
-          // Add timeout to prevent hanging
-          const timeoutPromise = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error("Auth check timed out")), 5000)
-          );
-          const currentUser = await Promise.race([getCurrentUser(), timeoutPromise]);
-          if (currentUser) {
-            setUser(currentUser as UserInfo);
-          } else {
-            logoutService();
-          }
-        } catch (error) {
-          console.error("Initial auth check failed or timed out:", error);
+      try {
+        // Always check authentication via API (cookie-based)
+        // This works even after page refresh since cookie persists
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("Auth check timed out")), 5000)
+        );
+        const currentUser = await Promise.race([getCurrentUser(), timeoutPromise]);
+        if (currentUser) {
+          setUser(currentUser as UserInfo);
+        } else {
+          // No valid session, clear any stale local storage
           logoutService();
         }
+      } catch (error) {
+        console.error("Initial auth check failed or timed out:", error);
+        // On error, try to use cached user info for initial render
+        // But still clear it since we can't verify the session
+        const cachedUser = getUser();
+        if (cachedUser) {
+          setUser(cachedUser);
+          // Try to verify in background
+          getCurrentUser().then((user) => {
+            if (user) {
+              setUser(user);
+            } else {
+              logoutService();
+              setUser(null);
+            }
+          });
+        }
+      } finally {
+        setIsLoading(false);
       }
-      setIsLoading(false);
     };
 
     initAuth();
@@ -67,8 +80,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const logout = () => {
-    logoutService();
+  const logout = async () => {
+    await logoutService();
     setUser(null);
     navigate("/login");
   };

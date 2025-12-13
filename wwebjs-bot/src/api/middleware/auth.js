@@ -2,17 +2,25 @@
  * Authentication and Authorization Middleware
  */
 
-const { verifyToken, extractTokenFromHeader } = require("../../utils/jwt");
+const { verifyToken, extractTokenFromHeader, extractTokenFromCookie } = require("../../utils/jwt");
 
 /**
  * Middleware to authenticate requests using JWT token
+ * Checks cookies first (HTTP-only), then falls back to Authorization header (for backward compatibility)
  * Adds user info to req.user if token is valid
  */
 function authenticateToken(req, res, next) {
   try {
-    // Get token from Authorization header
-    const authHeader = req.headers.authorization;
-    const token = extractTokenFromHeader(authHeader);
+    let token = null;
+
+    // First, try to get token from HTTP-only cookie (preferred method)
+    token = extractTokenFromCookie(req.cookies, 'auth_token');
+
+    // If no cookie token, fall back to Authorization header (backward compatibility)
+    if (!token) {
+      const authHeader = req.headers.authorization;
+      token = extractTokenFromHeader(authHeader);
+    }
 
     if (!token) {
       return res.status(401).json({
