@@ -250,8 +250,24 @@ async function runMigrations() {
         
         log(`✅ Migration applied successfully: ${filename}`, "green");
       } catch (error) {
-        log(`❌ Failed to apply migration ${filename}: ${error.message}`, "red");
-        throw error;
+        // Handle common "already exists" errors gracefully
+        const errorMessage = error.message || String(error);
+        const isAlreadyExistsError = 
+          errorMessage.includes("already exists") ||
+          errorMessage.includes("duplicate column") ||
+          errorMessage.includes("column") && errorMessage.includes("exists");
+        
+        if (isAlreadyExistsError) {
+          // Column/table/index already exists - this is OK, mark as applied
+          log(`⚠️  ${filename}: ${errorMessage}`, "yellow");
+          log(`   (This is OK - already applied, marking as complete)`, "yellow");
+          await markMigrationApplied(connection, version, dbType);
+          log(`✅ Migration marked as applied: ${filename}`, "green");
+        } else {
+          // Real error - fail the migration
+          log(`❌ Failed to apply migration ${filename}: ${error.message}`, "red");
+          throw error;
+        }
       }
     }
     

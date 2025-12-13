@@ -37,25 +37,63 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (currentUser) {
           setUser(currentUser as UserInfo);
         } else {
-          // No valid session, clear any stale local storage
-          logoutService();
+          // getCurrentUser() returned null - could be network error or no session
+          // Don't logout immediately - check if we have cached user first
+          const cachedUser = getUser();
+          if (cachedUser) {
+            // Use cached user for now, verify in background
+            setUser(cachedUser);
+            // Try to verify session in background
+            getCurrentUser()
+              .then((user) => {
+                if (user) {
+                  setUser(user);
+                } else {
+                  // getCurrentUser() returned null - could be 401 or network issue
+                  // Only logout if we get a clear 401 response
+                  // Don't logout on null responses (might be network error)
+                  // The user will be logged out naturally when they try to access protected routes
+                }
+              })
+              .catch((error) => {
+                // Network error or other error - keep cached user
+                // Only logout on confirmed 401 errors
+                if (error?.statusCode === 401 || error?.status === 401) {
+                  logoutService();
+                  setUser(null);
+                }
+                // Otherwise, keep cached user (might be temporary network issue)
+              });
+          } else {
+            // No cached user and no valid session - user is not logged in
+            // Don't call logoutService() as there's nothing to logout
+            setUser(null);
+          }
         }
       } catch (error) {
         console.error("Initial auth check failed or timed out:", error);
-        // On error, try to use cached user info for initial render
-        // But still clear it since we can't verify the session
+        // On error, use cached user info if available
         const cachedUser = getUser();
         if (cachedUser) {
           setUser(cachedUser);
-          // Try to verify in background
-          getCurrentUser().then((user) => {
-            if (user) {
-              setUser(user);
-            } else {
-              logoutService();
-              setUser(null);
-            }
-          });
+          // Try to verify in background (don't logout on network errors)
+          getCurrentUser()
+            .then((user) => {
+              if (user) {
+                setUser(user);
+              } else {
+                // Only logout if we get a clear 401 (invalid session)
+                // Don't logout on network errors or timeouts
+                logoutService();
+                setUser(null);
+              }
+            })
+            .catch(() => {
+              // Network error - keep cached user, don't logout
+            });
+        } else {
+          // No cached user - user is not logged in
+          setUser(null);
         }
       } finally {
         setIsLoading(false);

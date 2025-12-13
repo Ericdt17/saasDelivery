@@ -102,10 +102,24 @@ export async function getCurrentUser(): Promise<UserInfo | null> {
       localStorage.setItem(USER_KEY, JSON.stringify(user));
       return user;
     }
+    console.warn("[Auth] getCurrentUser: Response not successful", response);
     return null;
-  } catch (error) {
-    // If authentication fails, clear local storage
-    localStorage.removeItem(USER_KEY);
+  } catch (error: any) {
+    // Log error for debugging
+    console.error("[Auth] getCurrentUser error:", {
+      message: error?.message,
+      statusCode: error?.statusCode || error?.status,
+      name: error?.name,
+    });
+    
+    // Only clear localStorage on 401 (invalid session)
+    // Don't clear on network errors or other issues
+    if (error?.statusCode === 401 || error?.status === 401) {
+      // 401 means invalid/expired session - clear cache
+      console.warn("[Auth] 401 Unauthorized - clearing cached user");
+      localStorage.removeItem(USER_KEY);
+    }
+    // Return null for any error, but don't clear cache for network errors
     return null;
   }
 }

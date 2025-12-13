@@ -480,9 +480,11 @@ function createPostgresQueries(pool) {
   }
 
   async function getAllAgencies() {
+    // Only return active agencies (is_active = true)
     return await query(
       `SELECT id, name, email, role, is_active, created_at, updated_at 
        FROM agencies 
+       WHERE is_active = true
        ORDER BY created_at DESC`
     );
   }
