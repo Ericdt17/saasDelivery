@@ -5,6 +5,7 @@ import {
   logout as logoutService,
   getCurrentUser,
   getUser,
+  getToken,
   type UserInfo,
 } from "@/services/auth";
 
