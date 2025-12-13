@@ -51,10 +51,22 @@ const client = new Client({
       "--disable-sync",
       "--force-color-profile=srgb",
       "--metrics-recording-only",
-      "--mute-audio"
+      "--mute-audio",
+      // Additional Windows-specific fixes
+      "--disable-web-security",
+      "--disable-features=VizDisplayCompositor"
     ],
     // Optimize startup
     timeout: 60000, // 60 seconds timeout for browser launch
+    // Ignore default args that might cause issues
+    ignoreDefaultArgs: ['--disable-extensions'],
+  },
+  // Add restart on failure
+  restartOnAuthFail: true,
+  // Add web version cache
+  webVersionCache: {
+    type: 'remote',
+    remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2413.51-beta.html',
   }
 });
 
@@ -628,8 +640,21 @@ process.on("uncaughtException", (error) => {
 });
 
 process.on("unhandledRejection", (reason, promise) => {
-  console.error("⚠️  Unhandled Rejection:", reason);
-  console.error("   Bot will continue running...\n");
+  // Filter out common Puppeteer errors that are harmless
+  const errorMessage = reason?.message || String(reason);
+  const isPuppeteerError = 
+    errorMessage.includes("Execution context was destroyed") ||
+    errorMessage.includes("Protocol error") ||
+    errorMessage.includes("Target closed");
+  
+  if (isPuppeteerError) {
+    // These are common Puppeteer/WhatsApp Web.js errors that don't affect functionality
+    console.warn("⚠️  Puppeteer warning (can be ignored):", errorMessage.substring(0, 100));
+    console.warn("   Bot will continue running normally...\n");
+  } else {
+    console.error("⚠️  Unhandled Rejection:", reason);
+    console.error("   Bot will continue running...\n");
+  }
 });
 
 // Daily report scheduler

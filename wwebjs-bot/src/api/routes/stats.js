@@ -3,13 +3,8 @@ const router = express.Router();
 const { authenticateToken } = require("../middleware/auth");
 const { getDeliveryStats } = require("../../db");
 
-// Optional authentication - if token provided, use it for filtering
-router.use((req, res, next) => {
-  if (req.headers.authorization) {
-    return authenticateToken(req, res, next);
-  }
-  next();
-});
+// All routes require authentication (cookie-based or Authorization header)
+router.use(authenticateToken);
 
 /**
  * Validate and normalize date string (YYYY-MM-DD format)
@@ -66,10 +61,11 @@ router.get("/daily", async (req, res, next) => {
     let agency_id = null;
     if (req.user && req.user.role !== "super_admin") {
       // Use agencyId from token, or fallback to userId if agencyId is not set
-      agency_id = req.user.agencyId !== null && req.user.agencyId !== undefined 
-        ? req.user.agencyId 
-        : req.user.userId;
-      
+      agency_id =
+        req.user.agencyId !== null && req.user.agencyId !== undefined
+          ? req.user.agencyId
+          : req.user.userId;
+
       console.log("[Stats API] Using agencyId:", agency_id);
     }
 
@@ -78,9 +74,9 @@ router.get("/daily", async (req, res, next) => {
       agency_id,
       group_id ? parseInt(group_id) : null
     );
-    
+
     console.log("[Stats API] Stats result:", stats);
-    
+
     const responseDate =
       normalizedDate || new Date().toISOString().split("T")[0];
 

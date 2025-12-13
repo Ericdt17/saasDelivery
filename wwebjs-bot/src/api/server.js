@@ -100,6 +100,106 @@ app.get('/api/v1/health', (req, res) => {
   });
 });
 
+// Schema validation endpoint
+app.get('/api/v1/schema/status', async (req, res) => {
+  try {
+    const { adapter } = require('../db');
+    const fs = require('fs');
+    const path = require('path');
+    
+    // Get database type
+    const dbType = adapter?.type || 'unknown';
+    
+    // Get applied migrations from database
+    let appliedMigrations = [];
+    try {
+      if (dbType === 'postgres') {
+        const result = await adapter.query(
+          'SELECT version, applied_at FROM schema_migrations ORDER BY version'
+        );
+        appliedMigrations = result.map(row => ({
+          version: row.version,
+          applied_at: row.applied_at
+        }));
+      } else if (dbType === 'sqlite') {
+        const result = await adapter.query(
+          'SELECT version, applied_at FROM schema_migrations ORDER BY version'
+        );
+        appliedMigrations = result.map(row => ({
+          version: row.version,
+          applied_at: row.applied_at
+        }));
+      }
+    } catch (error) {
+      // schema_migrations table might not exist
+      if (error.message.includes('no such table') || error.message.includes('does not exist')) {
+        // Table doesn't exist - migrations never run
+        return res.json({
+          success: true,
+          database_type: dbType,
+          migrations_table_exists: false,
+          applied_migrations: [],
+          pending_migrations: [],
+          status: 'no_migrations_table',
+          message: 'Migrations table does not exist. Run migrations to create it.'
+        });
+      }
+      throw error;
+    }
+    
+    // Get all migration files
+    const migrationsDir = path.join(__dirname, '../../db/migrations');
+    let migrationFiles = [];
+    if (fs.existsSync(migrationsDir)) {
+      migrationFiles = fs.readdirSync(migrationsDir)
+        .filter(file => file.endsWith('.sql'))
+        .filter(file => /^\d{14}_/.test(file))
+        .sort()
+        .map(file => {
+          const version = file.substring(0, 14);
+          return {
+            filename: file,
+            version: version
+          };
+        });
+    }
+    
+    // Find pending migrations
+    const appliedVersions = appliedMigrations.map(m => m.version);
+    const pendingMigrations = migrationFiles.filter(
+      file => !appliedVersions.includes(file.version)
+    );
+    
+    // Determine status
+    let status = 'up_to_date';
+    if (pendingMigrations.length > 0) {
+      status = 'pending_migrations';
+    } else if (appliedMigrations.length === 0 && migrationFiles.length > 0) {
+      status = 'no_migrations_applied';
+    }
+    
+    res.json({
+      success: true,
+      database_type: dbType,
+      migrations_table_exists: true,
+      applied_migrations: appliedMigrations,
+      total_migration_files: migrationFiles.length,
+      pending_migrations: pendingMigrations.map(m => m.filename),
+      status: status,
+      message: pendingMigrations.length > 0 
+        ? `${pendingMigrations.length} migration(s) pending`
+        : 'Schema is up to date'
+    });
+  } catch (error) {
+    console.error('Schema status check error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Schema status check failed',
+      message: error.message
+    });
+  }
+});
+
 // Root endpoint
 app.get('/', (req, res) => {
   res.json({

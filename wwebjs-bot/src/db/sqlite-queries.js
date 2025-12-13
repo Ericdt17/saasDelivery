@@ -512,9 +512,11 @@ function createSqliteQueries(db) {
   }
 
   async function getAllAgencies() {
+    // Only return active agencies (is_active = 1)
     return await query(
       `SELECT id, name, email, role, is_active, created_at, updated_at 
        FROM agencies 
+       WHERE is_active = 1
        ORDER BY created_at DESC`
     );
   }

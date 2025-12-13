@@ -1,4 +1,8 @@
-require("dotenv").config();
+// Load .env file only if not in Docker container or if explicitly enabled
+// In Docker, we rely on environment variables passed at runtime
+if (!process.env.DOCKER_CONTAINER && process.env.USE_ENV_FILE !== 'false') {
+  require("dotenv").config();
+}
 const path = require("path");
 
 module.exports = {
