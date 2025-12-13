@@ -196,15 +196,26 @@ router.post("/login", async (req, res, next) => {
     }
 
     // Set HTTP-only cookie with JWT token
-    // For cross-domain (Vercel frontend + Render backend), use SameSite=None and Secure
+    // For cross-domain (Netlify frontend + Render backend), use SameSite=None and Secure
     const isProduction = process.env.NODE_ENV === "production";
     const cookieOptions = {
       httpOnly: true, // Prevents JavaScript access (XSS protection)
-      secure: isProduction, // HTTPS only in production (assumes HTTPS environments)
+      secure: isProduction, // HTTPS only in production (required for SameSite=None)
       sameSite: isProduction ? "none" : "lax", // Cross-domain in production, lax in development
       maxAge: 24 * 60 * 60 * 1000, // 24 hours (matches JWT_EXPIRES_IN default)
       path: "/", // Available for all paths
+      // Don't set domain - let browser handle it automatically for cross-origin
     };
+    
+    // Log cookie settings for debugging
+    if (isProduction) {
+      console.log("[Auth] Setting cookie with options:", {
+        httpOnly: cookieOptions.httpOnly,
+        secure: cookieOptions.secure,
+        sameSite: cookieOptions.sameSite,
+        path: cookieOptions.path,
+      });
+    }
 
     res.cookie("auth_token", token, cookieOptions);
 

@@ -1,24 +1,3 @@
-2025/12/13-16:17:35.619 1728 Reusing MANIFEST C:\Users\hp\Desktop\saasDelivery\wwebjs-bot\auth-dev\session\Default\IndexedDB\https_web.whatsapp.com_0.indexeddb.leveldb/MANIFEST-000001
-2025/12/13-16:17:35.622 1728 Recovering log #2869
-2025/12/13-16:17:35.737 1728 Reusing old log C:\Users\hp\Desktop\saasDelivery\wwebjs-bot\auth-dev\session\Default\IndexedDB\https_web.whatsapp.com_0.indexeddb.leveldb/002869.log 
-2025/12/13-16:17:35.738 1728 Delete type=2 #2832
-2025/12/13-16:17:35.738 1728 Delete type=2 #2833
-2025/12/13-16:17:35.738 1728 Delete type=2 #2834
-2025/12/13-16:17:35.738 1728 Delete type=2 #2835
-2025/12/13-16:17:35.738 1728 Delete type=2 #2836
-2025/12/13-16:17:35.738 1728 Delete type=2 #2837
-2025/12/13-16:17:35.738 1728 Delete type=2 #2845
-2025/12/13-16:17:35.738 1728 Delete type=2 #2846
-2025/12/13-16:17:35.739 1728 Delete type=2 #2847
-2025/12/13-16:17:35.739 1728 Delete type=2 #2848
-2025/12/13-16:17:35.739 1728 Delete type=2 #2849
-2025/12/13-16:17:35.739 1728 Delete type=2 #2881
-2025/12/13-16:17:42.282 5558 Level-0 table #2898: started
-2025/12/13-16:17:42.692 5558 Level-0 table #2898: 1109796 bytes OK
-2025/12/13-16:17:42.702 5558 Delete type=0 #2869
-2025/12/13-16:17:51.065 5eac Level-0 table #2900: started
-2025/12/13-16:17:51.302 5eac Level-0 table #2900: 1091672 bytes OK
-2025/12/13-16:17:51.308 5eac Delete type=0 #2897
-2025/12/13-16:17:58.333 5eac Level-0 table #2902: started
-2025/12/13-16:17:58.600 5eac Level-0 table #2902: 1052617 bytes OK
-2025/12/13-16:17:58.607 5eac Delete type=0 #2899
+2025/12/13-17:17:58.273 632c Reusing MANIFEST C:\Users\hp\Desktop\saasDelivery\wwebjs-bot\auth-dev\session\Default\IndexedDB\https_web.whatsapp.com_0.indexeddb.leveldb/MANIFEST-000001
+2025/12/13-17:17:58.276 632c Recovering log #3142
+2025/12/13-17:17:58.711 632c Reusing old log C:\Users\hp\Desktop\saasDelivery\wwebjs-bot\auth-dev\session\Default\IndexedDB\https_web.whatsapp.com_0.indexeddb.leveldb/003142.log 

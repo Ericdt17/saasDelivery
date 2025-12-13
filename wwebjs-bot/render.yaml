@@ -17,8 +17,8 @@ services:
     region: oregon  # Change to your preferred region
     plan: starter
     rootDir: wwebjs-bot
-    buildCommand: npm install && npm run migrate
-    startCommand: npm run api
+    buildCommand: npm install
+    startCommand: npm run migrate && npm run api
     envVars:
       - key: NODE_ENV
         value: production
