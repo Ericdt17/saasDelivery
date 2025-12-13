@@ -1,6 +1,6 @@
 export const API_CONFIG = {
   BASE_URL: import.meta.env.VITE_API_BASE_URL ?? "http://localhost:3000",
-  TIMEOUT: 15000,
+  TIMEOUT: 30000, // 30 seconds to handle Render free tier cold starts (10-30s wake time)
 };
 
 export function buildApiUrl(path: string): string {

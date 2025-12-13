@@ -31,9 +31,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const token = getToken();
       if (token) {
         try {
-          // Add timeout to prevent hanging
+          // Add timeout to prevent hanging (30s for Render cold starts)
           const timeoutPromise = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error("Auth check timed out")), 5000)
+            setTimeout(() => reject(new Error("Auth check timed out")), 30000)
           );
           const currentUser = await Promise.race([getCurrentUser(), timeoutPromise]);
           if (currentUser) {
@@ -41,9 +41,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           } else {
             logoutService();
           }
-        } catch (error) {
+        } catch (error: any) {
           console.error("Initial auth check failed or timed out:", error);
-          logoutService();
+          // Only logout if it's a real auth error (401), not a timeout
+          // Timeout (408) might be due to Render cold start - keep token for retry
+          if (error?.statusCode === 401 || (error instanceof Error && error.message.includes("401"))) {
+            logoutService();
+          }
+          // For timeout errors, keep the token - user can retry manually
         }
       }
       setIsLoading(false);
