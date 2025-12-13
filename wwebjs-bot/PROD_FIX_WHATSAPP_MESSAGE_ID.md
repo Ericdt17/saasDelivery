@@ -152,3 +152,4 @@ This error may be caught and logged, but the delivery won't be saved.
 3. Add database schema validation on startup
 4. Monitor logs for column-related errors
 
+

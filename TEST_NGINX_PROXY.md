@@ -192,3 +192,4 @@ Since backend works directly but browser shows 403, it's **definitely Nginx bloc
 
 Add the OPTIONS handling block shown above and reload Nginx.
 
+

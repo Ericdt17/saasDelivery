@@ -117,3 +117,4 @@ curl -X POST http://localhost:3000/api/v1/auth/login \
 
 - Response body should NOT contain `"token"`
 - Response headers should contain `Set-Cookie: auth_token=...`
+

@@ -280,3 +280,4 @@ ALLOWED_ORIGINS=https://your-site.netlify.app
 
 **That's it!** Your frontend should now be deployed on Netlify from the `dev` branch. 🎉
 
+

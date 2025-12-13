@@ -95,3 +95,4 @@ curl -X POST http://localhost:3000/api/v1/auth/login \
 3. ✅ Verify all tests pass
 4. ✅ Test in browser (see COOKIE_AUTH_TESTING_GUIDE.md)
 
+

@@ -116,3 +116,4 @@ After fix, you should see:
 **Difficulty:** Easy  
 **Risk:** Low (adding column is safe)
 
+

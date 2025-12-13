@@ -40,3 +40,4 @@ Write-Host ""
 Write-Host "⚠️  IMPORTANT: Régénérez le mot de passe PostgreSQL sur Render!" -ForegroundColor Red
 Write-Host ""
 
+
