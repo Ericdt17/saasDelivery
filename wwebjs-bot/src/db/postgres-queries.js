@@ -449,18 +449,22 @@ function createPostgresQueries(pool) {
     password_hash,
     role = "agency",
     is_active = true,
+    agency_code = null,
   }) {
+    // Normalize agency_code: trim and uppercase if provided
+    const normalizedCode = agency_code ? agency_code.trim().toUpperCase() : null;
+    
     const result = await query(
-      `INSERT INTO agencies (name, email, password_hash, role, is_active) 
-       VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-      [name, email, password_hash, role, is_active]
+      `INSERT INTO agencies (name, email, password_hash, role, is_active, agency_code) 
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+      [name, email, password_hash, role, is_active, normalizedCode]
     );
     return result.id || result[0]?.id;
   }
 
   async function getAgencyById(id) {
     const result = await query(
-      `SELECT id, name, email, role, is_active, created_at, updated_at 
+      `SELECT id, name, email, agency_code, role, is_active, created_at, updated_at 
        FROM agencies 
        WHERE id = $1 LIMIT 1`,
       [id]
@@ -479,10 +483,30 @@ function createPostgresQueries(pool) {
     return result;
   }
 
+  async function findAgencyByCode(code) {
+    // Case-insensitive search for agency code
+    // Normalize code: trim and uppercase
+    const normalizedCode = (code || "").trim().toUpperCase();
+    
+    if (!normalizedCode || normalizedCode.length < 4) {
+      return null;
+    }
+
+    const result = await query(
+      `SELECT id, name, email, agency_code, role, is_active, created_at, updated_at 
+       FROM agencies 
+       WHERE UPPER(TRIM(agency_code)) = $1 AND is_active = true 
+       LIMIT 1`,
+      [normalizedCode]
+    );
+    
+    return result[0] || null;
+  }
+
   async function getAllAgencies() {
     // Only return active agencies (is_active = true)
     return await query(
-      `SELECT id, name, email, role, is_active, created_at, updated_at 
+      `SELECT id, name, email, agency_code, role, is_active, created_at, updated_at 
        FROM agencies 
        WHERE is_active = true
        ORDER BY created_at DESC`
@@ -491,7 +515,7 @@ function createPostgresQueries(pool) {
 
   async function updateAgency(
     id,
-    { name, email, password_hash, role, is_active }
+    { name, email, password_hash, role, is_active, agency_code }
   ) {
     const updates = [];
     const params = [];
@@ -517,6 +541,17 @@ function createPostgresQueries(pool) {
       updates.push(`is_active = $${paramIndex++}`);
       params.push(is_active);
     }
+    if (agency_code !== undefined) {
+      // Normalize agency_code: trim and uppercase if provided, null if empty
+      const normalizedCode = agency_code && typeof agency_code === 'string' && agency_code.trim() 
+        ? agency_code.trim().toUpperCase() 
+        : null;
+      console.log(`[Postgres UpdateAgency] agency_code received:`, agency_code, "normalized to:", normalizedCode);
+      updates.push(`agency_code = $${paramIndex++}`);
+      params.push(normalizedCode);
+    } else {
+      console.log(`[Postgres UpdateAgency] agency_code is undefined, not updating`);
+    }
 
     if (updates.length === 0) {
       return { changes: 0 };
@@ -525,11 +560,20 @@ function createPostgresQueries(pool) {
     updates.push(`updated_at = CURRENT_TIMESTAMP`);
     params.push(id);
 
-    const result = await query(
-      `UPDATE agencies SET ${updates.join(", ")} WHERE id = $${paramIndex}`,
-      params
-    );
-    return { changes: result.changes || 0 };
+    const sql = `UPDATE agencies SET ${updates.join(", ")} WHERE id = $${paramIndex}`;
+    console.log(`[Postgres UpdateAgency] Executing SQL:`, sql);
+    console.log(`[Postgres UpdateAgency] Params:`, params);
+    
+    try {
+      const result = await query(sql, params);
+      console.log(`[Postgres UpdateAgency] Update result:`, result);
+      return { changes: result.changes || 0 };
+    } catch (error) {
+      console.error(`[Postgres UpdateAgency] Error executing update:`, error.message);
+      console.error(`[Postgres UpdateAgency] SQL was:`, sql);
+      console.error(`[Postgres UpdateAgency] Params were:`, params);
+      throw error;
+    }
   }
 
   async function deleteAgency(id) {
@@ -646,6 +690,7 @@ function createPostgresQueries(pool) {
     createAgency,
     getAgencyById,
     getAgencyByEmail,
+    findAgencyByCode,
     getAllAgencies,
     updateAgency,
     deleteAgency,

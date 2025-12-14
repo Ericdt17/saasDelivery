@@ -481,21 +481,25 @@ function createSqliteQueries(db) {
     password_hash,
     role = "agency",
     is_active = 1,
+    agency_code = null,
   }) {
     // Ensure is_active is a number (1 or 0) for SQLite
     const isActiveValue = is_active === true || is_active === 1 ? 1 : 0;
     
+    // Normalize agency_code: trim and uppercase if provided
+    const normalizedCode = agency_code ? agency_code.trim().toUpperCase() : null;
+    
     const result = await query(
-      `INSERT INTO agencies (name, email, password_hash, role, is_active) 
-       VALUES (?, ?, ?, ?, ?)`,
-      [name, email, password_hash, role, isActiveValue]
+      `INSERT INTO agencies (name, email, password_hash, role, is_active, agency_code) 
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [name, email, password_hash, role, isActiveValue, normalizedCode]
     );
     return result.lastInsertRowid;
   }
 
   async function getAgencyById(id) {
     return await query(
-      `SELECT id, name, email, role, is_active, created_at, updated_at 
+      `SELECT id, name, email, agency_code, role, is_active, created_at, updated_at 
        FROM agencies 
        WHERE id = ? LIMIT 1`,
       [id]
@@ -511,10 +515,28 @@ function createSqliteQueries(db) {
     );
   }
 
+  async function findAgencyByCode(code) {
+    // Case-insensitive search for agency code
+    // Normalize code: trim and uppercase
+    const normalizedCode = (code || "").trim().toUpperCase();
+    
+    if (!normalizedCode || normalizedCode.length < 4) {
+      return null;
+    }
+
+    return await query(
+      `SELECT id, name, email, agency_code, role, is_active, created_at, updated_at 
+       FROM agencies 
+       WHERE UPPER(TRIM(agency_code)) = ? AND is_active = 1 
+       LIMIT 1`,
+      [normalizedCode]
+    );
+  }
+
   async function getAllAgencies() {
     // Only return active agencies (is_active = 1)
     return await query(
-      `SELECT id, name, email, role, is_active, created_at, updated_at 
+      `SELECT id, name, email, agency_code, role, is_active, created_at, updated_at 
        FROM agencies 
        WHERE is_active = 1
        ORDER BY created_at DESC`
@@ -523,7 +545,7 @@ function createSqliteQueries(db) {
 
   async function updateAgency(
     id,
-    { name, email, password_hash, role, is_active }
+    { name, email, password_hash, role, is_active, agency_code }
   ) {
     const updates = [];
     const params = [];
@@ -550,6 +572,17 @@ function createSqliteQueries(db) {
       updates.push("is_active = ?");
       params.push(isActiveValue);
     }
+    if (agency_code !== undefined) {
+      // Normalize agency_code: trim and uppercase if provided, null if empty
+      const normalizedCode = agency_code && typeof agency_code === 'string' && agency_code.trim() 
+        ? agency_code.trim().toUpperCase() 
+        : null;
+      console.log(`[SQLite UpdateAgency] agency_code received:`, agency_code, "normalized to:", normalizedCode);
+      updates.push("agency_code = ?");
+      params.push(normalizedCode);
+    } else {
+      console.log(`[SQLite UpdateAgency] agency_code is undefined, not updating`);
+    }
 
     if (updates.length === 0) {
       return { changes: 0 };
@@ -558,11 +591,20 @@ function createSqliteQueries(db) {
     updates.push("updated_at = CURRENT_TIMESTAMP");
     params.push(id);
 
-    const result = await query(
-      `UPDATE agencies SET ${updates.join(", ")} WHERE id = ?`,
-      params
-    );
-    return result;
+    const sql = `UPDATE agencies SET ${updates.join(", ")} WHERE id = ?`;
+    console.log(`[SQLite UpdateAgency] Executing SQL:`, sql);
+    console.log(`[SQLite UpdateAgency] Params:`, params);
+    
+    try {
+      const result = await query(sql, params);
+      console.log(`[SQLite UpdateAgency] Update result:`, result);
+      return result;
+    } catch (error) {
+      console.error(`[SQLite UpdateAgency] Error executing update:`, error.message);
+      console.error(`[SQLite UpdateAgency] SQL was:`, sql);
+      console.error(`[SQLite UpdateAgency] Params were:`, params);
+      throw error;
+    }
   }
 
   async function deleteAgency(id) {
@@ -682,6 +724,7 @@ function createSqliteQueries(db) {
     createAgency,
     getAgencyById,
     getAgencyByEmail,
+    findAgencyByCode,
     getAllAgencies,
     updateAgency,
     deleteAgency,

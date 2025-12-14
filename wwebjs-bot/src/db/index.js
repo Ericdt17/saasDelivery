@@ -143,6 +143,7 @@ const api = {
   createAgency: queries.createAgency,
   getAgencyById: queries.getAgencyById,
   getAgencyByEmail: queries.getAgencyByEmail,
+  findAgencyByCode: queries.findAgencyByCode,
   getAllAgencies: queries.getAllAgencies,
   updateAgency: queries.updateAgency,
   deleteAgency: queries.deleteAgency,

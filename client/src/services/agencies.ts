@@ -9,6 +9,7 @@ export interface Agency {
   id: number;
   name: string;
   email: string;
+  agency_code: string | null;
   role: "agency" | "super_admin";
   is_active: boolean;
   created_at: string;
@@ -21,6 +22,7 @@ export interface CreateAgencyRequest {
   password: string;
   role?: "agency" | "super_admin";
   is_active?: boolean;
+  agency_code?: string | null;
 }
 
 export interface UpdateAgencyRequest {
@@ -29,6 +31,7 @@ export interface UpdateAgencyRequest {
   password?: string;
   role?: "agency" | "super_admin";
   is_active?: boolean;
+  agency_code?: string | null;
 }
 
 /**
@@ -84,6 +87,23 @@ export async function updateAgency(
 export async function deleteAgency(id: number): Promise<boolean> {
   const response = await apiDelete(`/api/v1/agencies/${id}`);
   return response.success;
+}
+
+/**
+ * Generate a random agency code
+ * Format: Alphanumeric, 6-8 characters
+ * Pattern: Random uppercase letters and numbers
+ * @returns {string} - Generated agency code
+ */
+export function generateAgencyCode(): string {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  let code = "";
+  // Generate 6-8 character code
+  const length = 6 + Math.floor(Math.random() * 3); // 6, 7, or 8 characters
+  for (let i = 0; i < length; i++) {
+    code += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return code;
 }
 
 

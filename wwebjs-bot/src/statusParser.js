@@ -171,6 +171,18 @@ function parseStatusUpdate(text, isReply = false) {
   ) {
     // Extract both old and new numbers
     const phones = text.match(/6\d{8}/g) || text.match(/6[x\d]{7,8}/g);
+    
+    // If it's a reply and only one phone is provided, treat it as the new phone
+    if (isReply && phones && phones.length === 1) {
+      return {
+        type: "number_change",
+        phone: null, // Old phone not needed for replies (we have the delivery)
+        newPhone: phones[0],
+        details: text,
+      };
+    }
+    
+    // Otherwise, extract both old and new (for non-reply messages)
     return {
       type: "number_change",
       phone: phones ? phones[0] : null,
