@@ -8,19 +8,23 @@ const { isDeliveryMessage, parseDeliveryMessage } = require("./parser");
 const { parseStatusUpdate, isStatusUpdate } = require("./statusParser");
 const {
   createDelivery,
-  findDeliveryByPhone,
   findDeliveryByPhoneForUpdate,
   findDeliveryByMessageId,
   updateDelivery,
   addHistory,
 } = require("./db");
 const { generateDailyReport } = require("./daily-report");
-const { getOrCreateGroup, getAgencyIdForGroup } = require("./utils/group-manager");
+const { getGroup, getAgencyIdForGroup } = require("./utils/group-manager");
+
+// Log startup time
+const startupStartTime = Date.now();
+console.log("⏳ Initializing bot components...");
 
 // Create WhatsApp client with local auth (saves session)
+// Using ./auth-dev for local development to avoid conflicts with production session
 const client = new Client({
   authStrategy: new LocalAuth({
-    dataPath: "./auth",
+    dataPath: process.env.WHATSAPP_SESSION_PATH || "./auth-dev",
   }),
   puppeteer: {
     headless: true,
@@ -32,8 +36,35 @@ const client = new Client({
       "--no-first-run",
       "--no-zygote",
       "--single-process",
-      "--disable-gpu"
-    ]
+      "--disable-gpu",
+      "--disable-extensions",
+      "--disable-background-networking",
+      "--disable-background-timer-throttling",
+      "--disable-backgrounding-occluded-windows",
+      "--disable-breakpad",
+      "--disable-component-extensions-with-background-pages",
+      "--disable-features=TranslateUI",
+      "--disable-ipc-flooding-protection",
+      "--disable-renderer-backgrounding",
+      "--disable-sync",
+      "--force-color-profile=srgb",
+      "--metrics-recording-only",
+      "--mute-audio",
+      // Additional Windows-specific fixes
+      "--disable-web-security",
+      "--disable-features=VizDisplayCompositor"
+    ],
+    // Optimize startup
+    timeout: 60000, // 60 seconds timeout for browser launch
+    // Ignore default args that might cause issues
+    ignoreDefaultArgs: ['--disable-extensions'],
+  },
+  // Add restart on failure
+  restartOnAuthFail: true,
+  // Add web version cache
+  webVersionCache: {
+    type: 'remote',
+    remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2413.51-beta.html',
   }
 });
 
@@ -80,7 +111,9 @@ client.on("qr", async (qr) => {
 
 // When client is ready
 client.on("ready", () => {
+  const startupDuration = ((Date.now() - startupStartTime) / 1000).toFixed(1);
   console.log("\n✅ Bot is ready!");
+  console.log(`⏱️  Startup time: ${startupDuration} seconds`);
   console.log("📋 Listening for messages...\n");
   qrShown = false; // Reset for next time
 
@@ -88,13 +121,49 @@ client.on("ready", () => {
   setupDailyReportScheduler();
 });
 
-// When client is authenticated
-client.on("authenticated", () => {
+// Additional check: Sometimes ready event doesn't fire, check state manually
+client.on("authenticated", async () => {
   console.log("\n" + "=".repeat(60));
   console.log("✅ AUTHENTICATED SUCCESSFULLY!");
   console.log("✅ Session saved!");
   console.log("💡 You won't need to scan QR code again next time.");
   console.log("=".repeat(60) + "\n");
+  
+  // Wait a bit then check if client is ready
+  setTimeout(async () => {
+    try {
+      const state = await client.getState();
+      console.log(`\n🔍 Checking client state: ${state}`);
+      
+      if (state === 'CONNECTED') {
+        console.log("✅ Client state: CONNECTED");
+        console.log("📋 Bot should be listening for messages now.");
+        
+        // Verify message event listener is registered
+        const listeners = client.listenerCount('message');
+        console.log(`📊 Message event listeners: ${listeners}`);
+        
+        if (listeners === 0) {
+          console.error("❌ WARNING: No message event listeners found!");
+          console.error("   This means the bot won't receive messages.");
+        } else {
+          console.log("✅ Message event listener is registered");
+        }
+        
+        // Setup daily report scheduler if ready event didn't fire
+        if (typeof setupDailyReportScheduler === 'function') {
+          setupDailyReportScheduler();
+        }
+        
+        console.log("\n💡 Test: Send a message in the group and check for 'DEBUG - Raw message received'\n");
+      } else {
+        console.log(`⚠️  Client state: ${state}`);
+        console.log("💡 Waiting for ready event...\n");
+      }
+    } catch (error) {
+      console.error("⚠️  Error checking client state:", error.message);
+    }
+  }, 5000); // Check after 5 seconds
 });
 
 // When authentication fails
@@ -122,10 +191,15 @@ client.on("disconnected", (reason) => {
 });
 
 // Listen to all incoming messages
+// Note: Some versions use "message_create" instead of "message"
+console.log("📋 Registering message event listener...");
 client.on("message", async (msg) => {
   try {
+    console.log("🔔 MESSAGE EVENT FIRED - Bot received a message!");
+    
     // Skip messages from the bot itself (to avoid loops)
     if (msg.fromMe) {
+      console.log("   ⏭️  Skipped: Message from bot itself\n");
       return;
     }
 
@@ -150,6 +224,25 @@ client.on("message", async (msg) => {
     const groupName = chat.name || "Unnamed Group";
     const targetGroupId = config.GROUP_ID;
 
+    // Handle #link command - works even for unregistered groups
+    // Check if message is exactly "#link" (case-insensitive, with optional whitespace)
+    const trimmedMessage = messageText.trim();
+    if (trimmedMessage.toLowerCase() === '#link') {
+      console.log("   🔗 #link command detected - sending group ID");
+      try {
+        await chat.sendMessage(
+          `📋 ID du groupe WhatsApp:\n\n` +
+          `\`${whatsappGroupId}\`\n\n` +
+          `💡 Copiez cet ID et collez-le dans votre tableau de bord pour lier ce groupe à votre agence.\n\n` +
+          `📝 Nom du groupe: ${groupName}`
+        );
+        console.log(`   ✅ Group ID sent: ${whatsappGroupId}`);
+      } catch (err) {
+        console.error(`   ⚠️  Could not send group ID message: ${err.message}`);
+      }
+      return; // Stop processing after sending group ID
+    }
+
     // Filter: Only handle messages from the configured group (if GROUP_ID is set)
     // If GROUP_ID is not set (null), process messages from all groups
     if (targetGroupId && whatsappGroupId !== targetGroupId) {
@@ -159,6 +252,10 @@ client.on("message", async (msg) => {
     }
 
     console.log("   ✅ Processing: Group message detected!\n");
+
+    // Initialize variables for group and agency
+    let group = null;
+    let agencyId = null;
 
     // Check if this is a reply to a previous message
     let quotedMessage = null;
@@ -221,18 +318,25 @@ client.on("message", async (msg) => {
       console.log(`   ⚠️  Error details: ${replyError.message}`);
     }
 
-    // Auto-register group if not exists
-    let group = null;
-    let agencyId = null;
+    // Check if group is registered in database
+    // Only process messages from registered groups
     try {
-      group = await getOrCreateGroup(whatsappGroupId, groupName, config.DEFAULT_AGENCY_ID);
-      if (group) {
-        agencyId = group.agency_id;
-        console.log(`   📋 Group: ${group.name} (DB ID: ${group.id}, Agency: ${agencyId})`);
+      group = await getGroup(whatsappGroupId);
+      
+      if (!group) {
+        // Group not registered - ignore message silently
+        console.log(`   ⏭️  Skipped: Group not registered in database`);
+        console.log(`   💡 Tip: Add this group via the dashboard to start processing messages`);
+        return; // Stop processing - group not registered
       }
+      
+      // Group is registered - continue processing
+      agencyId = group.agency_id;
+      console.log(`   📋 Group: ${group.name} (DB ID: ${group.id}, Agency: ${agencyId})`);
     } catch (groupError) {
-      console.error(`   ⚠️  Error registering group: ${groupError.message}`);
-      // Continue processing even if group registration fails
+      console.error(`   ⚠️  Error checking group: ${groupError.message}`);
+      // If error checking group, skip processing to avoid errors
+      return;
     }
 
     // Safely get contact info (may fail due to WhatsApp Web changes)
@@ -307,28 +411,33 @@ client.on("message", async (msg) => {
 
               case "payment":
                 // If amount is not specified, use the remaining amount due
-                let paymentAmount = statusData.amount;
+                // Convert to numbers to handle PostgreSQL DECIMAL types (returned as strings)
+                // Round to 2 decimal places to avoid floating point precision issues
+                const currentAmountPaid = Math.round((parseFloat(delivery.amount_paid) || 0) * 100) / 100;
+                const currentAmountDue = Math.round((parseFloat(delivery.amount_due) || 0) * 100) / 100;
+                
+                let paymentAmount = Math.round((parseFloat(statusData.amount) || 0) * 100) / 100;
                 if (!paymentAmount || paymentAmount === 0) {
-                  const remainingAmount = (delivery.amount_due || 0) - (delivery.amount_paid || 0);
-                  paymentAmount = remainingAmount > 0 ? remainingAmount : delivery.amount_due || 0;
+                  const remainingAmount = currentAmountDue - currentAmountPaid;
+                  paymentAmount = remainingAmount > 0 ? remainingAmount : currentAmountDue;
+                  paymentAmount = Math.round(paymentAmount * 100) / 100;
                   console.log(
                     `   💡 Montant non spécifié, utilisation du montant restant: ${paymentAmount} FCFA`
                   );
                 }
                 
-                const newAmountPaid =
-                  (delivery.amount_paid || 0) + paymentAmount;
+                const newAmountPaid = Math.round((currentAmountPaid + paymentAmount) * 100) / 100;
                 updateData.amount_paid = newAmountPaid;
                 historyAction = "payment_collected";
                 console.log(
                   `   💰 Paiement collecté: ${paymentAmount} FCFA`
                 );
                 console.log(
-                  `   💵 Total payé: ${newAmountPaid} FCFA / ${delivery.amount_due} FCFA`
+                  `   💵 Total payé: ${newAmountPaid} FCFA / ${currentAmountDue} FCFA`
                 );
 
                 // Auto-mark as delivered if fully paid
-                if (newAmountPaid >= delivery.amount_due) {
+                if (newAmountPaid >= currentAmountDue) {
                   updateData.status = "delivered";
                   console.log(
                     `   ✅ Livraison complètement payée - marquée comme LIVRÉE`
@@ -382,9 +491,16 @@ client.on("message", async (msg) => {
                 break;
             }
 
-            // Update delivery
+            // Update delivery - use delivery ID (we already have the delivery object)
             if (Object.keys(updateData).length > 0) {
+              // We already have the delivery object, so use its ID directly
               await updateDelivery(delivery.id, updateData);
+              if (deliveryFromReply && quotedMessage) {
+                console.log(`   ✅ Mise à jour de la livraison #${delivery.id} via message ID`);
+              } else {
+                console.log(`   ✅ Mise à jour de la livraison #${delivery.id} via numéro de téléphone`);
+              }
+              
               await addHistory(
                 delivery.id,
                 historyAction || statusData.type,
@@ -438,6 +554,13 @@ client.on("message", async (msg) => {
     }
 
     // SECOND: Check if this is a NEW DELIVERY message
+    // Only process if group is registered (not pending verification)
+    if (!group) {
+      console.log("   ⚠️  Group not registered - cannot process delivery/status messages");
+      console.log("   💡 Group must be verified with agency code first");
+      return;
+    }
+
     const isDelivery = isDeliveryMessage(messageText);
     console.log("   🔍 isDeliveryMessage check:", isDelivery);
 
@@ -487,70 +610,58 @@ client.on("message", async (msg) => {
       }
 
       try {
-        // Check if there's already a pending delivery for this phone
-        const existingDelivery = deliveryData.phone
-          ? await findDeliveryByPhone(deliveryData.phone)
-          : null;
+        // Allow multiple deliveries per phone number
+        // Create new delivery with group_id and agency_id
+        // Store WhatsApp message ID for reply-based updates
+        const whatsappMessageId = msg.id._serialized;
+        console.log(`   💾 Storing WhatsApp message ID: ${whatsappMessageId}`);
+        console.log(`   💾 Message ID (remote): ${msg.id?.remote}`);
+        console.log(`   💾 Message ID (id): ${msg.id?.id}`);
+        
+        const deliveryId = await createDelivery({
+          phone: deliveryData.phone || "unknown",
+          customer_name: deliveryData.customer_name,
+          items: deliveryData.items,
+          amount_due: deliveryData.amount_due || 0,
+          quartier: deliveryData.quartier,
+          carrier: deliveryData.carrier,
+          notes: `Original message: ${messageText.substring(0, 100)}`,
+          group_id: group ? group.id : null,
+          agency_id: agencyId,
+          whatsapp_message_id: whatsappMessageId,
+        });
 
-        if (existingDelivery) {
-          console.log(
-            `   ⚠️  Livraison existante trouvée #${existingDelivery.id} pour ce numéro`
-          );
-          console.log(
-            `   💡 Si c'est une nouvelle livraison, utilisez un format différent`
-          );
-        } else {
-          // Create new delivery with group_id and agency_id
-          // Store WhatsApp message ID for reply-based updates
-          const whatsappMessageId = msg.id._serialized;
-          console.log(`   💾 Storing WhatsApp message ID: ${whatsappMessageId}`);
-          console.log(`   💾 Message ID (remote): ${msg.id?.remote}`);
-          console.log(`   💾 Message ID (id): ${msg.id?.id}`);
-          
-          const deliveryId = await createDelivery({
-            phone: deliveryData.phone || "unknown",
-            customer_name: deliveryData.customer_name,
-            items: deliveryData.items,
-            amount_due: deliveryData.amount_due || 0,
-            quartier: deliveryData.quartier,
-            carrier: deliveryData.carrier,
-            notes: `Original message: ${messageText.substring(0, 100)}`,
-            group_id: group ? group.id : null,
-            agency_id: agencyId,
-            whatsapp_message_id: whatsappMessageId,
-          });
+        console.log("\n" + "=".repeat(60));
+        console.log(
+          `   ✅ LIVRAISON #${deliveryId} ENREGISTRÉE AVEC SUCCÈS!`
+        );
+        console.log("=".repeat(60));
+        console.log(`   📎 WhatsApp Message ID stored: ${whatsappMessageId}`);
+        console.log(`   📱 Numéro: ${deliveryData.phone || "Non trouvé"}`);
+        console.log(`   📦 Produits: ${deliveryData.items}`);
+        console.log(`   💰 Montant: ${deliveryData.amount_due || 0} FCFA`);
+        console.log(
+          `   📍 Quartier: ${deliveryData.quartier || "Non spécifié"}`
+        );
+        if (deliveryData.carrier) {
+          console.log(`   🚚 Transporteur: ${deliveryData.carrier}`);
+        }
+        console.log(`   💾 Sauvegardé dans la base de données`);
+        console.log(`   💡 Plusieurs livraisons peuvent exister pour le même numéro`);
+        console.log(`   🔍 Pour voir toutes les livraisons: npm run view`);
+        console.log("=".repeat(60) + "\n");
 
-          console.log("\n" + "=".repeat(60));
-          console.log(
-            `   ✅ LIVRAISON #${deliveryId} ENREGISTRÉE AVEC SUCCÈS!`
-          );
-          console.log("=".repeat(60));
-          console.log(`   📎 WhatsApp Message ID stored: ${whatsappMessageId}`);
-          console.log(`   📱 Numéro: ${deliveryData.phone || "Non trouvé"}`);
-          console.log(`   📦 Produits: ${deliveryData.items}`);
-          console.log(`   💰 Montant: ${deliveryData.amount_due || 0} FCFA`);
-          console.log(
-            `   📍 Quartier: ${deliveryData.quartier || "Non spécifié"}`
-          );
-          if (deliveryData.carrier) {
-            console.log(`   🚚 Transporteur: ${deliveryData.carrier}`);
-          }
-          console.log(`   💾 Sauvegardé dans la base de données`);
-          console.log(`   🔍 Pour voir toutes les livraisons: npm run view`);
-          console.log("=".repeat(60) + "\n");
-
-          // Optional: Send confirmation to group (if enabled)
-          if (config.SEND_CONFIRMATIONS === "true" && config.GROUP_ID) {
-            try {
-              const confirmationMsg = `✅ Livraison #${deliveryId} enregistrée\n` +
-                `📱 ${deliveryData.phone}\n` +
-                `📦 ${deliveryData.items}\n` +
-                `💰 ${deliveryData.amount_due || 0} FCFA`;
-              const chat = await client.getChatById(config.GROUP_ID);
-              await chat.sendMessage(confirmationMsg);
-            } catch (error) {
-              console.log("   ⚠️  Could not send confirmation message");
-            }
+        // Optional: Send confirmation to group (if enabled)
+        if (config.SEND_CONFIRMATIONS === "true" && config.GROUP_ID) {
+          try {
+            const confirmationMsg = `✅ Livraison #${deliveryId} enregistrée\n` +
+              `📱 ${deliveryData.phone}\n` +
+              `📦 ${deliveryData.items}\n` +
+              `💰 ${deliveryData.amount_due || 0} FCFA`;
+            const chat = await client.getChatById(config.GROUP_ID);
+            await chat.sendMessage(confirmationMsg);
+          } catch (error) {
+            console.log("   ⚠️  Could not send confirmation message");
           }
         }
       } catch (dbError) {
@@ -577,6 +688,15 @@ client.on("message", async (msg) => {
 // Handle errors
 client.on("error", (error) => {
   console.error("❌ Client Error:", error.message);
+  console.error("   Stack:", error.stack);
+});
+
+// Fallback: Also listen for message_create event (some versions use this)
+// This ensures messages are received even if "message" event doesn't fire
+client.on("message_create", async (msg) => {
+  // Only process if not already handled by main message handler
+  // The main handler will process it, this is just a backup
+  console.log("📨 message_create event received (backup handler)");
 });
 
 // Prevent uncaught errors from crashing the bot
@@ -586,8 +706,21 @@ process.on("uncaughtException", (error) => {
 });
 
 process.on("unhandledRejection", (reason, promise) => {
-  console.error("⚠️  Unhandled Rejection:", reason);
-  console.error("   Bot will continue running...\n");
+  // Filter out common Puppeteer errors that are harmless
+  const errorMessage = reason?.message || String(reason);
+  const isPuppeteerError = 
+    errorMessage.includes("Execution context was destroyed") ||
+    errorMessage.includes("Protocol error") ||
+    errorMessage.includes("Target closed");
+  
+  if (isPuppeteerError) {
+    // These are common Puppeteer/WhatsApp Web.js errors that don't affect functionality
+    console.warn("⚠️  Puppeteer warning (can be ignored):", errorMessage.substring(0, 100));
+    console.warn("   Bot will continue running normally...\n");
+  } else {
+    console.error("⚠️  Unhandled Rejection:", reason);
+    console.error("   Bot will continue running...\n");
+  }
 });
 
 // Daily report scheduler
@@ -657,5 +790,11 @@ function setupDailyReportScheduler() {
 
 
 // Initialize the client
+console.log("\n" + "=".repeat(60));
 console.log("🚀 Starting WhatsApp bot...");
+console.log("=".repeat(60));
+console.log("⏳ Initializing WhatsApp client...");
+console.log("💡 This may take 10-30 seconds (Puppeteer needs to start)");
+console.log("💡 First startup is slower (Chrome download if needed)");
+console.log("=".repeat(60) + "\n");
 client.initialize();

@@ -542,9 +542,17 @@ function isDeliveryMessage(text) {
     return parsed.valid === true; // Return true if valid structured format
   }
 
-  // Fallback: check for phone or amount (flexible format)
+  // For short messages (< 4 lines), require BOTH phone AND amount
+  // This prevents false positives like "Le 25..." being detected as deliveries
   const parsed = parseDeliveryMessage(text);
-  return parsed.valid && (parsed.hasPhone || parsed.hasAmount);
+  
+  // Reject very short messages that are clearly not deliveries
+  if (text.trim().length < 10) {
+    return false;
+  }
+  
+  // For flexible format, require both phone and amount to reduce false positives
+  return parsed.valid && parsed.hasPhone && parsed.hasAmount;
 }
 
 module.exports = {

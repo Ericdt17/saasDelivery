@@ -1,74 +1,65 @@
-/**
- * Login Page
- * Single login page for both super admin and agency admins
- */
-
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Truck, Loader2 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { AlertCircle, Loader2 } from "lucide-react";
 
-export default function Login() {
+const Login = () => {
+  const { login } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const { login, isLoading } = useAuth();
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setIsLoading(true);
 
-    if (!email || !password) {
-      setError("Veuillez remplir tous les champs");
-      return;
-    }
-
-    const success = await login(email, password);
-    if (!success) {
-      setError("Email ou mot de passe incorrect");
+    try {
+      const success = await login(email, password);
+      if (!success) {
+        setError("Email ou mot de passe incorrect");
+      }
+    } catch (err) {
+      setError("Une erreur est survenue lors de la connexion");
+    } finally {
+      setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800 p-4">
+    <div className="flex min-h-screen items-center justify-center bg-muted p-4">
       <Card className="w-full max-w-md">
-        <CardHeader className="space-y-1 text-center">
-          <div className="flex justify-center mb-4">
-            <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center">
-              <Truck className="w-8 h-8 text-white" />
-            </div>
-          </div>
-          <CardTitle className="text-2xl font-bold">LivrExpress</CardTitle>
+        <CardHeader className="space-y-1">
+          <CardTitle className="text-2xl font-bold">Connexion</CardTitle>
           <CardDescription>
-            Connectez-vous pour accéder à votre tableau de bord
+            Entrez vos identifiants pour accéder à votre compte
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
               <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
                 <AlertDescription>{error}</AlertDescription>
               </Alert>
             )}
-
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input
                 id="email"
                 type="email"
-                placeholder="admin@example.com"
+                placeholder="votre@email.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                disabled={isLoading}
                 required
-                autoComplete="email"
+                disabled={isLoading}
               />
             </div>
-
             <div className="space-y-2">
               <Label htmlFor="password">Mot de passe</Label>
               <Input
@@ -77,17 +68,11 @@ export default function Login() {
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                disabled={isLoading}
                 required
-                autoComplete="current-password"
+                disabled={isLoading}
               />
             </div>
-
-            <Button
-              type="submit"
-              className="w-full"
-              disabled={isLoading}
-            >
+            <Button type="submit" className="w-full" disabled={isLoading}>
               {isLoading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -102,5 +87,6 @@ export default function Login() {
       </Card>
     </div>
   );
-}
+};
 
+export default Login;

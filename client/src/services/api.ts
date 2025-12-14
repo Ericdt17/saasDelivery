@@ -27,12 +27,9 @@ async function apiRequest<T>(
     ...fetchOptions.headers,
   };
 
-  // Add authentication token if available
-  // Get token from localStorage to avoid circular dependency
-  const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
+  // Note: Authentication is now handled via HTTP-only cookies
+  // The browser automatically sends cookies with credentials: 'include'
+  // No need to manually add Authorization header
 
   // Create abort controller for timeout
   const controller = new AbortController();
@@ -42,6 +39,7 @@ async function apiRequest<T>(
     const response = await fetch(url, {
       ...fetchOptions,
       headers,
+      credentials: 'include', // Include cookies in cross-origin requests
       signal: controller.signal,
     });
 

@@ -110,3 +110,5 @@ ls -la /var/www/frontend/dist/
 
 Your frontend should now be accessible at `http://157.173.118.238`
 
+
+

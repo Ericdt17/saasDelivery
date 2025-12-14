@@ -191,3 +191,5 @@ After fixing Nginx:
 Since backend works directly but browser shows 403, it's **definitely Nginx blocking OPTIONS requests**.
 
 Add the OPTIONS handling block shown above and reload Nginx.
+
+

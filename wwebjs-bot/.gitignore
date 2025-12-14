@@ -9,6 +9,7 @@ node_modules/
 
 # WhatsApp session/auth data
 auth/
+auth-dev/
 
 # Database
 data/
@@ -22,4 +23,8 @@ qr-code.png
 # OS files
 .DS_Store
 Thumbs.db
+
+# Documentation (keep only README.md)
+*.md
+!README.md
 

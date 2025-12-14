@@ -1,28 +1,29 @@
 /**
  * Group Manager Utility
  * Handles automatic group registration and retrieval
+ * Now includes agency code verification for new groups
  */
 
-const { adapter, createGroup } = require("../db");
+const { adapter, createGroup, findAgencyByCode } = require("../db");
+const { isPendingVerification } = require("./group-verification");
 
 /**
- * Get or create a group in the database
+ * Get a group from the database by WhatsApp group ID
+ * Only returns existing groups - no auto-creation or auto-linking
  * @param {string} whatsappGroupId - WhatsApp group ID (from chat.id._serialized)
- * @param {string} groupName - Group name from WhatsApp
- * @param {number|null} agencyId - Agency ID to assign the group to (null = use default)
- * @returns {Promise<Object>} - Group object from database
+ * @returns {Promise<Object|null>} - Group object from database, or null if not found
  */
-async function getOrCreateGroup(whatsappGroupId, groupName, agencyId = null) {
+async function getGroup(whatsappGroupId) {
   try {
-    // First, try to find existing group by WhatsApp ID
+    // Find existing group by WhatsApp ID
     const findGroupQuery =
       adapter.type === "postgres"
         ? `SELECT g.id, g.agency_id, g.whatsapp_group_id, g.name, g.is_active 
          FROM groups g 
-         WHERE g.whatsapp_group_id = $1 LIMIT 1`
+         WHERE g.whatsapp_group_id = $1 AND g.is_active = true LIMIT 1`
         : `SELECT g.id, g.agency_id, g.whatsapp_group_id, g.name, g.is_active 
          FROM groups g 
-         WHERE g.whatsapp_group_id = ? LIMIT 1`;
+         WHERE g.whatsapp_group_id = ? AND g.is_active = 1 LIMIT 1`;
 
     const existingGroups = await adapter.query(findGroupQuery, [
       whatsappGroupId,
@@ -36,75 +37,27 @@ async function getOrCreateGroup(whatsappGroupId, groupName, agencyId = null) {
 
     if (existingGroup) {
       console.log(
-        `   ✅ Group already exists in database: ${existingGroup.name} (ID: ${existingGroup.id})`
+        `   ✅ Group found in database: ${existingGroup.name} (DB ID: ${existingGroup.id}, Agency: ${existingGroup.agency_id})`
       );
       return existingGroup;
     }
 
-    // Group doesn't exist - need to create it
-    console.log(`   📝 Registering new group: ${groupName}`);
-
-    // If no agency_id provided, get default agency
-    let finalAgencyId = agencyId;
-    if (!finalAgencyId) {
-      finalAgencyId = await getDefaultAgencyId();
-      if (!finalAgencyId) {
-        console.error(
-          `   ❌ No agency found in database. Cannot create group "${groupName}"`
-        );
-        console.error(`   💡 Solutions:`);
-        console.error(`      1. Create an agency via the API or frontend`);
-        console.error(
-          `      2. Run: npm run seed:admin (to create super admin)`
-        );
-        console.error(`      3. Set DEFAULT_AGENCY_ID in .env file`);
-        throw new Error(
-          "No agency found. Please create an agency first or set DEFAULT_AGENCY_ID in config."
-        );
-      }
-      console.log(
-        `   🔗 Assigning group to default agency (ID: ${finalAgencyId})`
-      );
-    }
-
-    // Create the group
-    const groupId = await createGroup({
-      agency_id: finalAgencyId,
-      whatsapp_group_id: whatsappGroupId,
-      name: groupName || "Unnamed Group",
-      is_active: true,
-    });
-
-    // Get the created group
-    const getGroupQuery =
-      adapter.type === "postgres"
-        ? `SELECT g.id, g.agency_id, g.whatsapp_group_id, g.name, g.is_active 
-         FROM groups g 
-         WHERE g.id = $1 LIMIT 1`
-        : `SELECT g.id, g.agency_id, g.whatsapp_group_id, g.name, g.is_active 
-         FROM groups g 
-         WHERE g.id = ? LIMIT 1`;
-
-    const newGroups = await adapter.query(getGroupQuery, [groupId]);
-    const newGroup =
-      adapter.type === "postgres"
-        ? Array.isArray(newGroups) && newGroups.length > 0
-          ? newGroups[0]
-          : null
-        : newGroups;
-
-    if (!newGroup) {
-      throw new Error(`Failed to retrieve created group with ID: ${groupId}`);
-    }
-
-    console.log(
-      `   ✅ Group registered successfully: ${newGroup.name} (ID: ${newGroup.id})`
-    );
-    return newGroup;
+    // Group not found
+    console.log(`   ⏭️  Group not registered in database: ${whatsappGroupId}`);
+    return null;
   } catch (error) {
-    console.error(`   ❌ Error registering group: ${error.message}`);
+    console.error(`   ❌ Error checking group: ${error.message}`);
     throw error;
   }
+}
+
+/**
+ * @deprecated Use getGroup() instead. This function is kept for backward compatibility.
+ * Get or create a group in the database (legacy function - now only checks for existing groups)
+ */
+async function getOrCreateGroup(whatsappGroupId, groupName, agencyId = null, messageText = null) {
+  // Simply delegate to getGroup() - no auto-creation
+  return await getGroup(whatsappGroupId);
 }
 
 /**
@@ -201,8 +154,78 @@ async function getAgencyIdForGroup(groupId) {
   }
 }
 
+/**
+ * Verify agency code and link group to agency
+ * @param {string} whatsappGroupId - WhatsApp group ID
+ * @param {string} code - Agency code to verify
+ * @param {string} groupName - Group name
+ * @returns {Promise<Object|null>} - Group object if verified and created, null if code invalid
+ */
+async function verifyAgencyCodeAndLinkGroup(whatsappGroupId, code, groupName) {
+  try {
+    // Normalize code (trim, uppercase for case-insensitive matching)
+    const normalizedCode = (code || "").trim().toUpperCase();
+    
+    if (!normalizedCode || normalizedCode.length < 4) {
+      console.log(`   ❌ Invalid code format: code must be at least 4 characters`);
+      return null;
+    }
+
+    // Find agency by code using the database function
+    const agency = await findAgencyByCode(normalizedCode);
+
+    if (!agency) {
+      console.log(`   ❌ No agency found with code: ${normalizedCode}`);
+      return null;
+    }
+
+    // Agency found - create group linked to this agency
+    console.log(`   ✅ Agency code verified: ${agency.name} (ID: ${agency.id})`);
+    console.log(`   📝 Creating group linked to agency...`);
+
+    const groupId = await createGroup({
+      agency_id: agency.id,
+      whatsapp_group_id: whatsappGroupId,
+      name: groupName || "Unnamed Group",
+      is_active: true,
+    });
+
+    // Get the created group
+    const getGroupQuery =
+      adapter.type === "postgres"
+        ? `SELECT g.id, g.agency_id, g.whatsapp_group_id, g.name, g.is_active 
+           FROM groups g 
+           WHERE g.id = $1 LIMIT 1`
+        : `SELECT g.id, g.agency_id, g.whatsapp_group_id, g.name, g.is_active 
+           FROM groups g 
+           WHERE g.id = ? LIMIT 1`;
+
+    const newGroups = await adapter.query(getGroupQuery, [groupId]);
+    const newGroup =
+      adapter.type === "postgres"
+        ? Array.isArray(newGroups) && newGroups.length > 0
+          ? newGroups[0]
+          : null
+        : newGroups;
+
+    if (!newGroup) {
+      throw new Error(`Failed to retrieve created group with ID: ${groupId}`);
+    }
+
+    console.log(
+      `   ✅ Group registered successfully: ${newGroup.name} (ID: ${newGroup.id}, Agency: ${agency.name})`
+    );
+    return newGroup;
+  } catch (error) {
+    console.error(`   ❌ Error verifying code and creating group: ${error.message}`);
+    throw error;
+  }
+}
+
 module.exports = {
-  getOrCreateGroup,
+  getGroup,
+  getOrCreateGroup, // Kept for backward compatibility
   getDefaultAgencyId,
   getAgencyIdForGroup,
+  verifyAgencyCodeAndLinkGroup, // Kept for backward compatibility (may be used elsewhere)
 };

@@ -47,3 +47,5 @@ node src/scripts/reassign-group-to-agency.js 7 24
 - Une fois créé, un groupe reste assigné à la même agence (sauf réassignation manuelle)
 - Les livraisons sont automatiquement liées au groupe qui a envoyé le message
 
+
+

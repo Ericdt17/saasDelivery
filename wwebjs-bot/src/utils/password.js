@@ -30,6 +30,23 @@ async function hashPassword(plainPassword) {
  */
 async function comparePassword(plainPassword, hashedPassword) {
   try {
+    // Validate inputs
+    if (!plainPassword) {
+      throw new Error("Plain password is required");
+    }
+
+    if (!hashedPassword) {
+      throw new Error("Hashed password is required");
+    }
+
+    if (typeof plainPassword !== "string") {
+      throw new Error("Plain password must be a string");
+    }
+
+    if (typeof hashedPassword !== "string") {
+      throw new Error("Hashed password must be a string");
+    }
+
     const isMatch = await bcrypt.compare(plainPassword, hashedPassword);
     return isMatch;
   } catch (error) {

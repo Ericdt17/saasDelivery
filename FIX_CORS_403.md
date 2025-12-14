@@ -167,3 +167,5 @@ curl -X OPTIONS http://localhost/api/v1/auth/login \
 - ❌ Backend CORS is blocking `http://157.173.118.238`
 - ✅ Fix: Update `ALLOWED_ORIGINS` to include your frontend origin
 
+
+

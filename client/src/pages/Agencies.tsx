@@ -7,7 +7,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
-import { getAgencies, createAgency, updateAgency, deleteAgency, type Agency, type CreateAgencyRequest } from "@/services/agencies";
+import { getAgencies, createAgency, updateAgency, deleteAgency, generateAgencyCode, type Agency, type CreateAgencyRequest } from "@/services/agencies";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -39,7 +39,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
-import { Building2, Plus, Edit, Trash2, Loader2 } from "lucide-react";
+import { Building2, Plus, Edit, Trash2, Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { Switch } from "@/components/ui/switch";
 
@@ -56,6 +56,7 @@ function AgenciesPage() {
     password: "",
     role: "agency",
     is_active: true,
+    agency_code: null,
   });
 
   const { data: agencies = [], isLoading } = useQuery({
@@ -69,7 +70,7 @@ function AgenciesPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["agencies"] });
       setIsCreateDialogOpen(false);
-      setFormData({ name: "", email: "", password: "", role: "agency", is_active: true });
+      setFormData({ name: "", email: "", password: "", role: "agency", is_active: true, agency_code: null });
       toast.success("Agence créée avec succès");
     },
     onError: (error: any) => {
@@ -109,7 +110,18 @@ function AgenciesPage() {
       toast.error("Veuillez remplir tous les champs");
       return;
     }
-    createMutation.mutate(formData);
+    // Prepare data: convert empty string to null for agency_code
+    const agencyCode = formData.agency_code;
+    const createData = {
+      ...formData,
+      agency_code: agencyCode && agencyCode.trim() ? agencyCode.trim() : null,
+    };
+    
+    // Debug: Log the data being sent
+    console.log("Creating agency with data:", createData);
+    console.log("Agency code value:", createData.agency_code);
+    
+    createMutation.mutate(createData);
   };
 
   const handleEdit = (agency: Agency) => {
@@ -120,6 +132,7 @@ function AgenciesPage() {
       password: "", // Don't pre-fill password
       role: agency.role,
       is_active: agency.is_active,
+      agency_code: agency.agency_code || null,
     });
     setIsEditDialogOpen(true);
   };
@@ -138,6 +151,19 @@ function AgenciesPage() {
     if (formData.password) {
       updateData.password = formData.password;
     }
+    // Handle agency_code: always include it explicitly, convert empty string to null, trim if provided
+    // This ensures agency_code is always sent, even if null
+    const agencyCodeValue = formData.agency_code;
+    if (agencyCodeValue && typeof agencyCodeValue === 'string' && agencyCodeValue.trim()) {
+      updateData.agency_code = agencyCodeValue.trim();
+    } else {
+      updateData.agency_code = null; // Explicitly set to null
+    }
+    
+    // Debug: Log the data being sent
+    console.log("Updating agency with data:", JSON.stringify(updateData, null, 2));
+    console.log("Agency code value:", updateData.agency_code, "Type:", typeof updateData.agency_code);
+    
     updateMutation.mutate({ id: selectedAgency.id, data: updateData });
   };
 
@@ -215,6 +241,34 @@ function AgenciesPage() {
                   />
                 </div>
                 <div className="space-y-2">
+                  <Label htmlFor="agency_code">Code Agence (optionnel)</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="agency_code"
+                      value={formData.agency_code || ""}
+                      onChange={(e) => setFormData({ ...formData, agency_code: e.target.value || null })}
+                      placeholder="Ex: ABC123"
+                      className="flex-1"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        const generatedCode = generateAgencyCode();
+                        setFormData({ ...formData, agency_code: generatedCode });
+                        toast.success(`Code généré: ${generatedCode}`);
+                      }}
+                      className="shrink-0"
+                    >
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Auto Générer
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Code utilisé pour lier les groupes WhatsApp à cette agence. Minimum 4 caractères alphanumériques.
+                  </p>
+                </div>
+                <div className="space-y-2">
                   <Label htmlFor="role">Rôle</Label>
                 <select
                   id="role"
@@ -261,6 +315,7 @@ function AgenciesPage() {
               <TableRow>
                 <TableHead>Nom</TableHead>
                 <TableHead>Email</TableHead>
+                <TableHead>Code Agence</TableHead>
                 <TableHead>Rôle</TableHead>
                 <TableHead>Statut</TableHead>
                 <TableHead>Date de création</TableHead>
@@ -270,7 +325,7 @@ function AgenciesPage() {
             <TableBody>
               {agencies.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground">
+                  <TableCell colSpan={7} className="text-center text-muted-foreground">
                     Aucune agence trouvée
                   </TableCell>
                 </TableRow>
@@ -279,6 +334,15 @@ function AgenciesPage() {
                   <TableRow key={agency.id}>
                     <TableCell className="font-medium">{agency.name}</TableCell>
                     <TableCell>{agency.email}</TableCell>
+                    <TableCell>
+                      {agency.agency_code ? (
+                        <Badge variant="outline" className="font-mono">
+                          {agency.agency_code}
+                        </Badge>
+                      ) : (
+                        <span className="text-muted-foreground text-sm">—</span>
+                      )}
+                    </TableCell>
                     <TableCell>
                       <Badge variant={agency.role === "super_admin" ? "default" : "secondary"}>
                         {agency.role === "super_admin" ? "Super Admin" : "Agence"}
@@ -344,6 +408,34 @@ function AgenciesPage() {
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
               />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-agency_code">Code Agence (optionnel)</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="edit-agency_code"
+                  value={formData.agency_code || ""}
+                  onChange={(e) => setFormData({ ...formData, agency_code: e.target.value || null })}
+                  placeholder="Ex: ABC123 (laisser vide pour supprimer)"
+                  className="flex-1"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    const generatedCode = generateAgencyCode();
+                    setFormData({ ...formData, agency_code: generatedCode });
+                    toast.success(`Code généré: ${generatedCode}`);
+                  }}
+                  className="shrink-0"
+                >
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Auto Générer
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Code utilisé pour lier les groupes WhatsApp. Laissez vide pour supprimer le code.
+              </p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="edit-password">Nouveau mot de passe (laisser vide pour ne pas changer)</Label>

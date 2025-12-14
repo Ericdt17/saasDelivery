@@ -18,7 +18,7 @@ services:
     plan: starter
     rootDir: wwebjs-bot
     buildCommand: npm install
-    startCommand: npm run api
+    startCommand: npm run migrate && npm run api
     envVars:
       - key: NODE_ENV
         value: production

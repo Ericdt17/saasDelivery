@@ -12,9 +12,38 @@ const {
   getAllAgencies,
   updateAgency,
   deleteAgency,
+  findAgencyByCode,
   adapter,
 } = require("../../db");
 const { hashPassword } = require("../../utils/password");
+
+/**
+ * Validate agency code format
+ * @param {string} code - Agency code to validate
+ * @returns {Object} - { valid: boolean, error: string|null }
+ */
+function validateAgencyCode(code) {
+  if (code === null || code === undefined || code === "") {
+    return { valid: true, error: null }; // NULL is allowed
+  }
+
+  const trimmed = code.trim();
+  
+  if (trimmed.length < 4) {
+    return { valid: false, error: "Agency code must be at least 4 characters" };
+  }
+  
+  if (trimmed.length > 20) {
+    return { valid: false, error: "Agency code must be at most 20 characters" };
+  }
+  
+  // Alphanumeric only (A-Z, 0-9)
+  if (!/^[A-Z0-9]+$/i.test(trimmed)) {
+    return { valid: false, error: "Agency code must contain only letters and numbers" };
+  }
+  
+  return { valid: true, error: null };
+}
 
 // All routes require authentication and super admin role
 router.use(authenticateToken);
@@ -68,7 +97,7 @@ router.get("/:id", async (req, res, next) => {
  */
 router.post("/", async (req, res, next) => {
   try {
-    const { name, email, password, role = "agency", is_active = true } = req.body;
+    const { name, email, password, role = "agency", is_active = true, agency_code } = req.body;
 
     // Validate input
     if (!name || !email || !password) {
@@ -77,6 +106,29 @@ router.post("/", async (req, res, next) => {
         error: "Validation error",
         message: "Name, email, and password are required",
       });
+    }
+
+    // Validate agency_code if provided
+    if (agency_code !== undefined && agency_code !== null) {
+      const codeValidation = validateAgencyCode(agency_code);
+      if (!codeValidation.valid) {
+        return res.status(400).json({
+          success: false,
+          error: "Validation error",
+          message: codeValidation.error,
+        });
+      }
+
+      // Check if code is already taken (case-insensitive)
+      const normalizedCode = agency_code.trim().toUpperCase();
+      const existingAgency = await findAgencyByCode(normalizedCode);
+      if (existingAgency) {
+        return res.status(409).json({
+          success: false,
+          error: "Conflict",
+          message: "An agency with this code already exists",
+        });
+      }
     }
 
     // Hash password
@@ -95,6 +147,7 @@ router.post("/", async (req, res, next) => {
       password_hash,
       role,
       is_active: isActiveValue,
+      agency_code: agency_code || null,
     });
 
     // Get created agency
@@ -135,7 +188,11 @@ router.post("/", async (req, res, next) => {
 router.put("/:id", async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { name, email, password, role, is_active } = req.body;
+    const { name, email, password, role, is_active, agency_code } = req.body;
+
+    // Debug: Log received data
+    console.log(`[Agency Update] ID: ${id}, Received agency_code:`, agency_code, "Type:", typeof agency_code);
+    console.log(`[Agency Update] Full body:`, JSON.stringify(req.body, null, 2));
 
     // Check if agency exists
     const existingAgency = await getAgencyById(parseInt(id));
@@ -145,6 +202,31 @@ router.put("/:id", async (req, res, next) => {
         error: "Not found",
         message: "Agency not found",
       });
+    }
+
+    // Validate agency_code if provided
+    if (agency_code !== undefined) {
+      const codeValidation = validateAgencyCode(agency_code);
+      if (!codeValidation.valid) {
+        return res.status(400).json({
+          success: false,
+          error: "Validation error",
+          message: codeValidation.error,
+        });
+      }
+
+      // Check if code is already taken by another agency (case-insensitive)
+      if (agency_code !== null && agency_code !== "") {
+        const normalizedCode = agency_code.trim().toUpperCase();
+        const existingAgencyWithCode = await findAgencyByCode(normalizedCode);
+        if (existingAgencyWithCode && existingAgencyWithCode.id !== parseInt(id)) {
+          return res.status(409).json({
+            success: false,
+            error: "Conflict",
+            message: "An agency with this code already exists",
+          });
+        }
+      }
     }
 
     // Prepare update data
@@ -162,6 +244,18 @@ router.put("/:id", async (req, res, next) => {
     if (password !== undefined) {
       updateData.password_hash = await hashPassword(password);
     }
+    if (agency_code !== undefined) {
+      // Normalize the code: trim and uppercase if provided, null if empty
+      const normalizedCode = agency_code && typeof agency_code === 'string' && agency_code.trim()
+        ? agency_code.trim().toUpperCase()
+        : null;
+      updateData.agency_code = normalizedCode;
+      console.log(`[Agency Update] Setting agency_code in updateData:`, updateData.agency_code, "from original:", agency_code);
+    } else {
+      console.log(`[Agency Update] WARNING: agency_code is undefined, not including in update`);
+    }
+
+    console.log(`[Agency Update] Final updateData:`, JSON.stringify(updateData, null, 2));
 
     // Update agency
     await updateAgency(parseInt(id), updateData);
@@ -175,8 +269,15 @@ router.put("/:id", async (req, res, next) => {
       message: "Agency updated successfully",
     });
   } catch (error) {
-    // Handle unique constraint violation (duplicate email)
-    if (error.message && error.message.includes("UNIQUE constraint")) {
+    // Handle unique constraint violation (duplicate email or code)
+    if (error.message && (error.message.includes("UNIQUE constraint") || error.message.includes("duplicate key"))) {
+      if (error.message.includes("agency_code") || error.message.includes("code")) {
+        return res.status(409).json({
+          success: false,
+          error: "Conflict",
+          message: "An agency with this code already exists",
+        });
+      }
       return res.status(409).json({
         success: false,
         error: "Conflict",

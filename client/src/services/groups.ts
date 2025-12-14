@@ -17,9 +17,9 @@ export interface Group {
 }
 
 export interface CreateGroupRequest {
-  agency_id: number;
-  whatsapp_group_id?: string;
-  name: string;
+  agency_id?: number; // Optional - required for super admin, auto-set for agency admin
+  whatsapp_group_id: string; // Required
+  name: string; // Required
   is_active?: boolean;
 }
 
@@ -51,7 +51,9 @@ export async function getGroupById(id: number): Promise<Group | null> {
 }
 
 /**
- * Create new group (super admin only)
+ * Create new group
+ * - Agency admins can create groups for their own agency
+ * - Super admins can create groups for any agency
  */
 export async function createGroup(data: CreateGroupRequest): Promise<Group | null> {
   const response = await apiPost<Group>("/api/v1/groups", data);
@@ -82,4 +84,6 @@ export async function deleteGroup(id: number): Promise<boolean> {
   const response = await apiDelete(`/api/v1/groups/${id}`);
   return response.success;
 }
+
+
 
