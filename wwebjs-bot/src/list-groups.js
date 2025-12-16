@@ -7,7 +7,7 @@ const { Client, LocalAuth } = require("whatsapp-web.js");
 
 const client = new Client({
   authStrategy: new LocalAuth({
-    dataPath: process.env.WHATSAPP_SESSION_PATH || "./auth-dev",
+    clientId: process.env.CLIENT_ID || "delivery-bot-default",
   }),
 });
 

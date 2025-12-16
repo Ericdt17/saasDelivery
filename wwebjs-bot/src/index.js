@@ -20,11 +20,32 @@ const { getGroup, getAgencyIdForGroup } = require("./utils/group-manager");
 const startupStartTime = Date.now();
 console.log("⏳ Initializing bot components...");
 
+// Log environment info for debugging
+console.log("\n" + "=".repeat(60));
+console.log("🔧 BOT ENVIRONMENT CONFIGURATION");
+console.log("=".repeat(60));
+console.log(`   NODE_ENV: ${process.env.NODE_ENV || "not set"}`);
+console.log(
+  `   CLIENT_ID: ${process.env.CLIENT_ID || "delivery-bot-default (default)"}`
+);
+if (process.env.DATABASE_URL) {
+  try {
+    const dbUrl = new URL(process.env.DATABASE_URL);
+    const maskedUrl = `${dbUrl.protocol}//${dbUrl.username}:***@${dbUrl.hostname}${dbUrl.pathname}`;
+    console.log(`   DATABASE_URL: ${maskedUrl}`);
+  } catch (e) {
+    console.log(`   DATABASE_URL: *** (present but invalid format)`);
+  }
+} else {
+  console.log(`   DATABASE_URL: NOT SET (will use SQLite)`);
+}
+console.log("=".repeat(60) + "\n");
+
 // Create WhatsApp client with local auth (saves session)
-// Using ./auth-dev for local development to avoid conflicts with production session
+// Using clientId for environment isolation (prod/staging/dev)
 const client = new Client({
   authStrategy: new LocalAuth({
-    dataPath: process.env.WHATSAPP_SESSION_PATH || "./auth-dev",
+    clientId: process.env.CLIENT_ID || "delivery-bot-default",
   }),
   puppeteer: {
     headless: true,
@@ -52,20 +73,21 @@ const client = new Client({
       "--mute-audio",
       // Additional Windows-specific fixes
       "--disable-web-security",
-      "--disable-features=VizDisplayCompositor"
+      "--disable-features=VizDisplayCompositor",
     ],
     // Optimize startup
     timeout: 60000, // 60 seconds timeout for browser launch
     // Ignore default args that might cause issues
-    ignoreDefaultArgs: ['--disable-extensions'],
+    ignoreDefaultArgs: ["--disable-extensions"],
   },
   // Add restart on failure
   restartOnAuthFail: true,
   // Add web version cache
   webVersionCache: {
-    type: 'remote',
-    remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2413.51-beta.html',
-  }
+    type: "remote",
+    remotePath:
+      "https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2413.51-beta.html",
+  },
 });
 
 // Show QR code in terminal when authentication needed
@@ -90,21 +112,54 @@ client.on("qr", async (qr) => {
     console.log("   (Open WhatsApp → Linked Devices → Link a Device)\n");
   }
 
-  // Show medium-sized QR code in terminal
+  // Show medium-sized QR code in terminal (may be distorted in Render logs)
   qrcode.generate(qr, { small: true });
 
-  // Also save as image file for easier scanning
+  // Also save as image file and generate data URL for remote access
   try {
     const qrImagePath = path.join(__dirname, "..", "qr-code.png");
     await QRCode.toFile(qrImagePath, qr, {
-      width: 200,
-      margin: 1,
+      width: 400, // Increased size for better scanning
+      margin: 2,
     });
-    console.log("\n💡 QR code also saved as: qr-code.png");
-    console.log("   Open this file with your image viewer to scan it!\n");
+    console.log("\n💡 QR code saved as: qr-code.png");
+
+    // Generate base64 data URL for Render/remote access
+    const qrDataUrl = await QRCode.toDataURL(qr, {
+      width: 400,
+      margin: 2,
+    });
+
+    // For Render: Output QR code in multiple formats for easier access
+    console.log("\n🌐 QR CODE FOR REMOTE ACCESS (Render/Cloud):");
+    console.log("=".repeat(80));
+    console.log("\n📋 Option 1: Use online QR code generator");
+    console.log("   Visit: https://www.qr-code-generator.com/");
+    console.log("   Or: https://qr.io/");
+    console.log("   Paste this QR code data:");
+    console.log("   " + qr);
+    console.log("\n📋 Option 2: Use base64 data URL (long, but works)");
+    console.log(
+      "   Copy the ENTIRE line below and paste in browser address bar:"
+    );
+    console.log(
+      "   (It's very long - use 'Copy All' from Render logs if possible)"
+    );
+    console.log(
+      qrDataUrl.substring(0, 200) + "... [truncated, see full URL in logs]"
+    );
+    console.log("\n📋 Option 3: Use the QR code terminal output above");
+    console.log(
+      "   (May be distorted in Render logs - try options 1 or 2 instead)"
+    );
+    console.log("=".repeat(80) + "\n");
   } catch (err) {
     console.log(
       "   (Could not save QR code image, but terminal QR code should work)\n"
+    );
+    console.log("   Raw QR data:", qr);
+    console.log(
+      "   Use this with an online QR code generator: https://www.qr-code-generator.com/\n"
     );
   }
 });
@@ -128,34 +183,36 @@ client.on("authenticated", async () => {
   console.log("✅ Session saved!");
   console.log("💡 You won't need to scan QR code again next time.");
   console.log("=".repeat(60) + "\n");
-  
+
   // Wait a bit then check if client is ready
   setTimeout(async () => {
     try {
       const state = await client.getState();
       console.log(`\n🔍 Checking client state: ${state}`);
-      
-      if (state === 'CONNECTED') {
+
+      if (state === "CONNECTED") {
         console.log("✅ Client state: CONNECTED");
         console.log("📋 Bot should be listening for messages now.");
-        
+
         // Verify message event listener is registered
-        const listeners = client.listenerCount('message');
+        const listeners = client.listenerCount("message");
         console.log(`📊 Message event listeners: ${listeners}`);
-        
+
         if (listeners === 0) {
           console.error("❌ WARNING: No message event listeners found!");
           console.error("   This means the bot won't receive messages.");
         } else {
           console.log("✅ Message event listener is registered");
         }
-        
+
         // Setup daily report scheduler if ready event didn't fire
-        if (typeof setupDailyReportScheduler === 'function') {
+        if (typeof setupDailyReportScheduler === "function") {
           setupDailyReportScheduler();
         }
-        
-        console.log("\n💡 Test: Send a message in the group and check for 'DEBUG - Raw message received'\n");
+
+        console.log(
+          "\n💡 Test: Send a message in the group and check for 'DEBUG - Raw message received'\n"
+        );
       } else {
         console.log(`⚠️  Client state: ${state}`);
         console.log("💡 Waiting for ready event...\n");
@@ -196,7 +253,7 @@ console.log("📋 Registering message event listener...");
 client.on("message", async (msg) => {
   try {
     console.log("🔔 MESSAGE EVENT FIRED - Bot received a message!");
-    
+
     // Skip messages from the bot itself (to avoid loops)
     if (msg.fromMe) {
       console.log("   ⏭️  Skipped: Message from bot itself\n");
@@ -227,14 +284,14 @@ client.on("message", async (msg) => {
     // Handle #link command - works even for unregistered groups
     // Check if message is exactly "#link" (case-insensitive, with optional whitespace)
     const trimmedMessage = messageText.trim();
-    if (trimmedMessage.toLowerCase() === '#link') {
+    if (trimmedMessage.toLowerCase() === "#link") {
       console.log("   🔗 #link command detected - sending group ID");
       try {
         await chat.sendMessage(
           `📋 ID du groupe WhatsApp:\n\n` +
-          `\`${whatsappGroupId}\`\n\n` +
-          `💡 Copiez cet ID et collez-le dans votre tableau de bord pour lier ce groupe à votre agence.\n\n` +
-          `📝 Nom du groupe: ${groupName}`
+            `\`${whatsappGroupId}\`\n\n` +
+            `💡 Copiez cet ID et collez-le dans votre tableau de bord pour lier ce groupe à votre agence.\n\n` +
+            `📝 Nom du groupe: ${groupName}`
         );
         console.log(`   ✅ Group ID sent: ${whatsappGroupId}`);
       } catch (err) {
@@ -247,7 +304,9 @@ client.on("message", async (msg) => {
     // If GROUP_ID is not set (null), process messages from all groups
     if (targetGroupId && whatsappGroupId !== targetGroupId) {
       console.log("   ⏭️  Skipped: Different group (GROUP_ID is configured)\n");
-      console.log("   💡 Tip: Remove GROUP_ID from .env to process all groups\n");
+      console.log(
+        "   💡 Tip: Remove GROUP_ID from .env to process all groups\n"
+      );
       return; // Skip messages from other groups
     }
 
@@ -264,39 +323,48 @@ client.on("message", async (msg) => {
       if (msg.hasQuotedMsg) {
         quotedMessage = await msg.getQuotedMessage();
         console.log("   💬 This is a REPLY to a previous message");
-        
+
         // Try different ID formats
         const quotedIdSerialized = quotedMessage.id?._serialized;
         const quotedIdRemote = quotedMessage.id?.remote;
         const quotedIdId = quotedMessage.id?.id;
-        
-        console.log(`   📎 Quoted message ID (_serialized): ${quotedIdSerialized}`);
+
+        console.log(
+          `   📎 Quoted message ID (_serialized): ${quotedIdSerialized}`
+        );
         console.log(`   📎 Quoted message ID (remote): ${quotedIdRemote}`);
         console.log(`   📎 Quoted message ID (id): ${quotedIdId}`);
-        console.log(`   📎 Full quoted message ID object:`, JSON.stringify(quotedMessage.id, null, 2));
-        
+        console.log(
+          `   📎 Full quoted message ID object:`,
+          JSON.stringify(quotedMessage.id, null, 2)
+        );
+
         // Try to find delivery by quoted message ID (try multiple formats)
         if (quotedIdSerialized) {
-          console.log(`   🔍 Searching for delivery with ID: ${quotedIdSerialized}`);
+          console.log(
+            `   🔍 Searching for delivery with ID: ${quotedIdSerialized}`
+          );
           deliveryFromReply = await findDeliveryByMessageId(quotedIdSerialized);
         }
-        
+
         // If not found, try with remote ID
         if (!deliveryFromReply && quotedIdRemote) {
-          console.log(`   🔍 Searching for delivery with remote ID: ${quotedIdRemote}`);
+          console.log(
+            `   🔍 Searching for delivery with remote ID: ${quotedIdRemote}`
+          );
           deliveryFromReply = await findDeliveryByMessageId(quotedIdRemote);
         }
-        
+
         // If not found, try with id
         if (!deliveryFromReply && quotedIdId) {
           console.log(`   🔍 Searching for delivery with id: ${quotedIdId}`);
           deliveryFromReply = await findDeliveryByMessageId(quotedIdId);
         }
-        
+
         // Try to extract ID from the quoted message body or other properties
         if (!deliveryFromReply && quotedMessage) {
           // Sometimes the ID might be in a different format, try to extract from _serialized
-          const serializedParts = quotedIdSerialized?.split('_');
+          const serializedParts = quotedIdSerialized?.split("_");
           if (serializedParts && serializedParts.length > 0) {
             // Try with just the last part (the actual message ID)
             const lastPart = serializedParts[serializedParts.length - 1];
@@ -304,12 +372,16 @@ client.on("message", async (msg) => {
             deliveryFromReply = await findDeliveryByMessageId(lastPart);
           }
         }
-        
+
         if (deliveryFromReply) {
-          console.log(`   ✅ Found delivery #${deliveryFromReply.id} linked to quoted message`);
+          console.log(
+            `   ✅ Found delivery #${deliveryFromReply.id} linked to quoted message`
+          );
         } else {
           console.log(`   ⚠️  No delivery found for quoted message ID`);
-          console.log(`   💡 The original delivery message might not have been stored with message ID`);
+          console.log(
+            `   💡 The original delivery message might not have been stored with message ID`
+          );
         }
       }
     } catch (replyError) {
@@ -322,17 +394,21 @@ client.on("message", async (msg) => {
     // Only process messages from registered groups
     try {
       group = await getGroup(whatsappGroupId);
-      
+
       if (!group) {
         // Group not registered - ignore message silently
         console.log(`   ⏭️  Skipped: Group not registered in database`);
-        console.log(`   💡 Tip: Add this group via the dashboard to start processing messages`);
+        console.log(
+          `   💡 Tip: Add this group via the dashboard to start processing messages`
+        );
         return; // Stop processing - group not registered
       }
-      
+
       // Group is registered - continue processing
       agencyId = group.agency_id;
-      console.log(`   📋 Group: ${group.name} (DB ID: ${group.id}, Agency: ${agencyId})`);
+      console.log(
+        `   📋 Group: ${group.name} (DB ID: ${group.id}, Agency: ${agencyId})`
+      );
     } catch (groupError) {
       console.error(`   ⚠️  Error checking group: ${groupError.message}`);
       // If error checking group, skip processing to avoid errors
@@ -366,10 +442,10 @@ client.on("message", async (msg) => {
     const isStatus = isStatusUpdate(messageText) || deliveryFromReply;
     if (isStatus) {
       console.log("   🔄 Detected as STATUS UPDATE");
-      
+
       // If it's a reply to a delivery message, use that delivery
       let delivery = deliveryFromReply;
-      
+
       // Otherwise, parse status update and find by phone
       let statusData = null;
       if (!delivery) {
@@ -383,171 +459,176 @@ client.on("message", async (msg) => {
       } else {
         // It's a reply, parse status update without requiring phone number
         statusData = parseStatusUpdate(messageText, true); // true = isReply, don't require phone
-        console.log("   📊 Status data from reply:", JSON.stringify(statusData, null, 2));
+        console.log(
+          "   📊 Status data from reply:",
+          JSON.stringify(statusData, null, 2)
+        );
       }
 
       // Only proceed if we have a delivery and status data
       if (delivery && statusData) {
-          try {
-            let updateData = {};
-            let historyAction = "";
+        try {
+          let updateData = {};
+          let historyAction = "";
 
-            switch (statusData.type) {
-              case "delivered":
-                updateData.status = "delivered";
-                historyAction = "marked_delivered";
+          switch (statusData.type) {
+            case "delivered":
+              updateData.status = "delivered";
+              historyAction = "marked_delivered";
+              console.log(
+                `   ✅ Livraison #${delivery.id} marquée comme LIVRÉE`
+              );
+              break;
+
+            case "failed":
+              updateData.status = "failed";
+              historyAction = "marked_failed";
+              console.log(
+                `   ❌ Livraison #${delivery.id} marquée comme ÉCHEC`
+              );
+              break;
+
+            case "payment":
+              // If amount is not specified, use the remaining amount due
+              // Convert to numbers to handle PostgreSQL DECIMAL types (returned as strings)
+              // Round to 2 decimal places to avoid floating point precision issues
+              const currentAmountPaid =
+                Math.round((parseFloat(delivery.amount_paid) || 0) * 100) / 100;
+              const currentAmountDue =
+                Math.round((parseFloat(delivery.amount_due) || 0) * 100) / 100;
+
+              let paymentAmount =
+                Math.round((parseFloat(statusData.amount) || 0) * 100) / 100;
+              if (!paymentAmount || paymentAmount === 0) {
+                const remainingAmount = currentAmountDue - currentAmountPaid;
+                paymentAmount =
+                  remainingAmount > 0 ? remainingAmount : currentAmountDue;
+                paymentAmount = Math.round(paymentAmount * 100) / 100;
                 console.log(
-                  `   ✅ Livraison #${delivery.id} marquée comme LIVRÉE`
+                  `   💡 Montant non spécifié, utilisation du montant restant: ${paymentAmount} FCFA`
                 );
-                break;
-
-              case "failed":
-                updateData.status = "failed";
-                historyAction = "marked_failed";
-                console.log(
-                  `   ❌ Livraison #${delivery.id} marquée comme ÉCHEC`
-                );
-                break;
-
-              case "payment":
-                // If amount is not specified, use the remaining amount due
-                // Convert to numbers to handle PostgreSQL DECIMAL types (returned as strings)
-                // Round to 2 decimal places to avoid floating point precision issues
-                const currentAmountPaid = Math.round((parseFloat(delivery.amount_paid) || 0) * 100) / 100;
-                const currentAmountDue = Math.round((parseFloat(delivery.amount_due) || 0) * 100) / 100;
-                
-                let paymentAmount = Math.round((parseFloat(statusData.amount) || 0) * 100) / 100;
-                if (!paymentAmount || paymentAmount === 0) {
-                  const remainingAmount = currentAmountDue - currentAmountPaid;
-                  paymentAmount = remainingAmount > 0 ? remainingAmount : currentAmountDue;
-                  paymentAmount = Math.round(paymentAmount * 100) / 100;
-                  console.log(
-                    `   💡 Montant non spécifié, utilisation du montant restant: ${paymentAmount} FCFA`
-                  );
-                }
-                
-                const newAmountPaid = Math.round((currentAmountPaid + paymentAmount) * 100) / 100;
-                updateData.amount_paid = newAmountPaid;
-                historyAction = "payment_collected";
-                console.log(
-                  `   💰 Paiement collecté: ${paymentAmount} FCFA`
-                );
-                console.log(
-                  `   💵 Total payé: ${newAmountPaid} FCFA / ${currentAmountDue} FCFA`
-                );
-
-                // Auto-mark as delivered if fully paid
-                if (newAmountPaid >= currentAmountDue) {
-                  updateData.status = "delivered";
-                  console.log(
-                    `   ✅ Livraison complètement payée - marquée comme LIVRÉE`
-                  );
-                }
-                break;
-
-              case "pickup":
-                updateData.status = "pickup";
-                historyAction = "marked_pickup";
-                console.log(
-                  `   📦 Livraison #${delivery.id} marquée comme PICKUP`
-                );
-                break;
-
-              case "pending":
-                updateData.status = "pending";
-                historyAction = "marked_pending";
-                console.log(
-                  `   ⏳ Livraison #${delivery.id} marquée comme EN ATTENTE`
-                );
-                break;
-
-              case "modify":
-                if (statusData.items) {
-                  updateData.items = statusData.items;
-                }
-                if (statusData.amount) {
-                  updateData.amount_due = statusData.amount;
-                }
-                historyAction = "modified";
-                console.log(`   ✏️  Livraison #${delivery.id} MODIFIÉE`);
-                if (statusData.items) {
-                  console.log(`   📦 Nouveaux produits: ${statusData.items}`);
-                }
-                if (statusData.amount) {
-                  console.log(
-                    `   💰 Nouveau montant: ${statusData.amount} FCFA`
-                  );
-                }
-                break;
-
-              case "number_change":
-                if (statusData.newPhone) {
-                  updateData.phone = statusData.newPhone;
-                  historyAction = "number_changed";
-                  console.log(
-                    `   📱 Numéro changé: ${delivery.phone} → ${statusData.newPhone}`
-                  );
-                }
-                break;
-            }
-
-            // Update delivery - use delivery ID (we already have the delivery object)
-            if (Object.keys(updateData).length > 0) {
-              // We already have the delivery object, so use its ID directly
-              await updateDelivery(delivery.id, updateData);
-              if (deliveryFromReply && quotedMessage) {
-                console.log(`   ✅ Mise à jour de la livraison #${delivery.id} via message ID`);
-              } else {
-                console.log(`   ✅ Mise à jour de la livraison #${delivery.id} via numéro de téléphone`);
               }
-              
-              await addHistory(
-                delivery.id,
-                historyAction || statusData.type,
-                JSON.stringify({ ...statusData, updated_by: contactName })
+
+              const newAmountPaid =
+                Math.round((currentAmountPaid + paymentAmount) * 100) / 100;
+              updateData.amount_paid = newAmountPaid;
+              historyAction = "payment_collected";
+              console.log(`   💰 Paiement collecté: ${paymentAmount} FCFA`);
+              console.log(
+                `   💵 Total payé: ${newAmountPaid} FCFA / ${currentAmountDue} FCFA`
               );
 
-              // Clear success message
-              console.log("\n" + "=".repeat(60));
-              console.log(`   ✅✅✅ MISE À JOUR RÉUSSIE ✅✅✅`);
-              console.log("=".repeat(60));
-              console.log(`   📦 Livraison #${delivery.id}`);
-              console.log(`   📱 Numéro: ${delivery.phone}`);
-              console.log(`   📊 Type: ${statusData.type}`);
-              if (statusData.amount) {
-                console.log(`   💰 Montant: ${statusData.amount} FCFA`);
+              // Auto-mark as delivered if fully paid
+              if (newAmountPaid >= currentAmountDue) {
+                updateData.status = "delivered";
+                console.log(
+                  `   ✅ Livraison complètement payée - marquée comme LIVRÉE`
+                );
               }
-              console.log(`   ✅ Statut mis à jour dans la base de données`);
-              console.log("=".repeat(60) + "\n");
+              break;
+
+            case "pickup":
+              updateData.status = "pickup";
+              historyAction = "marked_pickup";
+              console.log(
+                `   📦 Livraison #${delivery.id} marquée comme PICKUP`
+              );
+              break;
+
+            case "pending":
+              updateData.status = "pending";
+              historyAction = "marked_pending";
+              console.log(
+                `   ⏳ Livraison #${delivery.id} marquée comme EN ATTENTE`
+              );
+              break;
+
+            case "modify":
+              if (statusData.items) {
+                updateData.items = statusData.items;
+              }
+              if (statusData.amount) {
+                updateData.amount_due = statusData.amount;
+              }
+              historyAction = "modified";
+              console.log(`   ✏️  Livraison #${delivery.id} MODIFIÉE`);
+              if (statusData.items) {
+                console.log(`   📦 Nouveaux produits: ${statusData.items}`);
+              }
+              if (statusData.amount) {
+                console.log(`   💰 Nouveau montant: ${statusData.amount} FCFA`);
+              }
+              break;
+
+            case "number_change":
+              if (statusData.newPhone) {
+                updateData.phone = statusData.newPhone;
+                historyAction = "number_changed";
+                console.log(
+                  `   📱 Numéro changé: ${delivery.phone} → ${statusData.newPhone}`
+                );
+              }
+              break;
+          }
+
+          // Update delivery - use delivery ID (we already have the delivery object)
+          if (Object.keys(updateData).length > 0) {
+            // We already have the delivery object, so use its ID directly
+            await updateDelivery(delivery.id, updateData);
+            if (deliveryFromReply && quotedMessage) {
+              console.log(
+                `   ✅ Mise à jour de la livraison #${delivery.id} via message ID`
+              );
+            } else {
+              console.log(
+                `   ✅ Mise à jour de la livraison #${delivery.id} via numéro de téléphone`
+              );
             }
-          } catch (error) {
-            console.error(
-              "   ❌ Erreur lors de la mise à jour:",
-              error.message
+
+            await addHistory(
+              delivery.id,
+              historyAction || statusData.type,
+              JSON.stringify({ ...statusData, updated_by: contactName })
             );
+
+            // Clear success message
+            console.log("\n" + "=".repeat(60));
+            console.log(`   ✅✅✅ MISE À JOUR RÉUSSIE ✅✅✅`);
+            console.log("=".repeat(60));
+            console.log(`   📦 Livraison #${delivery.id}`);
+            console.log(`   📱 Numéro: ${delivery.phone}`);
+            console.log(`   📊 Type: ${statusData.type}`);
+            if (statusData.amount) {
+              console.log(`   💰 Montant: ${statusData.amount} FCFA`);
+            }
+            console.log(`   ✅ Statut mis à jour dans la base de données`);
+            console.log("=".repeat(60) + "\n");
           }
-        } else {
-          if (deliveryFromReply) {
-            console.log(
-              `   ⚠️  Réponse détectée mais aucune donnée de statut valide trouvée`
-            );
-          } else if (statusData && statusData.phone) {
-            console.log(
-              `   ⚠️  Aucune livraison trouvée pour le numéro: ${statusData.phone}`
-            );
-            console.log(
-              `   💡 Créez d'abord la livraison avec le format standard`
-            );
-          } else if (!statusData) {
-            console.log(
-              "   ⚠️  Message de réponse détecté mais format de statut non reconnu"
-            );
-          } else {
-            console.log(
-              "   ⚠️  Numéro de téléphone non trouvé dans le message de statut"
-            );
-          }
+        } catch (error) {
+          console.error("   ❌ Erreur lors de la mise à jour:", error.message);
         }
+      } else {
+        if (deliveryFromReply) {
+          console.log(
+            `   ⚠️  Réponse détectée mais aucune donnée de statut valide trouvée`
+          );
+        } else if (statusData && statusData.phone) {
+          console.log(
+            `   ⚠️  Aucune livraison trouvée pour le numéro: ${statusData.phone}`
+          );
+          console.log(
+            `   💡 Créez d'abord la livraison avec le format standard`
+          );
+        } else if (!statusData) {
+          console.log(
+            "   ⚠️  Message de réponse détecté mais format de statut non reconnu"
+          );
+        } else {
+          console.log(
+            "   ⚠️  Numéro de téléphone non trouvé dans le message de statut"
+          );
+        }
+      }
 
       console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
       return; // Don't process as delivery message
@@ -556,7 +637,9 @@ client.on("message", async (msg) => {
     // SECOND: Check if this is a NEW DELIVERY message
     // Only process if group is registered (not pending verification)
     if (!group) {
-      console.log("   ⚠️  Group not registered - cannot process delivery/status messages");
+      console.log(
+        "   ⚠️  Group not registered - cannot process delivery/status messages"
+      );
       console.log("   💡 Group must be verified with agency code first");
       return;
     }
@@ -617,7 +700,7 @@ client.on("message", async (msg) => {
         console.log(`   💾 Storing WhatsApp message ID: ${whatsappMessageId}`);
         console.log(`   💾 Message ID (remote): ${msg.id?.remote}`);
         console.log(`   💾 Message ID (id): ${msg.id?.id}`);
-        
+
         const deliveryId = await createDelivery({
           phone: deliveryData.phone || "unknown",
           customer_name: deliveryData.customer_name,
@@ -632,9 +715,7 @@ client.on("message", async (msg) => {
         });
 
         console.log("\n" + "=".repeat(60));
-        console.log(
-          `   ✅ LIVRAISON #${deliveryId} ENREGISTRÉE AVEC SUCCÈS!`
-        );
+        console.log(`   ✅ LIVRAISON #${deliveryId} ENREGISTRÉE AVEC SUCCÈS!`);
         console.log("=".repeat(60));
         console.log(`   📎 WhatsApp Message ID stored: ${whatsappMessageId}`);
         console.log(`   📱 Numéro: ${deliveryData.phone || "Non trouvé"}`);
@@ -647,14 +728,17 @@ client.on("message", async (msg) => {
           console.log(`   🚚 Transporteur: ${deliveryData.carrier}`);
         }
         console.log(`   💾 Sauvegardé dans la base de données`);
-        console.log(`   💡 Plusieurs livraisons peuvent exister pour le même numéro`);
+        console.log(
+          `   💡 Plusieurs livraisons peuvent exister pour le même numéro`
+        );
         console.log(`   🔍 Pour voir toutes les livraisons: npm run view`);
         console.log("=".repeat(60) + "\n");
 
         // Optional: Send confirmation to group (if enabled)
         if (config.SEND_CONFIRMATIONS === "true" && config.GROUP_ID) {
           try {
-            const confirmationMsg = `✅ Livraison #${deliveryId} enregistrée\n` +
+            const confirmationMsg =
+              `✅ Livraison #${deliveryId} enregistrée\n` +
               `📱 ${deliveryData.phone}\n` +
               `📦 ${deliveryData.items}\n` +
               `💰 ${deliveryData.amount_due || 0} FCFA`;
@@ -708,14 +792,17 @@ process.on("uncaughtException", (error) => {
 process.on("unhandledRejection", (reason, promise) => {
   // Filter out common Puppeteer errors that are harmless
   const errorMessage = reason?.message || String(reason);
-  const isPuppeteerError = 
+  const isPuppeteerError =
     errorMessage.includes("Execution context was destroyed") ||
     errorMessage.includes("Protocol error") ||
     errorMessage.includes("Target closed");
-  
+
   if (isPuppeteerError) {
     // These are common Puppeteer/WhatsApp Web.js errors that don't affect functionality
-    console.warn("⚠️  Puppeteer warning (can be ignored):", errorMessage.substring(0, 100));
+    console.warn(
+      "⚠️  Puppeteer warning (can be ignored):",
+      errorMessage.substring(0, 100)
+    );
     console.warn("   Bot will continue running normally...\n");
   } else {
     console.error("⚠️  Unhandled Rejection:", reason);
@@ -732,7 +819,7 @@ function setupDailyReportScheduler() {
 
   // Parse report time (HH:MM format)
   const [hours, minutes] = config.REPORT_TIME.split(":").map(Number);
-  
+
   function scheduleNextReport() {
     const now = new Date();
     const reportTime = new Date();
@@ -744,8 +831,10 @@ function setupDailyReportScheduler() {
     }
 
     const msUntilReport = reportTime.getTime() - now.getTime();
-    
-    console.log(`📊 Daily report scheduled for: ${reportTime.toLocaleString("fr-FR")}`);
+
+    console.log(
+      `📊 Daily report scheduled for: ${reportTime.toLocaleString("fr-FR")}`
+    );
     console.log(`   (in ${Math.round(msUntilReport / 1000 / 60)} minutes)\n`);
 
     setTimeout(async () => {
@@ -755,7 +844,7 @@ function setupDailyReportScheduler() {
         console.log("=".repeat(70));
 
         const { report } = await generateDailyReport();
-        
+
         // Send report via WhatsApp if configured
         if (config.REPORT_SEND_TO_GROUP && config.GROUP_ID) {
           try {
@@ -763,7 +852,10 @@ function setupDailyReportScheduler() {
             await chat.sendMessage(report);
             console.log("✅ Daily report sent to WhatsApp group");
           } catch (error) {
-            console.error("❌ Failed to send report to WhatsApp:", error.message);
+            console.error(
+              "❌ Failed to send report to WhatsApp:",
+              error.message
+            );
           }
         } else if (config.REPORT_RECIPIENT) {
           try {
@@ -771,7 +863,10 @@ function setupDailyReportScheduler() {
             await client.sendMessage(chatId, report);
             console.log(`✅ Daily report sent to ${config.REPORT_RECIPIENT}`);
           } catch (error) {
-            console.error("❌ Failed to send report via WhatsApp:", error.message);
+            console.error(
+              "❌ Failed to send report via WhatsApp:",
+              error.message
+            );
           }
         }
 
@@ -787,7 +882,6 @@ function setupDailyReportScheduler() {
 
   scheduleNextReport();
 }
-
 
 // Initialize the client
 console.log("\n" + "=".repeat(60));

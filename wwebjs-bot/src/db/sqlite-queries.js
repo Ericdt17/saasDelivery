@@ -645,26 +645,31 @@ function createSqliteQueries(db) {
     );
   }
 
-  async function getGroupsByAgency(agency_id) {
+  async function getGroupsByAgency(agency_id, includeInactive = false) {
+    const whereClause = includeInactive 
+      ? 'WHERE g.agency_id = ?'
+      : 'WHERE g.agency_id = ? AND g.is_active = 1';
     return await query(
       `SELECT g.id, g.agency_id, g.whatsapp_group_id, g.name, g.is_active, 
               g.created_at, g.updated_at,
               a.name as agency_name
        FROM groups g
        LEFT JOIN agencies a ON g.agency_id = a.id
-       WHERE g.agency_id = ?
+       ${whereClause}
        ORDER BY g.created_at DESC`,
       [agency_id]
     );
   }
 
-  async function getAllGroups() {
+  async function getAllGroups(includeInactive = false) {
+    const whereClause = includeInactive ? '' : 'WHERE g.is_active = 1';
     return await query(
       `SELECT g.id, g.agency_id, g.whatsapp_group_id, g.name, g.is_active, 
               g.created_at, g.updated_at,
               a.name as agency_name
        FROM groups g
        LEFT JOIN agencies a ON g.agency_id = a.id
+       ${whereClause}
        ORDER BY g.created_at DESC`
     );
   }
@@ -691,16 +696,28 @@ function createSqliteQueries(db) {
     updates.push("updated_at = CURRENT_TIMESTAMP");
     params.push(id);
 
-    const result = await query(
-      `UPDATE groups SET ${updates.join(", ")} WHERE id = ?`,
-      params
-    );
+    const sql = `UPDATE groups SET ${updates.join(", ")} WHERE id = ?`;
+    console.log(`[SQLite updateGroup] Executing SQL: ${sql}`);
+    console.log(`[SQLite updateGroup] Parameters:`, params);
+    console.log(`[SQLite updateGroup] This is an UPDATE query, NOT a DELETE`);
+    
+    const result = await query(sql, params);
+    
+    console.log(`[SQLite updateGroup] Query result:`, result);
+    console.log(`[SQLite updateGroup] Changes: ${result?.changes || 0}`);
+    
     return result;
   }
 
   async function deleteGroup(id) {
     // Soft delete: set is_active = 0
     return await updateGroup(id, { is_active: 0 });
+  }
+
+  async function hardDeleteGroup(id) {
+    // Hard delete: permanently remove from database
+    const result = await query(`DELETE FROM groups WHERE id = ?`, [id]);
+    return result;
   }
 
   return {
@@ -735,6 +752,7 @@ function createSqliteQueries(db) {
     getAllGroups,
     updateGroup,
     deleteGroup,
+    hardDeleteGroup,
     close: async () => db.close(),
     getRawDb: () => db,
     TIME_ZONE,

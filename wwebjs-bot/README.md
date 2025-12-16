@@ -79,6 +79,10 @@ npm run api
 - Migration automatique des schémas
 - Compatibilité entre les deux systèmes
 
+## 📖 Documentation
+
+- **[Group Management - Toggle and Delete](GROUP_MANAGEMENT.md)** - Complete guide to group activation/deactivation and deletion features
+
 ## 📚 API Endpoints
 
 ### Authentification

@@ -28,11 +28,14 @@ function runDatabaseMigrations() {
     try {
       console.log("\n🔄 Running database migrations...");
       const migrationStartTime = Date.now();
-      
+
       // Run migrations (will create schema_migrations table if needed)
       await runMigrations();
-      
-      const migrationDuration = ((Date.now() - migrationStartTime) / 1000).toFixed(2);
+
+      const migrationDuration = (
+        (Date.now() - migrationStartTime) /
+        1000
+      ).toFixed(2);
       console.log(`   ✅ Migrations completed (${migrationDuration}s)\n`);
     } catch (error) {
       // Log error but don't crash - allow app to start even if migrations fail
@@ -48,23 +51,64 @@ if (preferPostgres && hasDatabaseUrl) {
   // Extract database info from connection string
   const dbUrl = process.env.DATABASE_URL;
   let dbInfo = "PostgreSQL (Remote)";
+  let host = "unknown";
+  let dbName = "unknown";
   try {
     const url = new URL(dbUrl);
-    const host = url.hostname;
-    const dbName = url.pathname.replace('/', '');
+    host = url.hostname;
+    dbName = url.pathname.replace("/", "");
     dbInfo = `PostgreSQL - ${dbName} @ ${host}`;
   } catch (e) {
     // If parsing fails, just show it's PostgreSQL
   }
-  
+
   console.log(`\n🗄️  DATABASE TYPE: ${dbInfo}`);
+  console.log(`   Host: ${host}`);
+  console.log(`   Database: ${dbName}`);
+  console.log(`   DATABASE_URL present: ${hasDatabaseUrl ? 'YES' : 'NO'}`);
   console.log("   Status: Connecting...");
   client = createPostgresPool();
   queries = createPostgresQueries(client);
   dbType = "postgres";
   const dbDuration = ((Date.now() - dbStartTime) / 1000).toFixed(2);
   console.log(`   ✅ Connection established (${dbDuration}s)`);
-  
+
+  // Test database connection and show groups count
+  setImmediate(async () => {
+    try {
+      const testQuery = "SELECT COUNT(*) as total FROM groups";
+      const result = await queries.query(testQuery, []);
+      const count = dbType === "postgres" 
+        ? (Array.isArray(result) && result.length > 0 ? parseInt(result[0].total) : 0)
+        : (result ? parseInt(result.total) : 0);
+      console.log(`   📊 Database test: Found ${count} groups in database`);
+      
+      // Also show active groups
+      const activeQuery = "SELECT COUNT(*) as total FROM groups WHERE is_active = true";
+      const activeResult = await queries.query(activeQuery, []);
+      const activeCount = dbType === "postgres"
+        ? (Array.isArray(activeResult) && activeResult.length > 0 ? parseInt(activeResult[0].total) : 0)
+        : (activeResult ? parseInt(activeResult.total) : 0);
+      console.log(`   ✅ Active groups: ${activeCount}`);
+      
+      // Show sample group IDs for debugging
+      const sampleQuery = "SELECT whatsapp_group_id, name, is_active FROM groups LIMIT 5";
+      const sampleResult = await queries.query(sampleQuery, []);
+      const samples = dbType === "postgres" 
+        ? (Array.isArray(sampleResult) ? sampleResult : [])
+        : (Array.isArray(sampleResult) ? sampleResult : [sampleResult].filter(Boolean));
+      
+      if (samples.length > 0) {
+        console.log(`   📋 Sample groups in database:`);
+        samples.forEach((g, i) => {
+          console.log(`      ${i + 1}. ${g.name || 'Unnamed'} - ${g.whatsapp_group_id} (active: ${g.is_active})`);
+        });
+      }
+    } catch (error) {
+      console.error(`   ⚠️  Database test query failed: ${error.message}`);
+    }
+  });
+
   // Run migrations for PostgreSQL (async, non-blocking)
   runDatabaseMigrations();
 } else if (preferPostgres && !hasDatabaseUrl) {
@@ -82,7 +126,7 @@ if (preferPostgres && hasDatabaseUrl) {
   dbType = "sqlite";
   const dbDuration = ((Date.now() - dbStartTime) / 1000).toFixed(2);
   console.log(`   ✅ Initialized (${dbDuration}s)`);
-  
+
   // Run migrations for SQLite (async, non-blocking)
   runDatabaseMigrations();
 } else {
@@ -96,7 +140,7 @@ if (preferPostgres && hasDatabaseUrl) {
   dbType = "sqlite";
   const dbDuration = ((Date.now() - dbStartTime) / 1000).toFixed(2);
   console.log(`   ✅ Initialized (${dbDuration}s)`);
-  
+
   // Run migrations for SQLite (async, non-blocking)
   runDatabaseMigrations();
 }
@@ -154,6 +198,7 @@ const api = {
   getAllGroups: queries.getAllGroups,
   updateGroup: queries.updateGroup,
   deleteGroup: queries.deleteGroup,
+  hardDeleteGroup: queries.hardDeleteGroup,
   close: queries.close,
   getRawDb: queries.getRawDb,
 };
