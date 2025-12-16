@@ -15,7 +15,42 @@ const { isPendingVerification } = require("./group-verification");
  */
 async function getGroup(whatsappGroupId) {
   try {
-    // Find existing group by WhatsApp ID
+    console.log(`   🔍 Searching for group in database...`);
+    console.log(`   📋 Looking for WhatsApp ID: ${whatsappGroupId}`);
+    console.log(`   🗄️  Database type: ${adapter.type}`);
+    
+    // First, check if group exists (even if inactive) for debugging
+    const checkAllQuery =
+      adapter.type === "postgres"
+        ? `SELECT g.id, g.agency_id, g.whatsapp_group_id, g.name, g.is_active 
+         FROM groups g 
+         WHERE g.whatsapp_group_id = $1 LIMIT 1`
+        : `SELECT g.id, g.agency_id, g.whatsapp_group_id, g.name, g.is_active 
+         FROM groups g 
+         WHERE g.whatsapp_group_id = ? LIMIT 1`;
+    
+    const allGroups = await adapter.query(checkAllQuery, [whatsappGroupId]);
+    const allGroup = adapter.type === "postgres"
+      ? Array.isArray(allGroups) && allGroups.length > 0 ? allGroups[0] : null
+      : allGroups;
+    
+    if (allGroup) {
+      console.log(`   📊 Group found in database (checking active status):`);
+      console.log(`      - Name: ${allGroup.name}`);
+      console.log(`      - DB ID: ${allGroup.id}`);
+      console.log(`      - is_active: ${allGroup.is_active}`);
+      console.log(`      - WhatsApp ID in DB: ${allGroup.whatsapp_group_id}`);
+      
+      // Check if IDs match exactly (with detailed comparison)
+      if (allGroup.whatsapp_group_id !== whatsappGroupId) {
+        console.log(`   ⚠️  ID MISMATCH DETECTED:`);
+        console.log(`      - Looking for: "${whatsappGroupId}"`);
+        console.log(`      - Found in DB:  "${allGroup.whatsapp_group_id}"`);
+        console.log(`      - Length diff: ${whatsappGroupId.length} vs ${allGroup.whatsapp_group_id.length}`);
+      }
+    }
+    
+    // Find existing group by WhatsApp ID (only active groups)
     const findGroupQuery =
       adapter.type === "postgres"
         ? `SELECT g.id, g.agency_id, g.whatsapp_group_id, g.name, g.is_active 
@@ -42,11 +77,20 @@ async function getGroup(whatsappGroupId) {
       return existingGroup;
     }
 
-    // Group not found
-    console.log(`   ⏭️  Group not registered in database: ${whatsappGroupId}`);
+    // Group not found or inactive
+    if (allGroup && !allGroup.is_active) {
+      console.log(`   ⚠️  Group exists but is INACTIVE (is_active = false)`);
+      console.log(`   💡 Solution: Activate the group in the dashboard (set is_active = true)`);
+    } else {
+      console.log(`   ⏭️  Group not found in database: ${whatsappGroupId}`);
+      console.log(`   💡 Solution: Add this group via the dashboard`);
+    }
     return null;
   } catch (error) {
     console.error(`   ❌ Error checking group: ${error.message}`);
+    if (error.stack) {
+      console.error(`   Stack: ${error.stack}`);
+    }
     throw error;
   }
 }
