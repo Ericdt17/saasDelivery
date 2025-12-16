@@ -20,6 +20,7 @@ async function getGroup(whatsappGroupId) {
     console.log(`   🗄️  Database type: ${adapter.type}`);
     
     // First, check if group exists (even if inactive) for debugging
+    // Note: PostgreSQL adapter returns single object (or null) for LIMIT 1 queries, not array
     const checkAllQuery =
       adapter.type === "postgres"
         ? `SELECT g.id, g.agency_id, g.whatsapp_group_id, g.name, g.is_active 
@@ -29,10 +30,11 @@ async function getGroup(whatsappGroupId) {
          FROM groups g 
          WHERE g.whatsapp_group_id = ? LIMIT 1`;
     
-    const allGroups = await adapter.query(checkAllQuery, [whatsappGroupId]);
+    const allGroupResult = await adapter.query(checkAllQuery, [whatsappGroupId]);
+    // PostgreSQL returns single object (or null) for LIMIT 1, SQLite returns array
     const allGroup = adapter.type === "postgres"
-      ? Array.isArray(allGroups) && allGroups.length > 0 ? allGroups[0] : null
-      : allGroups;
+      ? (allGroupResult || null)  // Already a single object or null
+      : (Array.isArray(allGroupResult) && allGroupResult.length > 0 ? allGroupResult[0] : null);
     
     if (allGroup) {
       console.log(`   📊 Group found in database (checking active status):`);
@@ -60,15 +62,13 @@ async function getGroup(whatsappGroupId) {
          FROM groups g 
          WHERE g.whatsapp_group_id = ? AND g.is_active = 1 LIMIT 1`;
 
-    const existingGroups = await adapter.query(findGroupQuery, [
+    const existingGroupsResult = await adapter.query(findGroupQuery, [
       whatsappGroupId,
     ]);
-    const existingGroup =
-      adapter.type === "postgres"
-        ? Array.isArray(existingGroups) && existingGroups.length > 0
-          ? existingGroups[0]
-          : null
-        : existingGroups;
+    // PostgreSQL returns single object (or null) for LIMIT 1, SQLite returns array
+    const existingGroup = adapter.type === "postgres"
+      ? (existingGroupsResult || null)  // Already a single object or null
+      : (Array.isArray(existingGroupsResult) && existingGroupsResult.length > 0 ? existingGroupsResult[0] : null);
 
     if (existingGroup) {
       console.log(
