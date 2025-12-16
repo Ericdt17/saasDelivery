@@ -21,10 +21,10 @@ const startupStartTime = Date.now();
 console.log("⏳ Initializing bot components...");
 
 // Create WhatsApp client with local auth (saves session)
-// Using ./auth-dev for local development to avoid conflicts with production session
+// Using clientId for environment isolation (prod/staging/dev)
 const client = new Client({
   authStrategy: new LocalAuth({
-    dataPath: process.env.WHATSAPP_SESSION_PATH || "./auth-dev",
+    clientId: process.env.CLIENT_ID || "delivery-bot-default",
   }),
   puppeteer: {
     headless: true,

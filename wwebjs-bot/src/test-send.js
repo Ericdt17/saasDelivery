@@ -8,7 +8,7 @@ const config = require("./config");
 
 const client = new Client({
   authStrategy: new LocalAuth({
-    dataPath: "./auth",
+    clientId: process.env.CLIENT_ID || "delivery-bot-default",
   }),
 });
 
