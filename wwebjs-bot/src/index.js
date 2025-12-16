@@ -90,22 +90,46 @@ client.on("qr", async (qr) => {
     console.log("   (Open WhatsApp → Linked Devices → Link a Device)\n");
   }
 
-  // Show medium-sized QR code in terminal
+  // Show medium-sized QR code in terminal (may be distorted in Render logs)
   qrcode.generate(qr, { small: true });
 
-  // Also save as image file for easier scanning
+  // Also save as image file and generate data URL for remote access
   try {
     const qrImagePath = path.join(__dirname, "..", "qr-code.png");
     await QRCode.toFile(qrImagePath, qr, {
-      width: 200,
-      margin: 1,
+      width: 400, // Increased size for better scanning
+      margin: 2,
     });
-    console.log("\n💡 QR code also saved as: qr-code.png");
-    console.log("   Open this file with your image viewer to scan it!\n");
+    console.log("\n💡 QR code saved as: qr-code.png");
+    
+    // Generate base64 data URL for Render/remote access
+    const qrDataUrl = await QRCode.toDataURL(qr, {
+      width: 400,
+      margin: 2,
+    });
+    
+    // For Render: Output QR code in multiple formats for easier access
+    console.log("\n🌐 QR CODE FOR REMOTE ACCESS (Render/Cloud):");
+    console.log("=".repeat(80));
+    console.log("\n📋 Option 1: Use online QR code generator");
+    console.log("   Visit: https://www.qr-code-generator.com/");
+    console.log("   Or: https://qr.io/");
+    console.log("   Paste this QR code data:");
+    console.log("   " + qr);
+    console.log("\n📋 Option 2: Use base64 data URL (long, but works)");
+    console.log("   Copy the ENTIRE line below and paste in browser address bar:");
+    console.log("   (It's very long - use 'Copy All' from Render logs if possible)");
+    console.log(qrDataUrl.substring(0, 200) + "... [truncated, see full URL in logs]");
+    console.log("\n📋 Option 3: Use the QR code terminal output above");
+    console.log("   (May be distorted in Render logs - try options 1 or 2 instead)");
+    console.log("=".repeat(80) + "\n");
+    
   } catch (err) {
     console.log(
       "   (Could not save QR code image, but terminal QR code should work)\n"
     );
+    console.log("   Raw QR data:", qr);
+    console.log("   Use this with an online QR code generator: https://www.qr-code-generator.com/\n");
   }
 });
 
