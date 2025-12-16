@@ -469,7 +469,7 @@ function createPostgresQueries(pool) {
        WHERE id = $1 LIMIT 1`,
       [id]
     );
-    return result[0] || null;
+    return result;
   }
 
   async function getAgencyByEmail(email) {
@@ -500,7 +500,7 @@ function createPostgresQueries(pool) {
       [normalizedCode]
     );
     
-    return result[0] || null;
+    return result;
   }
 
   async function getAllAgencies() {
@@ -609,29 +609,34 @@ function createPostgresQueries(pool) {
        WHERE g.id = $1 LIMIT 1`,
       [id]
     );
-    return result[0] || null;
+    return result;
   }
 
-  async function getGroupsByAgency(agency_id) {
+  async function getGroupsByAgency(agency_id, includeInactive = false) {
+    const whereClause = includeInactive 
+      ? 'WHERE g.agency_id = $1'
+      : 'WHERE g.agency_id = $1 AND g.is_active = true';
     return await query(
       `SELECT g.id, g.agency_id, g.whatsapp_group_id, g.name, g.is_active, 
               g.created_at, g.updated_at,
               a.name as agency_name
        FROM groups g
        LEFT JOIN agencies a ON g.agency_id = a.id
-       WHERE g.agency_id = $1
+       ${whereClause}
        ORDER BY g.created_at DESC`,
       [agency_id]
     );
   }
 
-  async function getAllGroups() {
+  async function getAllGroups(includeInactive = false) {
+    const whereClause = includeInactive ? '' : 'WHERE g.is_active = true';
     return await query(
       `SELECT g.id, g.agency_id, g.whatsapp_group_id, g.name, g.is_active, 
               g.created_at, g.updated_at,
               a.name as agency_name
        FROM groups g
        LEFT JOIN agencies a ON g.agency_id = a.id
+       ${whereClause}
        ORDER BY g.created_at DESC`
     );
   }
@@ -669,6 +674,12 @@ function createPostgresQueries(pool) {
     return await updateGroup(id, { is_active: false });
   }
 
+  async function hardDeleteGroup(id) {
+    // Hard delete: permanently remove from database
+    const result = await query(`DELETE FROM groups WHERE id = $1`, [id]);
+    return { changes: result.changes || 0 };
+  }
+
   return {
     type: "postgres",
     query,
@@ -701,6 +712,7 @@ function createPostgresQueries(pool) {
     getAllGroups,
     updateGroup,
     deleteGroup,
+    hardDeleteGroup,
     close: async () => pool.end(),
     getRawDb: () => pool,
     TIME_ZONE,

@@ -28,11 +28,14 @@ function runDatabaseMigrations() {
     try {
       console.log("\n🔄 Running database migrations...");
       const migrationStartTime = Date.now();
-      
+
       // Run migrations (will create schema_migrations table if needed)
       await runMigrations();
-      
-      const migrationDuration = ((Date.now() - migrationStartTime) / 1000).toFixed(2);
+
+      const migrationDuration = (
+        (Date.now() - migrationStartTime) /
+        1000
+      ).toFixed(2);
       console.log(`   ✅ Migrations completed (${migrationDuration}s)\n`);
     } catch (error) {
       // Log error but don't crash - allow app to start even if migrations fail
@@ -51,12 +54,12 @@ if (preferPostgres && hasDatabaseUrl) {
   try {
     const url = new URL(dbUrl);
     const host = url.hostname;
-    const dbName = url.pathname.replace('/', '');
+    const dbName = url.pathname.replace("/", "");
     dbInfo = `PostgreSQL - ${dbName} @ ${host}`;
   } catch (e) {
     // If parsing fails, just show it's PostgreSQL
   }
-  
+
   console.log(`\n🗄️  DATABASE TYPE: ${dbInfo}`);
   console.log("   Status: Connecting...");
   client = createPostgresPool();
@@ -64,7 +67,7 @@ if (preferPostgres && hasDatabaseUrl) {
   dbType = "postgres";
   const dbDuration = ((Date.now() - dbStartTime) / 1000).toFixed(2);
   console.log(`   ✅ Connection established (${dbDuration}s)`);
-  
+
   // Run migrations for PostgreSQL (async, non-blocking)
   runDatabaseMigrations();
 } else if (preferPostgres && !hasDatabaseUrl) {
@@ -82,7 +85,7 @@ if (preferPostgres && hasDatabaseUrl) {
   dbType = "sqlite";
   const dbDuration = ((Date.now() - dbStartTime) / 1000).toFixed(2);
   console.log(`   ✅ Initialized (${dbDuration}s)`);
-  
+
   // Run migrations for SQLite (async, non-blocking)
   runDatabaseMigrations();
 } else {
@@ -96,7 +99,7 @@ if (preferPostgres && hasDatabaseUrl) {
   dbType = "sqlite";
   const dbDuration = ((Date.now() - dbStartTime) / 1000).toFixed(2);
   console.log(`   ✅ Initialized (${dbDuration}s)`);
-  
+
   // Run migrations for SQLite (async, non-blocking)
   runDatabaseMigrations();
 }
@@ -154,6 +157,7 @@ const api = {
   getAllGroups: queries.getAllGroups,
   updateGroup: queries.updateGroup,
   deleteGroup: queries.deleteGroup,
+  hardDeleteGroup: queries.hardDeleteGroup,
   close: queries.close,
   getRawDb: queries.getRawDb,
 };

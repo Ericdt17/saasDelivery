@@ -13,6 +13,7 @@ const {
   createGroup,
   updateGroup,
   deleteGroup,
+  hardDeleteGroup,
   adapter,
 } = require("../../db");
 
@@ -22,6 +23,7 @@ router.use(authenticateToken);
 /**
  * GET /api/v1/groups
  * List groups (filtered by agency for agency admins, all for super admin)
+ * Returns all groups (active and inactive) so users can see their status and toggle them.
  */
 router.get("/", async (req, res, next) => {
   try {
@@ -36,8 +38,10 @@ router.get("/", async (req, res, next) => {
     });
 
     // Super admin sees all groups, agency admin sees only their groups
+    // true = include inactive groups (so users can see all groups and their status)
     if (req.user.role === "super_admin") {
-      groups = await getAllGroups();
+      groups = await getAllGroups(true); // true = include inactive groups
+      console.log(`[Groups API] Super admin - Found ${groups?.length || 0} groups (active and inactive)`);
     } else {
       // Agency admin - only their groups
       // Use agencyId from token, or fallback to userId if agencyId is not set
@@ -55,8 +59,8 @@ router.get("/", async (req, res, next) => {
         });
       }
       
-      groups = await getGroupsByAgency(agencyId);
-      console.log("[Groups API] Found groups:", groups?.length || 0);
+      groups = await getGroupsByAgency(agencyId, true); // true = include inactive groups
+      console.log(`[Groups API] Agency admin - Found ${groups?.length || 0} groups (active and inactive)`);
     }
 
     res.json({
@@ -241,6 +245,10 @@ router.put("/:id", async (req, res, next) => {
     const { id } = req.params;
     const { name, is_active } = req.body;
 
+    console.log(`[Update Group] ID: ${id}, Body:`, { name, is_active });
+    console.log(`[Update Group] Method: PUT (toggle/update), is_active: ${is_active}`);
+    console.log(`[Update Group] This is an UPDATE operation (sets is_active), NOT a delete`);
+
     // Check if group exists
     const existingGroup = await getGroupById(parseInt(id));
     if (!existingGroup) {
@@ -278,10 +286,14 @@ router.put("/:id", async (req, res, next) => {
     }
 
     // Update group
-    await updateGroup(parseInt(id), updateData);
+    console.log(`[Update Group] Calling updateGroup with:`, { id: parseInt(id), updateData });
+    const updateResult = await updateGroup(parseInt(id), updateData);
+    console.log(`[Update Group] Update result:`, updateResult);
 
     // Get updated group
+    console.log(`[Update Group] Fetching updated group with ID: ${id}`);
     const updatedGroup = await getGroupById(parseInt(id));
+    console.log(`[Update Group] Updated group from DB:`, updatedGroup);
 
     res.json({
       success: true,
@@ -296,10 +308,17 @@ router.put("/:id", async (req, res, next) => {
 /**
  * DELETE /api/v1/groups/:id
  * Delete group (soft delete - sets is_active to false)
+ * - Agency admins can delete their own groups
+ * - Super admins can delete any group
  */
 router.delete("/:id", async (req, res, next) => {
   try {
     const { id } = req.params;
+    const { permanent } = req.query; // Check if permanent=true in query string
+
+    console.log(`[Delete Group] Method: DELETE, ID: ${id}, Permanent param:`, permanent);
+    console.log(`[Delete Group] Full query object:`, JSON.stringify(req.query));
+    console.log(`[Delete Group] URL:`, req.url);
 
     // Check if group exists
     const existingGroup = await getGroupById(parseInt(id));
@@ -311,23 +330,49 @@ router.delete("/:id", async (req, res, next) => {
       });
     }
 
-    // Only super admin can delete groups
+    // Agency admin can only delete their own groups
     if (req.user.role !== "super_admin") {
-      return res.status(403).json({
-        success: false,
-        error: "Forbidden",
-        message: "Only super admin can delete groups",
-      });
+      const agencyId = req.user.agencyId !== null && req.user.agencyId !== undefined 
+        ? req.user.agencyId 
+        : req.user.userId;
+      
+      if (existingGroup.agency_id !== agencyId) {
+        return res.status(403).json({
+          success: false,
+          error: "Forbidden",
+          message: "You can only delete groups belonging to your agency",
+        });
+      }
     }
 
-    // Soft delete
-    await deleteGroup(parseInt(id));
+    // Check if permanent delete - explicitly check for true values, default to soft delete
+    // Express parses query params as strings, so check for string "true" or boolean true
+    const permanentStr = String(permanent || "").trim().toLowerCase();
+    const isPermanent = permanentStr === "true" || permanent === true || permanentStr === "1";
+    console.log(`[Delete Group] Is permanent: ${isPermanent}, Permanent param: ${permanent}, Trimmed: "${permanentStr}"`);
 
-    res.json({
-      success: true,
-      message: "Group deleted successfully",
-    });
+    if (isPermanent) {
+      // Hard delete - permanently remove from database
+      console.log(`[Delete Group] Performing hard delete for group ID: ${id}`);
+      const result = await hardDeleteGroup(parseInt(id));
+      console.log(`[Delete Group] Hard delete result:`, result);
+      
+      res.json({
+        success: true,
+        message: "Group permanently deleted from database",
+      });
+    } else {
+      // Soft delete (sets is_active to false)
+      console.log(`[Delete Group] Performing soft delete for group ID: ${id}`);
+      await deleteGroup(parseInt(id));
+
+      res.json({
+        success: true,
+        message: "Group deactivated (soft delete - is_active set to false)",
+      });
+    }
   } catch (error) {
+    console.error("[Delete Group] Error:", error);
     next(error);
   }
 });

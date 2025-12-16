@@ -6,7 +6,7 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getGroups, createGroup, type Group, type CreateGroupRequest } from "@/services/groups";
+import { getGroups, createGroup, updateGroup, deleteGroup, hardDeleteGroup, type Group, type CreateGroupRequest } from "@/services/groups";
 import { getAgencies, type Agency } from "@/services/agencies";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -32,20 +32,36 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Users, Building2, Plus, Loader2, Copy, Check } from "lucide-react";
+import { Users, Building2, Plus, Loader2, Copy, Check, Trash2, Edit } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 
 export default function Groups() {
   const { user, isSuperAdmin } = useAuth();
   const queryClient = useQueryClient();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isHardDeleteDialogOpen, setIsHardDeleteDialogOpen] = useState(false);
+  const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
+  const [editFormData, setEditFormData] = useState({ name: "" });
   const [formData, setFormData] = useState<CreateGroupRequest>({
     name: "",
     whatsapp_group_id: "",
@@ -84,6 +100,105 @@ export default function Groups() {
       toast.error(errorMessage);
     },
   });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: { name?: string; is_active?: boolean } }) =>
+      updateGroup(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["groups"] });
+      setIsEditDialogOpen(false);
+      setSelectedGroup(null);
+      setEditFormData({ name: "" });
+      toast.success("Groupe modifié avec succès");
+    },
+    onError: (error: any) => {
+      const errorMessage = error?.data?.message || error?.message || "Erreur lors de la modification du groupe";
+      toast.error(errorMessage);
+    },
+  });
+
+  const toggleActiveMutation = useMutation({
+    mutationFn: ({ id, is_active }: { id: number; is_active: boolean }) =>
+      updateGroup(id, { is_active }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["groups"] });
+      toast.success("Statut du groupe mis à jour");
+    },
+    onError: (error: any) => {
+      const errorMessage = error?.data?.message || error?.message || "Erreur lors de la mise à jour du statut";
+      toast.error(errorMessage);
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteGroup,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["groups"] });
+      setIsDeleteDialogOpen(false);
+      setSelectedGroup(null);
+      toast.success("Groupe désactivé avec succès");
+    },
+    onError: (error: any) => {
+      const errorMessage = error?.data?.message || error?.message || "Erreur lors de la désactivation du groupe";
+      toast.error(errorMessage);
+    },
+  });
+
+  const hardDeleteMutation = useMutation({
+    mutationFn: hardDeleteGroup,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["groups"] });
+      setIsHardDeleteDialogOpen(false);
+      setSelectedGroup(null);
+      toast.success("Groupe supprimé définitivement");
+    },
+    onError: (error: any) => {
+      const errorMessage = error?.data?.message || error?.message || "Erreur lors de la suppression définitive";
+      toast.error(errorMessage);
+    },
+  });
+
+  const handleEditClick = (group: Group) => {
+    setSelectedGroup(group);
+    setEditFormData({ name: group.name });
+    setIsEditDialogOpen(true);
+  };
+
+  const handleEdit = () => {
+    if (!selectedGroup || !editFormData.name.trim()) {
+      toast.error("Le nom du groupe est requis");
+      return;
+    }
+    updateMutation.mutate({ id: selectedGroup.id, data: { name: editFormData.name.trim() } });
+  };
+
+  const handleToggleActive = (group: Group, newStatus: boolean) => {
+    console.log('[Toggle] handleToggleActive called:', { groupId: group.id, newStatus, group });
+    console.log('[Toggle] Calling toggleActiveMutation with:', { id: group.id, is_active: newStatus });
+    toggleActiveMutation.mutate({ id: group.id, is_active: newStatus });
+  };
+
+  const handleDeleteClick = (group: Group) => {
+    setSelectedGroup(group);
+    setIsDeleteDialogOpen(true);
+  };
+
+  const handleHardDeleteClick = (group: Group) => {
+    setSelectedGroup(group);
+    setIsHardDeleteDialogOpen(true);
+  };
+
+  const confirmDelete = () => {
+    if (selectedGroup) {
+      deleteMutation.mutate(selectedGroup.id);
+    }
+  };
+
+  const confirmHardDelete = () => {
+    if (selectedGroup) {
+      hardDeleteMutation.mutate(selectedGroup.id);
+    }
+  };
 
   const handleCreate = () => {
     if (!formData.name || !formData.whatsapp_group_id) {
@@ -269,11 +384,15 @@ export default function Groups() {
                 <TableHead>Statut</TableHead>
                 <TableHead>Date de création</TableHead>
                 <TableHead>ID WhatsApp</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {groups.map((group) => (
-                <TableRow key={group.id}>
+                <TableRow 
+                  key={group.id}
+                  className={group.is_active ? "" : "opacity-60"}
+                >
                   <TableCell className="font-medium">{group.name}</TableCell>
                   {isSuperAdmin && (
                     <TableCell>
@@ -284,9 +403,16 @@ export default function Groups() {
                     </TableCell>
                   )}
                   <TableCell>
-                    <Badge variant={group.is_active ? "default" : "secondary"}>
-                      {group.is_active ? "Actif" : "Inactif"}
-                    </Badge>
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        checked={group.is_active}
+                        onCheckedChange={(checked) => handleToggleActive(group, checked)}
+                        disabled={toggleActiveMutation.isPending}
+                      />
+                      <Badge variant={group.is_active ? "default" : "secondary"}>
+                        {group.is_active ? "Actif" : "Inactif"}
+                      </Badge>
+                    </div>
                   </TableCell>
                   <TableCell>
                     {new Date(group.created_at).toLocaleDateString("fr-FR")}
@@ -317,12 +443,108 @@ export default function Groups() {
                       <span className="text-muted-foreground">N/A</span>
                     )}
                   </TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => handleEditClick(group)}
+                        title="Modifier le nom du groupe"
+                      >
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                        onClick={() => handleHardDeleteClick(group)}
+                        title="Supprimer définitivement"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
         </div>
       )}
+
+      {/* Edit Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Modifier le groupe</DialogTitle>
+            <DialogDescription>
+              Modifiez le nom du groupe "{selectedGroup?.name}".
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-name">Nom du groupe *</Label>
+              <Input
+                id="edit-name"
+                value={editFormData.name}
+                onChange={(e) =>
+                  setEditFormData({ ...editFormData, name: e.target.value })
+                }
+                placeholder="Ex: Groupe de livraison"
+                required
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setIsEditDialogOpen(false)}
+            >
+              Annuler
+            </Button>
+            <Button
+              onClick={handleEdit}
+              disabled={updateMutation.isPending || !editFormData.name.trim()}
+            >
+              {updateMutation.isPending && (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              )}
+              Enregistrer
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Hard Delete Confirmation Dialog */}
+      <AlertDialog open={isHardDeleteDialogOpen} onOpenChange={setIsHardDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Suppression définitive</AlertDialogTitle>
+            <AlertDialogDescription>
+              ⚠️ Cette action supprimera définitivement le groupe "{selectedGroup?.name}" de la base de données.
+              <br />
+              <span className="font-semibold mt-2 block text-destructive">
+                Cette action est irréversible et supprimera toutes les données associées.
+              </span>
+              <br />
+              Êtes-vous absolument sûr de vouloir continuer ?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmHardDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={hardDeleteMutation.isPending}
+            >
+              {hardDeleteMutation.isPending && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              )}
+              Supprimer définitivement
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
