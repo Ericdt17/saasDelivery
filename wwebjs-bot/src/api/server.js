@@ -36,10 +36,14 @@ const corsOptions = {
 
       // If ALLOWED_ORIGINS is set, check against it
       if (allowedOrigins.length > 0) {
+        // Normalize origin and allowed origins (remove trailing slashes)
+        const normalizeUrl = (url) => url.trim().replace(/\/+$/, "");
+        const normalizedOrigin = normalizeUrl(origin);
+        
         // Check exact match or if origin starts with any allowed origin
         const isAllowed = allowedOrigins.some((allowed) => {
-          const allowedClean = allowed.trim();
-          return origin === allowedClean || origin.startsWith(allowedClean);
+          const allowedClean = normalizeUrl(allowed);
+          return normalizedOrigin === allowedClean || normalizedOrigin.startsWith(allowedClean);
         });
 
         if (isAllowed) {
