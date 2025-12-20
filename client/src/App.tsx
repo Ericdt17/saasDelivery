@@ -18,6 +18,7 @@ import Modifications from "./pages/Modifications";
 import Parametres from "./pages/Parametres";
 import Agencies from "./pages/Agencies";
 import Groups from "./pages/Groups";
+import GroupDetail from "./pages/GroupDetail";
 import Tarifs from "./pages/Tarifs";
 import NotFound from "./pages/NotFound";
 
@@ -39,21 +40,9 @@ const queryClient = new QueryClient({
       retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
       staleTime: 1000 * 30, // 30 seconds
       refetchOnWindowFocus: false,
-      onError: (error) => {
-        handleError(error, {
-          showToast: true,
-          toastTitle: "Erreur de chargement",
-        });
-      },
     },
     mutations: {
       retry: false, // Don't retry mutations by default
-      onError: (error) => {
-        handleError(error, {
-          showToast: true,
-          toastTitle: "Erreur",
-        });
-      },
     },
   },
 });
@@ -88,6 +77,7 @@ const App = () => (
             <Route path="/livraisons" element={<Livraisons />} />
             <Route path="/livraisons/:id" element={<LivraisonDetails />} />
             <Route path="/groupes" element={<Groups />} />
+            <Route path="/groupes/:id" element={<GroupDetail />} />
             <Route path="/tarifs" element={<Tarifs />} />
             <Route
               path="/agences"
