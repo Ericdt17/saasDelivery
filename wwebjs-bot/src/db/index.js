@@ -199,6 +199,14 @@ const api = {
   updateGroup: queries.updateGroup,
   deleteGroup: queries.deleteGroup,
   hardDeleteGroup: queries.hardDeleteGroup,
+  // Tariff queries
+  createTariff: queries.createTariff,
+  getTariffById: queries.getTariffById,
+  getTariffByAgencyAndQuartier: queries.getTariffByAgencyAndQuartier,
+  getTariffsByAgency: queries.getTariffsByAgency,
+  getAllTariffs: queries.getAllTariffs,
+  updateTariff: queries.updateTariff,
+  deleteTariff: queries.deleteTariff,
   close: queries.close,
   getRawDb: queries.getRawDb,
 };
