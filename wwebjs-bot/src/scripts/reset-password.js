@@ -3,8 +3,8 @@
  * Resets the password for an existing user
  * 
  * Usage:
- *   node src/scripts/reset-password.js admin@livrexpress.com admin123
- *   node src/scripts/reset-password.js admin@livrexpress.com "new password"
+ *   node src/scripts/reset-password.js admin@livsight.com admin123
+ *   node src/scripts/reset-password.js admin@livsight.com "new password"
  */
 
 require("dotenv").config();
@@ -80,7 +80,7 @@ async function resetPassword(email, newPassword) {
 const args = process.argv.slice(2);
 if (args.length < 2) {
   console.error("❌ Usage: node src/scripts/reset-password.js <email> <new-password>");
-  console.error("   Example: node src/scripts/reset-password.js admin@livrexpress.com admin123");
+  console.error("   Example: node src/scripts/reset-password.js admin@livsight.com admin123");
   process.exit(1);
 }
 
@@ -91,6 +91,7 @@ const newPassword = args[1];
 resetPassword(email, newPassword);
 
 module.exports = { resetPassword };
+
 
 
 

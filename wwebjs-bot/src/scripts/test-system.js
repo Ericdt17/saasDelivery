@@ -14,7 +14,7 @@ const { generateToken, verifyToken } = require("../utils/jwt");
 
 // Test configuration
 const API_BASE_URL = process.env.API_BASE_URL || "http://localhost:3000";
-const SUPER_ADMIN_EMAIL = process.env.SUPER_ADMIN_EMAIL || "admin@livrexpress.com";
+const SUPER_ADMIN_EMAIL = process.env.SUPER_ADMIN_EMAIL || "admin@livsight.com";
 const SUPER_ADMIN_PASSWORD = process.env.SUPER_ADMIN_PASSWORD || "admin123";
 
 const VERBOSE = process.argv.includes("--verbose") || process.argv.includes("-v");

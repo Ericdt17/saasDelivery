@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -31,18 +32,111 @@ import {
   Trash2,
   Plus,
   Truck,
+  Loader2,
 } from "lucide-react";
-import { toast } from "@/hooks/use-toast";
+import { toast } from "sonner";
+import { getAgencyMe, updateAgency } from "@/services/agencies";
+import { useAuth } from "@/contexts/AuthContext";
 
 const Parametres = () => {
-  const [agencyName, setAgencyName] = useState("LivrExpress Côte d'Ivoire");
+  const { user, isSuperAdmin } = useAuth();
+  const queryClient = useQueryClient();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  const [agencyName, setAgencyName] = useState("");
+  const [address, setAddress] = useState("");
+  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
+  const [logoBase64, setLogoBase64] = useState<string | null>(null);
   const [reportTime, setReportTime] = useState("18:00");
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
 
+  // Load agency data - only for agency admins (super admins don't have an agency)
+  const { data: agency, isLoading: isLoadingAgency, isError: isErrorAgency, error: agencyError } = useQuery({
+    queryKey: ["agency", "me"],
+    queryFn: getAgencyMe,
+    retry: 1,
+    enabled: !isSuperAdmin && user?.role === "agency", // Only enable for agency role users
+    onError: (error: any) => {
+      console.error("[Parametres] Error loading agency:", error);
+    },
+  });
+
+  useEffect(() => {
+    if (agency) {
+      setAgencyName(agency.name || "");
+      setAddress(agency.address || "");
+      setPhone(agency.phone || "");
+      setEmail(agency.email || "");
+      setLogoBase64(agency.logo_base64 || null);
+    }
+  }, [agency]);
+
+  // Handle logo upload
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith("image/")) {
+      toast.error("Veuillez sélectionner un fichier image");
+      return;
+    }
+
+    // Validate file size (2MB)
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error("Le fichier est trop volumineux (max 2MB)");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const base64String = reader.result as string;
+      setLogoBase64(base64String);
+    };
+    reader.onerror = () => {
+      toast.error("Erreur lors de la lecture du fichier");
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Get agency ID: use agency.id if loaded, otherwise use user.agencyId or user.id
+  // For agency admins, userId and agencyId are the same (the agency is the user)
+  const agencyId = agency?.id || user?.agencyId || (user?.id ? Number(user.id) : null);
+
+  // Save mutation
+  const saveMutation = useMutation({
+    mutationFn: (data: { name: string; address?: string; phone?: string; logo_base64?: string | null }) => {
+      if (!agencyId) {
+        throw new Error("Impossible de déterminer l'ID de l'agence. Veuillez vous reconnecter.");
+      }
+      return updateAgency(agencyId, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["agency", "me"] });
+      toast.success("Paramètres enregistrés avec succès");
+    },
+    onError: (error: any) => {
+      toast.error(error?.message || "Erreur lors de la sauvegarde");
+    },
+  });
+
   const handleSave = () => {
-    toast({
-      title: "Paramètres enregistrés",
-      description: "Vos modifications ont été sauvegardées avec succès.",
+    if (!agencyId) {
+      toast.error("Impossible de déterminer l'ID de l'agence. Veuillez vous reconnecter.");
+      return;
+    }
+
+    if (!agencyName.trim()) {
+      toast.error("Le nom de l'agence est obligatoire");
+      return;
+    }
+
+    saveMutation.mutate({
+      name: agencyName.trim(),
+      address: address?.trim() || null,
+      phone: phone?.trim() || null,
+      logo_base64: logoBase64 || null,
     });
   };
 
@@ -83,52 +177,115 @@ const Parametres = () => {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div>
-                <label className="text-sm font-medium">Nom de l'agence</label>
-                <Input
-                  value={agencyName}
-                  onChange={(e) => setAgencyName(e.target.value)}
-                  className="mt-1"
-                />
-              </div>
-              <div>
-                <label className="text-sm font-medium">Logo</label>
-                <div className="mt-1 flex items-center gap-4">
-                  <div className="w-20 h-20 rounded-xl gradient-primary flex items-center justify-center">
-                    <Truck className="w-10 h-10 text-primary-foreground" />
+              {isSuperAdmin ? (
+                <div className="text-center py-8 text-muted-foreground border border-muted rounded-lg p-4">
+                  <p className="font-medium">Super administrateur</p>
+                  <p className="text-sm mt-2">Les super administrateurs n'ont pas d'agence associée.</p>
+                  <p className="text-sm mt-1">Veuillez utiliser la page "Agences" pour modifier les paramètres d'une agence spécifique.</p>
+                </div>
+              ) : isLoadingAgency ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : (
+                <>
+                  {isErrorAgency && (
+                    <div className="mb-4 p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
+                      <p className="font-medium">Erreur lors du chargement des données de l'agence</p>
+                      <p className="mt-1">
+                        {agencyError?.message || "Impossible de charger les informations. Veuillez vérifier vos permissions ou vous reconnecter."}
+                      </p>
+                      {user && (
+                        <p className="mt-1 text-xs opacity-75">
+                          Rôle: {user.role}, AgencyId: {user.agencyId || "non défini"}, UserId: {user.id}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                  <div>
+                    <label className="text-sm font-medium">Nom de l'agence</label>
+                    <Input
+                      value={agencyName}
+                      onChange={(e) => setAgencyName(e.target.value)}
+                      className="mt-1"
+                      placeholder="Nom de l'agence"
+                      disabled={isSuperAdmin}
+                    />
                   </div>
                   <div>
-                    <Button variant="outline" size="sm" className="gap-2">
-                      <Upload className="w-4 h-4" />
-                      Changer le logo
-                    </Button>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      PNG, JPG jusqu'à 2MB
-                    </p>
+                    <label className="text-sm font-medium">Logo</label>
+                    <div className="mt-1 flex items-center gap-4">
+                      <div className="w-20 h-20 rounded-xl gradient-primary flex items-center justify-center overflow-hidden">
+                        {logoBase64 ? (
+                          <img
+                            src={logoBase64}
+                            alt="Logo"
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <Truck className="w-10 h-10 text-primary-foreground" />
+                        )}
+                      </div>
+                      <div>
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept="image/*"
+                          onChange={handleLogoUpload}
+                          className="hidden"
+                        />
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-2"
+                          onClick={() => fileInputRef.current?.click()}
+                          disabled={isSuperAdmin}
+                        >
+                          <Upload className="w-4 h-4" />
+                          {logoBase64 ? "Changer le logo" : "Ajouter un logo"}
+                        </Button>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          PNG, JPG jusqu'à 2MB
+                        </p>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
-              <div>
-                <label className="text-sm font-medium">Adresse</label>
-                <Textarea
-                  placeholder="Adresse complète de l'agence"
-                  className="mt-1"
-                  defaultValue="Cocody, Riviera Faya, Abidjan, Côte d'Ivoire"
-                />
-              </div>
-              <div className="grid sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium">Téléphone</label>
-                  <Input defaultValue="+225 07 00 00 00 00" className="mt-1" />
-                </div>
-                <div>
-                  <label className="text-sm font-medium">Email</label>
-                  <Input
-                    defaultValue="contact@livrexpress.ci"
-                    className="mt-1"
-                  />
-                </div>
-              </div>
+                  <div>
+                    <label className="text-sm font-medium">Adresse</label>
+                    <Textarea
+                      placeholder="Adresse complète de l'agence"
+                      className="mt-1"
+                      value={address}
+                      onChange={(e) => setAddress(e.target.value)}
+                      disabled={isSuperAdmin}
+                    />
+                  </div>
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-sm font-medium">Téléphone</label>
+                      <Input
+                        value={phone}
+                        onChange={(e) => setPhone(e.target.value)}
+                        placeholder="+225 07 00 00 00 00"
+                        className="mt-1"
+                        disabled={isSuperAdmin}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium">Email</label>
+                      <Input
+                        value={email}
+                        disabled
+                        className="mt-1 bg-muted"
+                        placeholder="Email de l'agence"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        L'email ne peut pas être modifié ici
+                      </p>
+                    </div>
+                  </div>
+                </>
+              )}
             </CardContent>
           </Card>
 
@@ -253,7 +410,7 @@ const Parametres = () => {
                 </div>
                 <div>
                   <label className="text-sm font-medium">Destinataires</label>
-                  <Input defaultValue="marie@livrexpress.ci" className="mt-1" />
+                  <Input defaultValue="marie@livsight.ci" className="mt-1" />
                 </div>
               </div>
             </CardContent>
@@ -340,13 +497,24 @@ const Parametres = () => {
         </div>
       </div>
 
-      {/* Save Button */}
-      <div className="flex justify-end">
-        <Button onClick={handleSave} size="lg" className="gap-2">
-          <Save className="w-4 h-4" />
-          Enregistrer les modifications
-        </Button>
-      </div>
+             {/* Save Button */}
+             {!isSuperAdmin && (
+               <div className="flex justify-end">
+                 <Button
+                   onClick={handleSave}
+                   size="lg"
+                   className="gap-2"
+                   disabled={saveMutation.isPending || (isLoadingAgency && !agencyId)}
+                 >
+                   {saveMutation.isPending ? (
+                     <Loader2 className="w-4 h-4 animate-spin" />
+                   ) : (
+                     <Save className="w-4 h-4" />
+                   )}
+                   Enregistrer les modifications
+                 </Button>
+               </div>
+             )}
     </div>
   );
 };
