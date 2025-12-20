@@ -11,7 +11,7 @@
 const BASE_URL = process.argv[2] || 'http://localhost:3001';
 
 // Test credentials (update these to match your test user)
-const TEST_EMAIL = process.env.TEST_EMAIL || 'admin@livrexpress.com';
+const TEST_EMAIL = process.env.TEST_EMAIL || 'admin@livsight.com';
 const TEST_PASSWORD = process.env.TEST_PASSWORD || 'admin123';
 
 // Colors for console output

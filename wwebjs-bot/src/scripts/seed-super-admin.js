@@ -7,7 +7,7 @@
  *   node src/scripts/seed-super-admin.js --email admin@example.com --password mypassword --name "Super Admin"
  * 
  * Environment Variables:
- *   SUPER_ADMIN_EMAIL - Email for super admin (default: admin@livrexpress.com)
+ *   SUPER_ADMIN_EMAIL - Email for super admin (default: admin@livsight.com)
  *   SUPER_ADMIN_PASSWORD - Password for super admin (default: admin123)
  *   SUPER_ADMIN_NAME - Name for super admin (default: Super Administrator)
  */
@@ -17,7 +17,7 @@ const db = require("../db");
 const { hashPassword } = require("../utils/password");
 
 // Get configuration from environment variables or use defaults
-const SUPER_ADMIN_EMAIL = process.env.SUPER_ADMIN_EMAIL || "admin@livrexpress.com";
+const SUPER_ADMIN_EMAIL = process.env.SUPER_ADMIN_EMAIL || "admin@livsight.com";
 const SUPER_ADMIN_PASSWORD = process.env.SUPER_ADMIN_PASSWORD || "admin123";
 const SUPER_ADMIN_NAME = process.env.SUPER_ADMIN_NAME || "Super Administrator";
 

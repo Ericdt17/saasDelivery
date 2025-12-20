@@ -3,7 +3,7 @@
  * Helps diagnose login issues by checking database and password verification
  * 
  * Usage:
- *   node src/scripts/debug-login.js admin@livrexpress.com admin123
+ *   node src/scripts/debug-login.js admin@livsight.com admin123
  */
 
 require("dotenv").config();
@@ -111,7 +111,7 @@ async function debugLogin(email, password) {
 const args = process.argv.slice(2);
 if (args.length < 2) {
   console.error("❌ Usage: node src/scripts/debug-login.js <email> <password>");
-  console.error("   Example: node src/scripts/debug-login.js admin@livrexpress.com admin123");
+  console.error("   Example: node src/scripts/debug-login.js admin@livsight.com admin123");
   process.exit(1);
 }
 
@@ -119,6 +119,7 @@ const email = args[0];
 const password = args[1];
 
 debugLogin(email, password);
+
 
 
 

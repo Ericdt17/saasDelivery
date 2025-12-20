@@ -5,6 +5,7 @@
  */
 
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getGroups, createGroup, updateGroup, deleteGroup, hardDeleteGroup, type Group, type CreateGroupRequest } from "@/services/groups";
 import { getAgencies, type Agency } from "@/services/agencies";
@@ -54,6 +55,7 @@ import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 
 export default function Groups() {
+  const navigate = useNavigate();
   const { user, isSuperAdmin } = useAuth();
   const queryClient = useQueryClient();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -391,7 +393,8 @@ export default function Groups() {
               {groups.map((group) => (
                 <TableRow 
                   key={group.id}
-                  className={group.is_active ? "" : "opacity-60"}
+                  className={`${group.is_active ? "" : "opacity-60"} cursor-pointer hover:bg-muted/50 transition-colors`}
+                  onClick={() => navigate(`/groupes/${group.id}`)}
                 >
                   <TableCell className="font-medium">{group.name}</TableCell>
                   {isSuperAdmin && (
@@ -444,7 +447,7 @@ export default function Groups() {
                     )}
                   </TableCell>
                   <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-1">
+                    <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
                       <Button
                         variant="ghost"
                         size="icon"

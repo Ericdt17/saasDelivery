@@ -15,6 +15,7 @@ import {
   Menu,
   Building2,
   Users,
+  Receipt,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -32,6 +33,7 @@ const allNavItems: NavItem[] = [
   { title: "Groupes", href: "/groupes", icon: Users },
   { title: "Agences", href: "/agences", icon: Building2, requireSuperAdmin: true },
   { title: "Paiements", href: "/paiements", icon: CreditCard },
+  { title: "Tarifs", href: "/tarifs", icon: Receipt },
   { title: "Rapports", href: "/rapports", icon: FileText },
   { title: "Expéditions", href: "/expeditions", icon: Truck },
   { title: "Modifications", href: "/modifications", icon: History },
@@ -61,14 +63,14 @@ export function Sidebar() {
         </div>
         {(!collapsed || isMobile) && (
           <div className="flex flex-col">
-            <span className="font-bold text-sidebar-foreground text-lg">LivrExpress</span>
+            <span className="font-bold text-sidebar-foreground text-lg">LivSight</span>
             <span className="text-xs text-sidebar-muted">Gestion des livraisons</span>
           </div>
         )}
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+      <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto scrollbar-hide">
         {navItems.map((item) => {
           const isActive = location.pathname === item.href || 
             (item.href !== "/" && location.pathname.startsWith(item.href));

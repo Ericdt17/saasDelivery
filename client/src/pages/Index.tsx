@@ -13,6 +13,8 @@ import {
   AlertCircle,
   RefreshCw,
   Calendar,
+  Receipt,
+  HandCoins,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
@@ -27,8 +29,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getDailyStats } from "@/services/stats";
 import { getDeliveries } from "@/services/deliveries";
 import { toast } from "sonner";
-import { getDateRangeLocal } from "@/lib/date-utils";
+import { getDateRangeLocal, getDateRangeForPreset, type DateRange } from "@/lib/date-utils";
 import { calculateStatsFromDeliveries } from "@/lib/stats-utils";
+import { DateRangePicker } from "@/components/ui/date-range-picker";
 
 const formatCurrency = (value: number) => {
   return new Intl.NumberFormat("fr-FR").format(value) + " F";
@@ -37,8 +40,10 @@ const formatCurrency = (value: number) => {
 const Index = () => {
   const { user, isSuperAdmin } = useAuth();
   const [period, setPeriod] = useState<"jour" | "semaine" | "mois">("jour");
+  const [dateRange, setDateRange] = useState<DateRange>(() => getDateRangeForPreset("today"));
 
-  const dateRange = useMemo(() => getDateRangeLocal(period), [period]);
+  // Check if it's a single day (for daily stats)
+  const isSingleDay = dateRange.startDate === dateRange.endDate;
 
   // Fetch stats for today (for day view)
   // Stats are automatically filtered by agency_id on backend
@@ -51,7 +56,7 @@ const Index = () => {
   } = useQuery({
     queryKey: ["dailyStats", dateRange.startDate],
     queryFn: () => getDailyStats(dateRange.startDate, null),
-    enabled: period === "jour",
+    enabled: isSingleDay,
     retry: 2,
     refetchOnWindowFocus: false,
     onError: (error) => {
@@ -85,7 +90,7 @@ const Index = () => {
         sortBy: "created_at",
         sortOrder: "DESC",
       }),
-    enabled: period !== "jour",
+    enabled: !isSingleDay,
     retry: 2,
     refetchOnWindowFocus: false,
     onError: (error) => {
@@ -96,10 +101,42 @@ const Index = () => {
     },
   });
 
-  // Calculate current data based on period
+  // Fetch deliveries for day period to calculate tariffs (since dailyStats doesn't include tariffs yet)
+  const {
+    data: dayDeliveriesData,
+    isLoading: isLoadingDayDeliveries,
+  } = useQuery({
+    queryKey: [
+      "deliveries",
+      "dashboard-day",
+      dateRange.startDate,
+      dateRange.endDate,
+    ],
+    queryFn: () =>
+      getDeliveries({
+        page: 1,
+        limit: 1000,
+        startDate: dateRange.startDate,
+        endDate: dateRange.endDate,
+        sortBy: "created_at",
+        sortOrder: "DESC",
+      }),
+    enabled: isSingleDay,
+    retry: 2,
+    refetchOnWindowFocus: false,
+  });
+
+  // Calculate current data based on date range
   const stats = useMemo(() => {
-    if (period === "jour") {
+    if (isSingleDay) {
+      // For day view, use dailyStats but calculate tariffs from deliveries
+      const dayDeliveries = dayDeliveriesData?.deliveries || [];
+      const dayStats = calculateStatsFromDeliveries(dayDeliveries);
+      
       if (dailyStats) {
+        // For day view: dailyStats.montantEncaisse is NET (from backend total_collected)
+        // Calculate brut = NET + tarifs (from deliveries)
+        const montantBrut = (dailyStats.montantEncaisse || 0) + (dayStats.totalTarifs || 0);
         return {
           totalLivraisons: dailyStats.totalLivraisons,
           livreesReussies: dailyStats.livreesReussies,
@@ -107,30 +144,34 @@ const Index = () => {
           enCours: dailyStats.enCours,
           pickups: dailyStats.pickups,
           expeditions: dailyStats.expeditions,
-          montantEncaisse: dailyStats.montantEncaisse,
-          montantRestant: dailyStats.montantRestant,
-          chiffreAffaires: dailyStats.chiffreAffaires,
+          montantEncaisse: montantBrut, // Montant brut (NET + tarifs)
+          montantRestant: dayStats.montantRestant, // Use calculated restant from deliveries (takes tariff into account)
+          chiffreAffaires: montantBrut + dayStats.montantRestant,
+          totalTarifs: dayStats.totalTarifs, // Calculate from deliveries
+          montantNetEncaisse: dailyStats.montantEncaisse, // Montant NET (après tarifs)
         };
       }
-      // Jour sans dailyStats -> valeurs neutres (pas de fallback livraisons)
+      // Jour sans dailyStats -> utiliser les livraisons
       return {
-        totalLivraisons: 0,
-        livreesReussies: 0,
-        echecs: 0,
-        enCours: 0,
-        pickups: 0,
-        expeditions: 0,
-        montantEncaisse: 0,
-        montantRestant: 0,
-        chiffreAffaires: 0,
+        totalLivraisons: dayStats.totalLivraisons,
+        livreesReussies: dayStats.livreesReussies,
+        echecs: dayStats.echecs,
+        enCours: dayStats.enCours,
+        pickups: dayStats.pickups,
+        expeditions: dayStats.expeditions,
+        montantEncaisse: dayStats.montantEncaisse, // Already brut from calculateStatsFromDeliveries
+        montantRestant: dayStats.montantRestant,
+        chiffreAffaires: dayStats.chiffreAffaires,
+        totalTarifs: dayStats.totalTarifs,
+        montantNetEncaisse: dayStats.montantNetEncaisse, // Montant NET (après tarifs)
       };
     }
 
-    if (period !== "jour" && deliveriesData) {
+    if (!isSingleDay && deliveriesData) {
       return calculateStatsFromDeliveries(deliveriesData.deliveries);
     }
 
-    // Semaine/Mois sans données -> valeurs neutres
+    // Date range sans données -> valeurs neutres
     return {
       totalLivraisons: 0,
       livreesReussies: 0,
@@ -141,14 +182,18 @@ const Index = () => {
       montantEncaisse: 0,
       montantRestant: 0,
       chiffreAffaires: 0,
+      totalTarifs: 0,
+      montantNetEncaisse: 0,
     };
-  }, [period, dailyStats, deliveriesData]);
+  }, [isSingleDay, dailyStats, deliveriesData, dayDeliveriesData]);
 
   const isLoading =
-    period === "jour" ? isLoadingDailyStats : isLoadingDeliveries;
-  const isError = period === "jour" ? isErrorDailyStats : isErrorDeliveries;
-  const error = period === "jour" ? dailyStatsError : deliveriesError;
-  const refetch = period === "jour" ? refetchDailyStats : refetchDeliveries;
+    isSingleDay 
+      ? (isLoadingDailyStats || isLoadingDayDeliveries)
+      : isLoadingDeliveries;
+  const isError = isSingleDay ? isErrorDailyStats : isErrorDeliveries;
+  const error = isSingleDay ? dailyStatsError : deliveriesError;
+  const refetch = isSingleDay ? refetchDailyStats : refetchDeliveries;
 
   const periodLabels = {
     jour: "Aujourd'hui",
@@ -176,7 +221,7 @@ const Index = () => {
 
         {/* Loading Skeletons */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-          {Array.from({ length: 8 }).map((_, i) => (
+          {Array.from({ length: 10 }).map((_, i) => (
             <div key={i} className="stat-card">
               <Skeleton className="h-4 w-24 mb-2" />
               <Skeleton className="h-8 w-32" />
@@ -239,15 +284,28 @@ const Index = () => {
           {isSuperAdmin
             ? "Vue d'ensemble de toutes les agences"
             : `Vue d'ensemble de votre agence${user?.name ? ` - ${user.name}` : ""}`}
-          {" — "}
-          {periodLabels[period]}
+          {dateRange.startDate === dateRange.endDate ? (
+            <span className="ml-2">— {dateRange.startDate}</span>
+          ) : (
+            <span className="ml-2">— {dateRange.startDate} au {dateRange.endDate}</span>
+          )}
         </p>
+      </div>
+
+      {/* Date Range Picker */}
+      <div className="flex flex-col gap-4">
+        <DateRangePicker value={dateRange} onChange={setDateRange} />
       </div>
 
       {/* Period Tabs */}
       <Tabs
         value={period}
-        onValueChange={(v) => setPeriod(v as typeof period)}
+        onValueChange={(v) => {
+          setPeriod(v as typeof period);
+          // Update dateRange when period changes
+          const newDateRange = getDateRangeLocal(v as typeof period);
+          setDateRange(newDateRange);
+        }}
         className="w-full"
       >
         <TabsList className="grid w-full max-w-md grid-cols-3">
@@ -270,7 +328,7 @@ const Index = () => {
           {isLoading && (
             <div className="space-y-6">
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                {Array.from({ length: 8 }).map((_, i) => (
+                {Array.from({ length: 10 }).map((_, i) => (
                   <div key={i} className="stat-card">
                     <Skeleton className="h-4 w-24 mb-2" />
                     <Skeleton className="h-8 w-32" />
@@ -356,6 +414,18 @@ const Index = () => {
                   value={formatCurrency(stats.montantRestant)}
                   icon={ArrowDownRight}
                   variant="warning"
+                />
+                <StatCard
+                  title="Tarifs appliqués"
+                  value={formatCurrency(stats.totalTarifs || 0)}
+                  icon={Receipt}
+                  variant="info"
+                />
+                <StatCard
+                  title="À reverser aux groupes"
+                  value={formatCurrency(stats.montantNetEncaisse || 0)}
+                  icon={HandCoins}
+                  variant="success"
                 />
               </div>
 

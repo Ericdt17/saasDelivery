@@ -7,6 +7,7 @@ const {
   createDelivery,
   updateDelivery,
   getDeliveryHistory,
+  getTariffByAgencyAndQuartier,
 } = require('../../db');
 
 // All routes require authentication (cookie-based or Authorization header)
@@ -245,6 +246,66 @@ router.put('/:id', async (req, res, next) => {
         success: false,
         error: 'Delivery not found',
       });
+    }
+
+    // Get the actual delivery object (handle array response from queries)
+    const delivery = Array.isArray(existing) ? existing[0] : existing;
+
+    // Check if status is being changed to "delivered"
+    const isStatusChangingToDelivered = updates.status === 'delivered' && delivery.status !== 'delivered';
+
+    // If status is changing to "delivered", apply tariff logic
+    if (isStatusChangingToDelivered) {
+      // Get agency_id from delivery (use existing agency_id)
+      const agencyId = delivery.agency_id;
+      const quartier = delivery.quartier || updates.quartier;
+
+      if (!agencyId) {
+        return res.status(400).json({
+          success: false,
+          error: 'Missing agency information',
+          message: 'Cannot apply tariff: delivery has no agency_id',
+        });
+      }
+
+      if (!quartier) {
+        return res.status(400).json({
+          success: false,
+          error: 'Missing quartier',
+          message: 'Cannot apply tariff: delivery has no quartier specified. Please specify a quartier before marking as delivered.',
+        });
+      }
+
+      // Check if tariff already applied (delivery_fee already set)
+      const currentDeliveryFee = delivery.delivery_fee || 0;
+      if (currentDeliveryFee > 0) {
+        // Tariff already applied, just proceed with update
+        console.log(`[Delivery Update] Tariff already applied (${currentDeliveryFee}), skipping tariff application`);
+      } else {
+        // Find tariff for this agency and quartier
+        const tariffResult = await getTariffByAgencyAndQuartier(agencyId, quartier);
+        const tariff = Array.isArray(tariffResult) ? tariffResult[0] : tariffResult;
+
+        if (!tariff || !tariff.tarif_amount) {
+          // If no tariff found, log a warning but allow the status change
+          // The delivery will be updated without tariff applied (delivery_fee remains 0)
+          console.log(`[Delivery Update] Warning: No tariff found for quartier "${quartier}", status change allowed without tariff`);
+          // Continue with update without applying tariff
+        } else {
+          const tariffAmount = parseFloat(tariff.tarif_amount) || 0;
+
+          // Calculate new amount_paid (subtract tariff from current amount_paid)
+          const currentAmountPaid = parseFloat(delivery.amount_paid) || 0;
+          const newAmountPaid = Math.max(0, Math.round((currentAmountPaid - tariffAmount) * 100) / 100);
+
+          // Set delivery_fee and update amount_paid
+          updates.delivery_fee = tariffAmount;
+          updates.amount_paid = newAmountPaid;
+
+          console.log(`[Delivery Update] Applied tariff: ${tariffAmount} for quartier "${quartier}"`);
+          console.log(`[Delivery Update] Amount paid: ${currentAmountPaid} -> ${newAmountPaid}`);
+        }
+      }
     }
 
     // Update delivery
