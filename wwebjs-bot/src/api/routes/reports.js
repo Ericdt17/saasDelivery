@@ -147,6 +147,60 @@ router.get("/groups/:groupId/pdf", async (req, res, next) => {
     // Set better line height defaults
     doc.lineGap(2);
 
+    // Store agency info for footer
+    const agencyInfo = {
+      email: agency.email,
+      phone: agency.phone,
+    };
+
+    // Helper function to add footer to current page
+    const pageWidth = 595; // A4 width in points (210mm = 595pt at 72dpi)
+    const leftColumnX = 50;
+    const generationDate = new Date().toLocaleString("fr-FR", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    
+    const addFooterToPage = () => {
+      const footerY = 800; // Bottom of page (A4 height is ~842pt, minus margin)
+      
+      // Draw separator line
+      doc
+        .moveTo(leftColumnX, footerY)
+        .lineTo(pageWidth - leftColumnX, footerY)
+        .lineWidth(0.5)
+        .strokeColor("#cccccc")
+        .stroke()
+        .strokeColor("#000000")
+        .lineWidth(1);
+      
+      const footerYStart = footerY + 8;
+      
+      doc.fontSize(8).font("Helvetica").fillColor("#666666");
+      doc.text(`Rapport généré le: ${generationDate}`, leftColumnX, footerYStart);
+      
+      // Agency contact info
+      const contactInfo = [];
+      if (agencyInfo.email) contactInfo.push(`Email: ${agencyInfo.email}`);
+      if (agencyInfo.phone) contactInfo.push(`Téléphone: ${agencyInfo.phone}`);
+      if (contactInfo.length > 0) {
+        doc.text(contactInfo.join(" | "), leftColumnX, footerYStart + 12);
+      }
+      
+      doc.fillColor("#000000");
+    };
+    
+    // Add footer to first page (will be added after header)
+    // Footer will be added at the end before doc.end()
+    
+    // Add footer to each new page automatically
+    doc.on("pageAdded", () => {
+      addFooterToPage();
+    });
+
     // Set response headers
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader(
@@ -159,7 +213,6 @@ router.get("/groups/:groupId/pdf", async (req, res, next) => {
 
     // Header: Logo + Agency info on left, Report info on right
     const headerY = 45;
-    const leftColumnX = 50;
     const rightColumnX = 380;
 
     // Left column: Logo and Agency info
@@ -210,6 +263,15 @@ router.get("/groups/:groupId/pdf", async (req, res, next) => {
       currentY += 18;
     }
 
+    if (agency.email) {
+      doc
+        .fontSize(10)
+        .font("Helvetica")
+        .fillColor("#4a4a4a")
+        .text(`Email: ${agency.email}`, leftColumnX, currentY);
+      currentY += 18;
+    }
+
     // Reset to black for rest of document
     doc.fillColor("#000000");
 
@@ -256,6 +318,18 @@ router.get("/groups/:groupId/pdf", async (req, res, next) => {
       .fillColor("#000000")
       .font("Helvetica-Bold")
       .text(`${periodStart} - ${periodEnd}`, rightColumnX + 50, rightY);
+    rightY += 17;
+
+    if (agency.email) {
+      doc
+        .fontSize(10)
+        .font("Helvetica")
+        .fillColor("#4a4a4a")
+        .text(`Email: `, rightColumnX, rightY)
+        .fillColor("#000000")
+        .font("Helvetica")
+        .text(agency.email, rightColumnX + 40, rightY);
+    }
 
     // Reset fill color
     doc.fillColor("#000000");
@@ -263,8 +337,6 @@ router.get("/groups/:groupId/pdf", async (req, res, next) => {
     // Start section 1 directly after header info (removed Compte Rendu title)
     const maxY = Math.max(currentY, rightY);
     currentY = maxY + 40;
-
-    const pageWidth = 595; // A4 width in points (210mm = 595pt at 72dpi)
 
     // Section 1: Détails des livraisons (centered, homogeneous with other titles)
     const section1Title = "DÉTAILS DES LIVRAISONS";
@@ -350,10 +422,22 @@ router.get("/groups/:groupId/pdf", async (req, res, next) => {
       quartierGroups[quartier].totalAmountPaid += item.amountPaid || 0;
     });
 
-    // Display quartiers with their data
-    Object.values(quartierGroups)
-      .sort((a, b) => a.quartier.localeCompare(b.quartier))
-      .forEach((group) => {
+    // Display quartiers with their data or message if empty
+    const quartierGroupsList = Object.values(quartierGroups).sort((a, b) => a.quartier.localeCompare(b.quartier));
+    
+    if (quartierGroupsList.length === 0) {
+      // Message when no deliveries
+      doc.fontSize(10).font("Helvetica").fillColor("#666666");
+      doc.text(
+        "Aucune livraison livrée pour cette période",
+        col1X + 3,
+        currentY + 5,
+        { width: tableRight - col1X, align: "center" }
+      );
+      doc.fillColor("#000000");
+      currentY += 25;
+    } else {
+      quartierGroupsList.forEach((group) => {
         if (currentY > 700) {
           // New page if needed
           doc.addPage();
@@ -398,8 +482,9 @@ router.get("/groups/:groupId/pdf", async (req, res, next) => {
         currentY += 18;
         rowIndex++;
       });
+    }
 
-    // Total section with styling (centered) - improved visual hierarchy
+    // Total section - box aligned to the right of the table
     currentY += 8;
     doc
       .moveTo(col1X - 5, currentY)
@@ -411,56 +496,38 @@ router.get("/groups/:groupId/pdf", async (req, res, next) => {
       .strokeColor("#000000");
     currentY += 14;
 
-    // Background for totals (centered) with better styling
-    const totalsBoxWidth = 320;
-    const totalsBoxX = (pageWidth - totalsBoxWidth) / 2;
+    // Background for totals box - aligned to the right of the table
+    const totalsBoxWidth = 200;
+    const totalsBoxX = tableRight - totalsBoxWidth;
+    const totalsBoxHeight = 40; // Reduced height (removed TVA line)
     doc
-      .rect(totalsBoxX, currentY - 4, totalsBoxWidth, 56)
+      .rect(totalsBoxX, currentY - 4, totalsBoxWidth, totalsBoxHeight)
       .fillColor("#f0f0f0")
       .fill()
       .fillColor("#000000");
 
     doc.fontSize(10.5).font("Helvetica-Bold").fillColor("#1a1a1a");
     const totalHTText = `Total HT FCFA: ${formatCurrency(totalHT)}`;
-    const totalHTTextWidth = doc.widthOfString(totalHTText, {
-      fontSize: 10.5,
-      font: "Helvetica-Bold",
-    });
     doc.text(
       totalHTText,
-      totalsBoxX + (totalsBoxWidth - totalHTTextWidth) / 2,
-      currentY + 2
-    );
-    currentY += 17;
-
-    doc.fontSize(10).font("Helvetica").fillColor("#4a4a4a");
-    const tvaText = `TOTAL TVA FCFA: 0,00`;
-    const tvaTextWidth = doc.widthOfString(tvaText, {
-      fontSize: 10,
-      font: "Helvetica",
-    });
-    doc.text(
-      tvaText,
-      totalsBoxX + (totalsBoxWidth - tvaTextWidth) / 2,
-      currentY + 2
+      totalsBoxX + 5,
+      currentY + 2,
+      { width: totalsBoxWidth - 10, align: "right" }
     );
     currentY += 17;
 
     doc.fontSize(11).font("Helvetica-Bold").fillColor("#000000");
-    const ttcText = `TTC A PAYER FCFA: ${formatCurrency(totalHT)}`;
-    const ttcTextWidth = doc.widthOfString(ttcText, {
-      fontSize: 11,
-      font: "Helvetica-Bold",
-    });
+    const ttcText = `TTC A PAYER: ${formatCurrency(totalHT)}`;
     doc.text(
       ttcText,
-      totalsBoxX + (totalsBoxWidth - ttcTextWidth) / 2,
-      currentY + 2
+      totalsBoxX + 5,
+      currentY + 2,
+      { width: totalsBoxWidth - 10, align: "right" }
     );
 
     // Draw border around totals with better styling
     doc
-      .rect(totalsBoxX, currentY - 34, totalsBoxWidth, 56)
+      .rect(totalsBoxX, currentY - 19, totalsBoxWidth, totalsBoxHeight)
       .lineWidth(1.5)
       .strokeColor("#333333")
       .stroke()
@@ -476,7 +543,7 @@ router.get("/groups/:groupId/pdf", async (req, res, next) => {
       currentY = 50;
     }
 
-    const section2Title = "TARIFS PAR LIVRAISON (Retenus par l'agence)";
+    const section2Title = "TARIFS PAR LIVRAISON";
     const section2TitleWidth = doc.widthOfString(section2Title, {
       fontSize: 17,
       font: "Helvetica-Bold",
@@ -557,59 +624,73 @@ router.get("/groups/:groupId/pdf", async (req, res, next) => {
     doc.fontSize(9.5).font("Helvetica");
     const tarifsList = Object.values(tarifsParQuartier);
     let tarifRowIndex = 0;
-    tarifsList.forEach((tarif) => {
-      if (currentY > 700) {
-        doc.addPage();
-        currentY = 50;
-        tarifRowIndex = 0;
-      }
-
-      // Alternate row background with better color
-      if (tarifRowIndex % 2 === 0) {
-        doc
-          .rect(
-            tarifsCol1X - 5,
-            currentY - 2,
-            tableRight - tarifsCol1X + 10,
-            18
-          )
-          .fillColor("#f8f8f8")
-          .fill()
-          .fillColor("#000000");
-      }
-
-      const unitPrice = tarif.total / tarif.count;
-      doc.fillColor("#1a1a1a");
-      doc.text(tarif.quartier, tarifsCol1X + 3, currentY + 1, { width: 190 });
-      doc.text(tarif.count.toString(), tarifsCol2X, currentY + 1, {
-        width: 50,
-        align: "right",
-      });
-      doc.text(formatCurrency(unitPrice), tarifsCol3X, currentY + 1, {
-        width: 80,
-        align: "right",
-      });
-      doc.text(formatCurrency(tarif.total), tarifsCol4X, currentY + 1, {
-        width: 80,
-        align: "right",
-      });
+    
+    if (tarifsList.length === 0) {
+      // Message when no tariffs
+      doc.fontSize(10).font("Helvetica").fillColor("#666666");
+      doc.text(
+        "Aucun tarif appliqué pour cette période",
+        tarifsCol1X + 3,
+        currentY + 5,
+        { width: tableRight - tarifsCol1X, align: "center" }
+      );
       doc.fillColor("#000000");
+      currentY += 25;
+    } else {
+      tarifsList.forEach((tarif) => {
+        if (currentY > 700) {
+          doc.addPage();
+          currentY = 50;
+          tarifRowIndex = 0;
+        }
 
-      // Draw row border with subtle color
-      doc
-        .moveTo(tarifsCol1X - 5, currentY + 16)
-        .lineTo(tableRight + 5, currentY + 16)
-        .lineWidth(0.5)
-        .strokeColor("#e0e0e0")
-        .stroke()
-        .strokeColor("#000000")
-        .lineWidth(1);
+        // Alternate row background with better color
+        if (tarifRowIndex % 2 === 0) {
+          doc
+            .rect(
+              tarifsCol1X - 5,
+              currentY - 2,
+              tableRight - tarifsCol1X + 10,
+              18
+            )
+            .fillColor("#f8f8f8")
+            .fill()
+            .fillColor("#000000");
+        }
 
-      currentY += 18;
-      tarifRowIndex++;
-    });
+        const unitPrice = tarif.total / tarif.count;
+        doc.fillColor("#1a1a1a");
+        doc.text(tarif.quartier, tarifsCol1X + 3, currentY + 1, { width: 190 });
+        doc.text(tarif.count.toString(), tarifsCol2X, currentY + 1, {
+          width: 50,
+          align: "right",
+        });
+        doc.text(formatCurrency(unitPrice), tarifsCol3X, currentY + 1, {
+          width: 80,
+          align: "right",
+        });
+        doc.text(formatCurrency(tarif.total), tarifsCol4X, currentY + 1, {
+          width: 80,
+          align: "right",
+        });
+        doc.fillColor("#000000");
 
-    // Total tarifs with styling (centered) - improved visual hierarchy
+        // Draw row border with subtle color
+        doc
+          .moveTo(tarifsCol1X - 5, currentY + 16)
+          .lineTo(tableRight + 5, currentY + 16)
+          .lineWidth(0.5)
+          .strokeColor("#e0e0e0")
+          .stroke()
+          .strokeColor("#000000")
+          .lineWidth(1);
+
+        currentY += 18;
+        tarifRowIndex++;
+      });
+    }
+
+    // Total tarifs - box aligned to the right of the table
     if (tarifsList.length > 0) {
       currentY += 8;
       doc
@@ -622,31 +703,29 @@ router.get("/groups/:groupId/pdf", async (req, res, next) => {
         .strokeColor("#000000");
       currentY += 14;
 
-      // Background for total (centered) with better styling
-      const tarifsTotalBoxWidth = 320;
-      const tarifsTotalBoxX = (pageWidth - tarifsTotalBoxWidth) / 2;
+      // Background for total - aligned to the right of the table
+      const tarifsTotalBoxWidth = 180;
+      const tarifsTotalBoxX = tableRight - tarifsTotalBoxWidth;
+      const tarifsTotalBoxHeight = 24;
       doc
-        .rect(tarifsTotalBoxX, currentY - 4, tarifsTotalBoxWidth, 24)
+        .rect(tarifsTotalBoxX, currentY - 4, tarifsTotalBoxWidth, tarifsTotalBoxHeight)
         .fillColor("#f0f0f0")
         .fill()
         .fillColor("#000000");
 
       doc.fontSize(10.5).font("Helvetica-Bold").fillColor("#1a1a1a");
-      const tarifsTotalText = `Total tarifs: ${formatCurrency(totalTarifs)}`;
-      const tarifsTotalTextWidth = doc.widthOfString(tarifsTotalText, {
-        fontSize: 10.5,
-        font: "Helvetica-Bold",
-      });
+      const tarifsTotalText = `Total: ${formatCurrency(totalTarifs)}`;
       doc.text(
         tarifsTotalText,
-        tarifsTotalBoxX + (tarifsTotalBoxWidth - tarifsTotalTextWidth) / 2,
-        currentY + 2
+        tarifsTotalBoxX + 5,
+        currentY + 2,
+        { width: tarifsTotalBoxWidth - 10, align: "right" }
       );
       doc.fillColor("#000000");
 
       // Draw border around total with better styling
       doc
-        .rect(tarifsTotalBoxX, currentY - 4, tarifsTotalBoxWidth, 24)
+        .rect(tarifsTotalBoxX, currentY - 4, tarifsTotalBoxWidth, tarifsTotalBoxHeight)
         .lineWidth(1.5)
         .strokeColor("#333333")
         .stroke()
@@ -740,6 +819,11 @@ router.get("/groups/:groupId/pdf", async (req, res, next) => {
       .lineWidth(1);
 
     doc.fillColor("#000000");
+
+    // Add footer to last page (first page footer was added at the beginning)
+    // The pageAdded event handles all subsequent pages
+    // We add footer to the current (last) page here
+    addFooterToPage();
 
     // Finalize PDF
     doc.end();
