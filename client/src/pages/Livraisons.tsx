@@ -38,6 +38,8 @@ import { searchDeliveries } from "@/services/search";
 import { getGroups } from "@/services/groups";
 import { mapStatusToBackend } from "@/lib/data-transform";
 import { toast } from "sonner";
+import { getDateRangeForPreset, type DateRange } from "@/lib/date-utils";
+import { DateRangePicker } from "@/components/ui/date-range-picker";
 
 const formatCurrency = (value: number) => {
   return new Intl.NumberFormat('fr-FR').format(value) + " F";
@@ -74,6 +76,7 @@ const mapStatusFilter = (frontendStatus: string): string | undefined => {
 
 const Livraisons = () => {
   const navigate = useNavigate();
+  const [dateRange, setDateRange] = useState<DateRange>(() => getDateRangeForPreset("today"));
   const [search, setSearch] = useState("");
   const [statutFilter, setStatutFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");
@@ -106,6 +109,8 @@ const Livraisons = () => {
       limit,
       sortBy: 'created_at',
       sortOrder: 'DESC',
+      startDate: dateRange.startDate,
+      endDate: dateRange.endDate,
     };
 
     // Map status filter
@@ -126,7 +131,7 @@ const Livraisons = () => {
     }
 
     return params;
-  }, [page, statutFilter, search, groupFilter]);
+  }, [page, statutFilter, search, groupFilter, dateRange.startDate, dateRange.endDate]);
 
   // Fetch deliveries
   const { 
@@ -136,7 +141,7 @@ const Livraisons = () => {
     error,
     refetch 
   } = useQuery({
-    queryKey: ['deliveries', apiParams],
+    queryKey: ['deliveries', apiParams, dateRange.startDate, dateRange.endDate],
     queryFn: () => {
       // If search is provided and not a phone number, use search API
       if (search && search.trim() && !/^[\d\s\+\-]+$/.test(search.trim())) {
@@ -199,6 +204,11 @@ const Livraisons = () => {
           <Plus className="w-4 h-4" />
           Nouvelle livraison
         </Button>
+      </div>
+
+      {/* Date Range Picker */}
+      <div className="flex flex-col gap-4">
+        <DateRangePicker value={dateRange} onChange={setDateRange} />
       </div>
 
       {/* Filters */}

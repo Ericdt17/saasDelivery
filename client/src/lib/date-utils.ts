@@ -60,6 +60,118 @@ export function getDateRangeLocal(period: "jour" | "semaine" | "mois"): {
   }
 }
 
+/**
+ * Preset date range options
+ */
+export type DateRangePreset =
+  | "today"
+  | "yesterday"
+  | "thisWeek"
+  | "lastWeek"
+  | "thisMonth"
+  | "lastMonth"
+  | "thisYear"
+  | "lastYear"
+  | "custom";
 
+export interface DateRange {
+  startDate: string;
+  endDate: string;
+}
 
+/**
+ * Get date range for a preset option
+ */
+export function getDateRangeForPreset(preset: DateRangePreset): DateRange {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
 
+  switch (preset) {
+    case "today": {
+      return {
+        startDate: formatDateLocal(today),
+        endDate: formatDateLocal(today),
+      };
+    }
+    case "yesterday": {
+      const yesterday = new Date(today);
+      yesterday.setDate(yesterday.getDate() - 1);
+      return {
+        startDate: formatDateLocal(yesterday),
+        endDate: formatDateLocal(yesterday),
+      };
+    }
+    case "thisWeek": {
+      const weekStart = new Date(today);
+      weekStart.setDate(today.getDate() - today.getDay()); // Start of week (Sunday = 0)
+      return {
+        startDate: formatDateLocal(weekStart),
+        endDate: formatDateLocal(today),
+      };
+    }
+    case "lastWeek": {
+      const weekStart = new Date(today);
+      weekStart.setDate(today.getDate() - today.getDay() - 7); // Last week start
+      const weekEnd = new Date(weekStart);
+      weekEnd.setDate(weekStart.getDate() + 6); // Last week end
+      return {
+        startDate: formatDateLocal(weekStart),
+        endDate: formatDateLocal(weekEnd),
+      };
+    }
+    case "thisMonth": {
+      const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+      return {
+        startDate: formatDateLocal(monthStart),
+        endDate: formatDateLocal(today),
+      };
+    }
+    case "lastMonth": {
+      const lastMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+      const lastMonthEnd = new Date(today.getFullYear(), today.getMonth(), 0); // Last day of last month
+      return {
+        startDate: formatDateLocal(lastMonthStart),
+        endDate: formatDateLocal(lastMonthEnd),
+      };
+    }
+    case "thisYear": {
+      const yearStart = new Date(today.getFullYear(), 0, 1);
+      return {
+        startDate: formatDateLocal(yearStart),
+        endDate: formatDateLocal(today),
+      };
+    }
+    case "lastYear": {
+      const lastYearStart = new Date(today.getFullYear() - 1, 0, 1);
+      const lastYearEnd = new Date(today.getFullYear() - 1, 11, 31);
+      return {
+        startDate: formatDateLocal(lastYearStart),
+        endDate: formatDateLocal(lastYearEnd),
+      };
+    }
+    case "custom":
+    default:
+      return {
+        startDate: formatDateLocal(today),
+        endDate: formatDateLocal(today),
+      };
+  }
+}
+
+/**
+ * Get label for a preset option
+ */
+export function getPresetLabel(preset: DateRangePreset): string {
+  const labels: Record<DateRangePreset, string> = {
+    today: "Aujourd'hui",
+    yesterday: "Hier",
+    thisWeek: "Cette semaine",
+    lastWeek: "Semaine dernière",
+    thisMonth: "Ce mois",
+    lastMonth: "Mois dernier",
+    thisYear: "Cette année",
+    lastYear: "Année dernière",
+    custom: "Personnalisé",
+  };
+  return labels[preset];
+}

@@ -18,6 +18,8 @@ import Modifications from "./pages/Modifications";
 import Parametres from "./pages/Parametres";
 import Agencies from "./pages/Agencies";
 import Groups from "./pages/Groups";
+import GroupDetail from "./pages/GroupDetail";
+import Tarifs from "./pages/Tarifs";
 import NotFound from "./pages/NotFound";
 
 // Configure QueryClient with better error handling
@@ -26,7 +28,7 @@ const queryClient = new QueryClient({
     queries: {
       retry: (failureCount, error) => {
         // Don't retry on 4xx errors (client errors)
-        if (error && typeof error === 'object' && 'statusCode' in error) {
+        if (error && typeof error === "object" && "statusCode" in error) {
           const statusCode = (error as { statusCode: number }).statusCode;
           if (statusCode >= 400 && statusCode < 500) {
             return false;
@@ -38,21 +40,9 @@ const queryClient = new QueryClient({
       retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
       staleTime: 1000 * 30, // 30 seconds
       refetchOnWindowFocus: false,
-      onError: (error) => {
-        handleError(error, {
-          showToast: true,
-          toastTitle: 'Erreur de chargement',
-        });
-      },
     },
     mutations: {
       retry: false, // Don't retry mutations by default
-      onError: (error) => {
-        handleError(error, {
-          showToast: true,
-          toastTitle: 'Erreur',
-        });
-      },
     },
   },
 });
@@ -62,7 +52,7 @@ const App = () => (
     onError={(error, errorInfo) => {
       // Log error to console in development
       if (import.meta.env.DEV) {
-        console.error('ErrorBoundary caught error:', error, errorInfo);
+        console.error("ErrorBoundary caught error:", error, errorInfo);
       }
       // You could also send to error tracking service here (e.g., Sentry)
     }}
@@ -74,7 +64,7 @@ const App = () => (
         <Routes>
           {/* Public route */}
           <Route path="/login" element={<Login />} />
-          
+
           {/* Protected routes */}
           <Route
             element={
@@ -87,6 +77,8 @@ const App = () => (
             <Route path="/livraisons" element={<Livraisons />} />
             <Route path="/livraisons/:id" element={<LivraisonDetails />} />
             <Route path="/groupes" element={<Groups />} />
+            <Route path="/groupes/:id" element={<GroupDetail />} />
+            <Route path="/tarifs" element={<Tarifs />} />
             <Route
               path="/agences"
               element={

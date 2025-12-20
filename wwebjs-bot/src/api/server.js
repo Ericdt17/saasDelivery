@@ -7,6 +7,8 @@ const searchRouter = require("./routes/search");
 const authRouter = require("./routes/auth");
 const agenciesRouter = require("./routes/agencies");
 const groupsRouter = require("./routes/groups");
+const tariffsRouter = require("./routes/tariffs");
+const reportsRouter = require("./routes/reports");
 const errorHandler = require("./middleware/errorHandler");
 
 const app = express();
@@ -36,10 +38,14 @@ const corsOptions = {
 
       // If ALLOWED_ORIGINS is set, check against it
       if (allowedOrigins.length > 0) {
+        // Normalize origin and allowed origins (remove trailing slashes)
+        const normalizeUrl = (url) => url.trim().replace(/\/+$/, "");
+        const normalizedOrigin = normalizeUrl(origin);
+        
         // Check exact match or if origin starts with any allowed origin
         const isAllowed = allowedOrigins.some((allowed) => {
-          const allowedClean = allowed.trim();
-          return origin === allowedClean || origin.startsWith(allowedClean);
+          const allowedClean = normalizeUrl(allowed);
+          return normalizedOrigin === allowedClean || normalizedOrigin.startsWith(allowedClean);
         });
 
         if (isAllowed) {
@@ -112,9 +118,11 @@ app.use((req, res, next) => {
 app.use("/api/v1/auth", authRouter);
 app.use("/api/v1/agencies", agenciesRouter);
 app.use("/api/v1/groups", groupsRouter);
+app.use("/api/v1/tariffs", tariffsRouter);
 app.use("/api/v1/deliveries", deliveriesRouter);
 app.use("/api/v1/stats", statsRouter);
 app.use("/api/v1/search", searchRouter);
+app.use("/api/v1/reports", reportsRouter);
 
 // Health check endpoint
 app.get("/api/v1/health", (req, res) => {
@@ -260,6 +268,10 @@ if (require.main === module) {
     console.log(`   GET    /api/v1/agencies (super admin)`);
     console.log(`   POST   /api/v1/agencies (super admin)`);
     console.log(`   GET    /api/v1/groups`);
+    console.log(`   GET    /api/v1/tariffs`);
+    console.log(`   POST   /api/v1/tariffs`);
+    console.log(`   PUT    /api/v1/tariffs/:id`);
+    console.log(`   DELETE /api/v1/tariffs/:id`);
     console.log(`   GET    /api/v1/deliveries`);
     console.log(`   GET    /api/v1/deliveries/:id`);
     console.log(`   POST   /api/v1/deliveries`);

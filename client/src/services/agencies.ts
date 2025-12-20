@@ -12,6 +12,9 @@ export interface Agency {
   agency_code: string | null;
   role: "agency" | "super_admin";
   is_active: boolean;
+  address?: string | null;
+  phone?: string | null;
+  logo_base64?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -32,6 +35,9 @@ export interface UpdateAgencyRequest {
   role?: "agency" | "super_admin";
   is_active?: boolean;
   agency_code?: string | null;
+  address?: string | null;
+  phone?: string | null;
+  logo_base64?: string | null;
 }
 
 /**
@@ -90,6 +96,17 @@ export async function deleteAgency(id: number): Promise<boolean> {
 }
 
 /**
+ * Get current user's agency
+ */
+export async function getAgencyMe(): Promise<Agency | null> {
+  const response = await apiGet<Agency>("/api/v1/agencies/me");
+  if (response.success && response.data) {
+    return response.data;
+  }
+  return null;
+}
+
+/**
  * Generate a random agency code
  * Format: Alphanumeric, 6-8 characters
  * Pattern: Random uppercase letters and numbers
@@ -105,6 +122,3 @@ export function generateAgencyCode(): string {
   }
   return code;
 }
-
-
-
