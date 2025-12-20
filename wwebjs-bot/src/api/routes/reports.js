@@ -164,7 +164,19 @@ router.get("/groups/:groupId/pdf", async (req, res, next) => {
       minute: "2-digit",
     });
     
+    // Track pages that already have footer to prevent infinite loop
+    const pagesWithFooter = new Set();
+    
     const addFooterToPage = () => {
+      // Prevent infinite loop - check if footer already added to this page
+      const currentPage = doc.bufferedPageRange().count || 1;
+      if (pagesWithFooter.has(currentPage)) {
+        return; // Footer already added to this page
+      }
+      
+      // Mark this page as having footer
+      pagesWithFooter.add(currentPage);
+      
       const footerY = 800; // Bottom of page (A4 height is ~842pt, minus margin)
       
       // Draw separator line
@@ -192,9 +204,6 @@ router.get("/groups/:groupId/pdf", async (req, res, next) => {
       
       doc.fillColor("#000000");
     };
-    
-    // Add footer to first page (will be added after header)
-    // Footer will be added at the end before doc.end()
     
     // Add footer to each new page automatically
     doc.on("pageAdded", () => {
@@ -820,9 +829,7 @@ router.get("/groups/:groupId/pdf", async (req, res, next) => {
 
     doc.fillColor("#000000");
 
-    // Add footer to last page (first page footer was added at the beginning)
-    // The pageAdded event handles all subsequent pages
-    // We add footer to the current (last) page here
+    // Add footer to first page (pageAdded event handles subsequent pages)
     addFooterToPage();
 
     // Finalize PDF
