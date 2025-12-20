@@ -10,7 +10,7 @@ node_modules/
 # WhatsApp session/auth data
 auth/
 auth-dev/
-
+.wwebjs_auth/
 # Database
 data/
 

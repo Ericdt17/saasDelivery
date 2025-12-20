@@ -40,7 +40,7 @@ export function Header() {
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container mx-auto flex h-16 items-center justify-between px-4 md:px-6 lg:px-8">
         <div className="flex items-center gap-2">
-          <h1 className="text-lg font-semibold">LivrExpress</h1>
+          <h1 className="text-lg font-semibold">LivSight</h1>
           {isSuperAdmin && (
             <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-800 dark:bg-blue-900 dark:text-blue-200">
               <Shield className="h-3 w-3" />
