@@ -34,6 +34,7 @@ import { toast } from "sonner";
 import { type DateRange, getDateRangeForPreset } from "@/lib/date-utils";
 import { calculateStatsFromDeliveries } from "@/lib/stats-utils";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
+import { buildApiUrl } from "@/lib/api-config";
 
 const formatCurrency = (value: number) => {
   return new Intl.NumberFormat("fr-FR").format(value) + " FCFA";
@@ -127,7 +128,7 @@ const Rapports = () => {
               const params = new URLSearchParams();
               params.append("startDate", dateRange.startDate);
               params.append("endDate", dateRange.endDate);
-              const url = `/api/v1/reports/pdf?${params.toString()}`;
+              const url = buildApiUrl(`/api/v1/reports/pdf?${params.toString()}`);
               window.open(url, "_blank");
             }}
           >

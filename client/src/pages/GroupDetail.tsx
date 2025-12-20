@@ -71,6 +71,7 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { getGroupById } from "@/services/groups";
 import { getDailyStats } from "@/services/stats";
+import { buildApiUrl } from "@/lib/api-config";
 import { getDeliveries, type GetDeliveriesParams, type CreateDeliveryRequest } from "@/services/deliveries";
 import { apiDelete } from "@/services/api";
 import { searchDeliveries } from "@/services/search";
@@ -431,7 +432,7 @@ export default function GroupDetail() {
                 if (dateRange.startDate) params.append("startDate", dateRange.startDate);
                 if (dateRange.endDate) params.append("endDate", dateRange.endDate);
                 
-                const url = `/api/v1/reports/groups/${groupId}/pdf${params.toString() ? `?${params.toString()}` : ""}`;
+                const url = buildApiUrl(`/api/v1/reports/groups/${groupId}/pdf${params.toString() ? `?${params.toString()}` : ""}`);
                 window.open(url, "_blank");
               }}
             >
