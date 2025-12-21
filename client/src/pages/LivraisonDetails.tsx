@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,11 +36,14 @@ import {
   FileText,
   AlertCircle
 } from "lucide-react";
-import { getDeliveryById, getDeliveryHistory } from "@/services/deliveries";
+import { getDeliveryById, getDeliveryHistory, updateDelivery } from "@/services/deliveries";
+import { mapStatusToBackend, type StatutLivraison } from "@/lib/data-transform";
 import { toast } from "sonner";
 
-const formatCurrency = (value: number) => {
-  return new Intl.NumberFormat('fr-FR').format(value) + " FCFA";
+const formatCurrency = (value: number | undefined | null) => {
+  // Handle NaN, undefined, null, or invalid numbers
+  const numValue = typeof value === 'number' && !isNaN(value) && isFinite(value) ? value : 0;
+  return new Intl.NumberFormat('fr-FR').format(numValue) + " FCFA";
 };
 
 const formatDate = (dateString: string) => {
@@ -60,6 +63,126 @@ const formatTime = (dateString: string) => {
   });
 };
 
+const formatHistoryEvent = (action: string, details: string) => {
+  // Traduire les actions
+  const actionLabels: Record<string, string> = {
+    "created": "Livraison créée",
+    "updated_status": "Statut modifié",
+    "updated_delivery_fee": "Frais de livraison modifié",
+    "updated_amount_paid": "Montant encaissé modifié",
+  };
+  
+  // Si details est du JSON, le parser et formater
+  if (details && details.trim().startsWith('{')) {
+    try {
+      const parsed = JSON.parse(details);
+      
+      // Cas spécial : "Livraison créée" - formater les informations de création
+      if (action === "created") {
+        const parts: string[] = [];
+        
+        if (parsed.phone) {
+          parts.push(`Téléphone: ${parsed.phone}`);
+        }
+        if (parsed.quartier) {
+          parts.push(`Quartier: ${parsed.quartier}`);
+        }
+        if (parsed.items) {
+          // Nettoyer les \n et formater les produits
+          const items = String(parsed.items).replace(/\\n/g, ", ").replace(/\n/g, ", ");
+          parts.push(`Produits: ${items}`);
+        }
+        if (parsed.amount_due !== undefined && parsed.amount_due !== null) {
+          parts.push(`Montant: ${formatCurrency(parseFloat(String(parsed.amount_due)))}`);
+        }
+        
+        const actor = parsed.actor || parsed.auteur || parsed.user || "";
+        
+        return {
+          title: "Livraison créée",
+          description: parts.join(" • "),
+          actor: actor,
+        };
+      }
+      
+      // Cas des modifications (updated_*)
+      const field = parsed.field || parsed.champ || "";
+      const oldValue = parsed.old_value || parsed.ancienne_valeur || parsed.from || "";
+      const newValue = parsed.new_value || parsed.nouvelle_valeur || parsed.to || "";
+      const actor = parsed.actor || parsed.auteur || parsed.user || "";
+      
+      // Si on a un champ et des valeurs, formater
+      if (field && (oldValue !== undefined || newValue !== undefined)) {
+        // Traduire les noms de champs
+        const fieldLabels: Record<string, string> = {
+          "Frais de livraison": "Frais de livraison",
+          "delivery_fee": "Frais de livraison",
+          "Statut": "Statut",
+          "status": "Statut",
+          "Montant encaissé": "Montant encaissé",
+          "amount_paid": "Montant encaissé",
+        };
+        
+        const fieldLabel = fieldLabels[field] || field;
+        
+        // Traduire les statuts
+        const translateStatus = (status: string): string => {
+          const statusMap: Record<string, string> = {
+            "pending": "En cours",
+            "delivered": "Livré",
+            "failed": "Échec",
+            "pickup": "Pickup",
+            "expedition": "Expédition",
+            "cancelled": "Annulé",
+            "client_absent": "Client absent",
+            "en_cours": "En cours",
+            "livré": "Livré",
+            "échec": "Échec",
+            "annulé": "Annulé",
+          };
+          return statusMap[status.toLowerCase()] || status;
+        };
+        
+        // Formater les valeurs
+        const formatValue = (val: string | number) => {
+          if (val === null || val === undefined || val === "") return "";
+          
+          // Si c'est un statut, le traduire
+          if (fieldLabel.toLowerCase().includes("statut") || fieldLabel.toLowerCase() === "status") {
+            return translateStatus(String(val));
+          }
+          
+          // Si c'est une valeur monétaire, formater en devise
+          const numVal = typeof val === 'number' ? val : parseFloat(String(val));
+          if (!isNaN(numVal) && (fieldLabel.toLowerCase().includes("montant") || fieldLabel.toLowerCase().includes("frais") || fieldLabel.toLowerCase().includes("amount") || fieldLabel.toLowerCase().includes("fee"))) {
+            return formatCurrency(numVal);
+          }
+          
+          return String(val);
+        };
+        
+        const formattedOld = formatValue(oldValue);
+        const formattedNew = formatValue(newValue);
+        
+        return {
+          title: `${fieldLabel} modifié`,
+          description: formattedOld && formattedNew ? `${formattedOld} → ${formattedNew}` : (formattedNew || formattedOld || details),
+          actor: actor,
+        };
+      }
+    } catch (e) {
+      // Si le parsing échoue, utiliser le format par défaut
+    }
+  }
+  
+  // Format par défaut pour les actions non-JSON ou si le parsing a échoué
+  return {
+    title: actionLabels[action] || action,
+    description: details || "",
+    actor: "",
+  };
+};
+
 const typeLabels = {
   livraison: "Livraison",
   pickup: "Pickup",
@@ -69,10 +192,12 @@ const typeLabels = {
 const LivraisonDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showNoteModal, setShowNoteModal] = useState(false);
+  const [selectedStatus, setSelectedStatus] = useState<StatutLivraison | "">("");
 
   // Fetch delivery data
   const { 
@@ -106,6 +231,28 @@ const LivraisonDetails = () => {
     enabled: !!id && !!livraison,
     retry: 2,
     refetchOnWindowFocus: false,
+  });
+
+  // Status update mutation
+  const statusUpdateMutation = useMutation({
+    mutationFn: async (newStatus: StatutLivraison) => {
+      if (!id || !livraison) throw new Error("Livraison non trouvée");
+      return updateDelivery(id, {
+        status: mapStatusToBackend(newStatus),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["delivery", id] });
+      queryClient.invalidateQueries({ queryKey: ["deliveries"] });
+      queryClient.invalidateQueries({ queryKey: ["dailyStats"] });
+      setShowStatusModal(false);
+      setSelectedStatus("");
+      toast.success("Statut mis à jour avec succès");
+      refetchDelivery();
+    },
+    onError: (error: any) => {
+      toast.error(error?.data?.message || error?.message || "Erreur lors de la mise à jour du statut");
+    },
   });
 
   // Loading state
@@ -206,7 +353,10 @@ const LivraisonDetails = () => {
 
       {/* Actions */}
       <div className="flex flex-wrap gap-2">
-        <Dialog open={showStatusModal} onOpenChange={setShowStatusModal}>
+        <Dialog open={showStatusModal} onOpenChange={(open) => {
+          setShowStatusModal(open);
+          if (!open) setSelectedStatus("");
+        }}>
           <DialogTrigger asChild>
             <Button variant="outline" className="gap-2">
               <RefreshCw className="w-4 h-4" />
@@ -220,21 +370,42 @@ const LivraisonDetails = () => {
                 Sélectionnez le nouveau statut de la livraison
               </DialogDescription>
             </DialogHeader>
-            <Select defaultValue={livraison.statut}>
+            <Select 
+              value={selectedStatus || livraison.statut} 
+              onValueChange={(value) => setSelectedStatus(value as StatutLivraison)}
+            >
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="en_cours">En cours</SelectItem>
                 <SelectItem value="livré">Livré</SelectItem>
+                <SelectItem value="client_absent">Client absent</SelectItem>
                 <SelectItem value="échec">Échec</SelectItem>
                 <SelectItem value="pickup">Pickup</SelectItem>
                 <SelectItem value="expedition">Expédition</SelectItem>
               </SelectContent>
             </Select>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setShowStatusModal(false)}>Annuler</Button>
-              <Button onClick={() => setShowStatusModal(false)}>Enregistrer</Button>
+              <Button variant="outline" onClick={() => {
+                setShowStatusModal(false);
+                setSelectedStatus("");
+              }} disabled={statusUpdateMutation.isPending}>
+                Annuler
+              </Button>
+              <Button 
+                onClick={() => {
+                  if (selectedStatus && selectedStatus !== livraison.statut) {
+                    statusUpdateMutation.mutate(selectedStatus);
+                  } else {
+                    setShowStatusModal(false);
+                    setSelectedStatus("");
+                  }
+                }}
+                disabled={statusUpdateMutation.isPending || !selectedStatus || selectedStatus === livraison.statut}
+              >
+                {statusUpdateMutation.isPending ? "Enregistrement..." : "Enregistrer"}
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -469,20 +640,32 @@ const LivraisonDetails = () => {
                   </AlertDescription>
                 </Alert>
               ) : livraisonHistorique.length > 0 ? (
-                livraisonHistorique.map((event) => (
-                  <div key={event.id} className="timeline-item">
-                    <div className="timeline-dot">
-                      <Clock className="w-3 h-3 text-primary-foreground" />
-                    </div>
-                    <div>
-                      <p className="font-medium text-sm">{event.action}</p>
-                      <p className="text-sm text-muted-foreground">{event.details}</p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {formatTime(event.date)}
-                      </p>
-                    </div>
-                  </div>
-                ))
+                <div className="space-y-4">
+                  {livraisonHistorique.map((event) => {
+                    const formatted = formatHistoryEvent(event.action, event.details);
+                    return (
+                      <div key={event.id} className="relative pl-8 pb-4 border-l-2 border-muted last:border-0 last:pb-0">
+                        <div className="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-primary border-2 border-background flex items-center justify-center">
+                          <Clock className="w-2.5 h-2.5 text-primary-foreground" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-sm">{formatted.title}</p>
+                          {formatted.description && (
+                            <p className="text-sm text-muted-foreground mt-1">{formatted.description}</p>
+                          )}
+                          {formatted.actor && (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Par: {formatted.actor}
+                            </p>
+                          )}
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {formatTime(event.date)}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               ) : (
                 <p className="text-sm text-muted-foreground text-center py-4">
                   Aucun historique disponible

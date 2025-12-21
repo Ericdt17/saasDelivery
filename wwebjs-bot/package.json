@@ -17,6 +17,7 @@
     "test-send": "node src/test-send.js",
     "list-groups": "node src/list-groups.js",
     "test": "node src/test/scenarios.test.js",
+    "test:status": "node test-status-updates.js",
     "test:db": "node src/test-db-connection.js",
     "migrate": "node db/migrate.js",
     "migrate:prod": "node src/scripts/migrate-prod.js",

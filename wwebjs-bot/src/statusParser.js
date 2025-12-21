@@ -111,7 +111,29 @@ function parseStatusUpdate(text, isReply = false) {
     };
   }
 
-  // 2. FAILED - "Échec", "Echec", "Numéro ne passe pas"
+  // 2. CLIENT_ABSENT - "Client absent", "Client n'a pas pris", "Le client n'a pas pris"
+  // Check this BEFORE "failed" to avoid conflicts
+  if (
+    lowerText.includes("client absent") ||
+    lowerText.includes("client n'a pas pris") ||
+    lowerText.includes("client na pas pris") ||
+    lowerText.includes("le client n'a pas pris") ||
+    lowerText.includes("le client na pas pris") ||
+    lowerText.includes("client n'a pas été") ||
+    lowerText.includes("client na pas été") ||
+    lowerText.match(/client.*absent/i) ||
+    lowerText.match(/client.*pas.*pris/i)
+  ) {
+    const phone = extractPhoneFromStatus(text);
+    return {
+      type: "client_absent",
+      phone: phone,
+      amount: null,
+      details: text,
+    };
+  }
+
+  // 3. FAILED - "Échec", "Echec", "Numéro ne passe pas"
   if (
     lowerText.match(/^échec|^echec/i) ||
     lowerText.includes("numéro ne passe pas") ||
@@ -127,7 +149,7 @@ function parseStatusUpdate(text, isReply = false) {
     };
   }
 
-  // 3. PAYMENT COLLECTED - "Collecté", "Collecte", "Payé"
+  // 4. PAYMENT COLLECTED - "Collecté", "Collecte", "Payé"
   if (
     lowerText.match(/^collect[ée]?/i) ||
     lowerText.match(/^pay[ée]?/i) ||
@@ -144,7 +166,7 @@ function parseStatusUpdate(text, isReply = false) {
     };
   }
 
-  // 4. PICKUP - "Vient chercher", "Pickup", "Ramassage", "Elle passe chercher"
+  // 5. PICKUP - "Vient chercher", "Pickup", "Ramassage", "Elle passe chercher"
   if (
     lowerText.includes("vient chercher") ||
     lowerText.includes("passe chercher") ||
@@ -162,7 +184,7 @@ function parseStatusUpdate(text, isReply = false) {
     };
   }
 
-  // 5. NUMBER CHANGE - "Changer numéro", "Nouveau numéro" (check before modify since "change" matches both)
+  // 6. NUMBER CHANGE - "Changer numéro", "Nouveau numéro" (check before modify since "change" matches both)
   if (
     lowerText.includes("changer numéro") ||
     lowerText.includes("nouveau numéro") ||
@@ -191,7 +213,7 @@ function parseStatusUpdate(text, isReply = false) {
     };
   }
 
-  // 6. MODIFY - "Modifier", "Change", "Modif" (check after number_change)
+  // 7. MODIFY - "Modifier", "Change", "Modif" (check after number_change)
   if (
     lowerText.match(/^modifier|^modif/i) ||
     lowerText.includes("modifier") ||
@@ -216,7 +238,7 @@ function parseStatusUpdate(text, isReply = false) {
     };
   }
 
-  // 7. PENDING/WAIT - "En attente", "Attente"
+  // 8. PENDING/WAIT - "En attente", "Attente"
   if (
     lowerText.includes("en attente") ||
     lowerText.includes("attente") ||

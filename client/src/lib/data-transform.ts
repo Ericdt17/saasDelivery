@@ -36,6 +36,7 @@ function mapStatusToFrontend(backendStatus: string): StatutLivraison {
     pickup: "pickup",
     expedition: "expedition",
     cancelled: "annulé",
+    client_absent: "client_absent",
   };
 
   return statusMap[backendStatus.toLowerCase()] || "en_cours";
@@ -52,6 +53,7 @@ export function mapStatusToBackend(frontendStatus: StatutLivraison): string {
     pickup: "pickup",
     expedition: "expedition",
     annulé: "cancelled",
+    client_absent: "client_absent",
   };
 
   return statusMap[frontendStatus] || "pending";
@@ -90,15 +92,46 @@ function deriveType(backendDelivery: BackendDelivery): TypeLivraison {
 export function transformDeliveryToFrontend(
   backend: BackendDelivery
 ): FrontendDelivery {
-  const restant = Math.max(0, backend.amount_due - backend.amount_paid);
+  // Calculate restant (remaining amount)
+  // For "delivered" status: restant should be 0 (completely paid)
+  // For "failed" status: restant should be 0 (cannot collect anymore)
+  // For other statuses: restant = amount_due - amount_paid
+  const backendStatus = backend.status?.toLowerCase();
+  const isDelivered = backendStatus === "delivered";
+  const isFailed = backendStatus === "failed";
+  
+  // Convertir explicitement en nombres pour éviter les problèmes avec les strings PostgreSQL
+  // PostgreSQL retourne les DECIMAL/NUMERIC comme des strings en JavaScript
+  const amountDue = typeof backend.amount_due === 'number' 
+    ? backend.amount_due 
+    : (backend.amount_due !== null && backend.amount_due !== undefined 
+        ? parseFloat(String(backend.amount_due)) || 0 
+        : 0);
+  
+  const amountPaid = typeof backend.amount_paid === 'number'
+    ? backend.amount_paid
+    : (backend.amount_paid !== null && backend.amount_paid !== undefined
+        ? parseFloat(String(backend.amount_paid)) || 0
+        : 0);
+  
+  const restant = isDelivered || isFailed
+    ? 0 // Delivered or failed: no remaining amount
+    : Math.max(0, amountDue - amountPaid);
+
+  // Convertir delivery_fee aussi
+  const deliveryFee = backend.delivery_fee !== null && backend.delivery_fee !== undefined
+    ? (typeof backend.delivery_fee === 'number' 
+        ? backend.delivery_fee 
+        : parseFloat(String(backend.delivery_fee)) || undefined)
+    : undefined;
 
   return {
     id: backend.id,
     telephone: backend.phone || "",
     quartier: backend.quartier || "",
     produits: backend.items || "",
-    montant_total: backend.amount_due || 0,
-    montant_encaisse: backend.amount_paid || 0,
+    montant_total: amountDue,
+    montant_encaisse: amountPaid,
     restant: restant,
     statut: mapStatusToFrontend(backend.status),
     type: deriveType(backend),
@@ -108,6 +141,7 @@ export function transformDeliveryToFrontend(
     carrier: backend.carrier || null,
     group_id: backend.group_id || null,
     agency_id: backend.agency_id || null,
+    frais_livraison: deliveryFee,
   };
 }
 
@@ -145,6 +179,10 @@ export function transformDeliveryToBackend(
 
   if (frontend.instructions !== undefined) {
     backend.notes = frontend.instructions;
+  }
+
+  if (frontend.frais_livraison !== undefined) {
+    backend.delivery_fee = frontend.frais_livraison;
   }
 
   // If type is expedition, we might want to set carrier

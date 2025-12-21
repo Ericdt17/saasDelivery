@@ -118,12 +118,13 @@ function createSqliteQueries(db) {
       agency_id,
       group_id,
       whatsapp_message_id,
+      delivery_fee,
     } = data;
 
     const result = await query(
       `INSERT INTO deliveries 
-        (phone, customer_name, items, amount_due, amount_paid, status, quartier, notes, carrier, agency_id, group_id, whatsapp_message_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        (phone, customer_name, items, amount_due, amount_paid, status, quartier, notes, carrier, agency_id, group_id, whatsapp_message_id, delivery_fee)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         phone,
         customer_name,
@@ -137,6 +138,7 @@ function createSqliteQueries(db) {
         agency_id || null,
         group_id || null,
         whatsapp_message_id || null,
+        delivery_fee !== undefined && delivery_fee !== null ? Math.round(parseFloat(delivery_fee) * 100) / 100 : null,
       ]
     );
 
@@ -834,6 +836,13 @@ function createSqliteQueries(db) {
     );
   }
 
+  async function deleteDelivery(id) {
+    return await query(
+      "DELETE FROM deliveries WHERE id = ?",
+      [id]
+    );
+  }
+
   return {
     type: "sqlite",
     initSchema,
@@ -851,6 +860,7 @@ function createSqliteQueries(db) {
     getDailyStats,
     searchDeliveries,
     saveHistory,
+    deleteDelivery,
     // Agency queries
     createAgency,
     getAgencyById,

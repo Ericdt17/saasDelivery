@@ -77,12 +77,13 @@ function createPostgresQueries(pool) {
       agency_id,
       group_id,
       whatsapp_message_id,
+      delivery_fee,
     } = data;
 
     const res = await query(
       `INSERT INTO deliveries 
-        (phone, customer_name, items, amount_due, amount_paid, status, quartier, notes, carrier, agency_id, group_id, whatsapp_message_id)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        (phone, customer_name, items, amount_due, amount_paid, status, quartier, notes, carrier, agency_id, group_id, whatsapp_message_id, delivery_fee)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
         RETURNING id`,
       [
         phone,
@@ -97,6 +98,7 @@ function createPostgresQueries(pool) {
         agency_id || null,
         group_id || null,
         whatsapp_message_id || null,
+        delivery_fee !== undefined && delivery_fee !== null ? Math.round(parseFloat(delivery_fee) * 100) / 100 : null,
       ]
     );
 
@@ -801,6 +803,14 @@ function createPostgresQueries(pool) {
     return { changes: result.changes || 0 };
   }
 
+  async function deleteDelivery(id) {
+    const result = await query(
+      "DELETE FROM deliveries WHERE id = $1 RETURNING id",
+      [id]
+    );
+    return { changes: result.changes || 0 };
+  }
+
   return {
     type: "postgres",
     query,
@@ -818,6 +828,7 @@ function createPostgresQueries(pool) {
     getDailyStats,
     searchDeliveries,
     saveHistory,
+    deleteDelivery,
     // Agency queries
     createAgency,
     getAgencyById,

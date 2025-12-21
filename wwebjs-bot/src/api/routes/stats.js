@@ -36,7 +36,7 @@ function validateDate(dateString) {
 // GET /api/v1/stats/daily - Get daily statistics
 router.get("/daily", async (req, res, next) => {
   try {
-    const { date, group_id } = req.query;
+    const { date, group_id, agency_id: queryAgencyId } = req.query;
 
     // Debug: Log user info
     console.log("[Stats API] User info:", {
@@ -67,6 +67,10 @@ router.get("/daily", async (req, res, next) => {
           : req.user.userId;
 
       console.log("[Stats API] Using agencyId:", agency_id);
+    } else if (req.user && req.user.role === "super_admin" && queryAgencyId) {
+      // Super admin can filter by agency_id if provided in query
+      agency_id = parseInt(queryAgencyId);
+      console.log("[Stats API] Super admin filtering by agencyId:", agency_id);
     }
 
     const stats = await getDeliveryStats(

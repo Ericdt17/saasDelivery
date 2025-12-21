@@ -4,6 +4,8 @@
  */
 
 import { useContext } from "react";
+import { useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { AuthContext } from "@/contexts/AuthContext";
 import {
   DropdownMenu,
@@ -14,12 +16,14 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { LogOut, User, Shield } from "lucide-react";
+import { getAgencyMe } from "@/services/agencies";
 
 export function Header() {
   // Use useContext directly to avoid hook error if context is not available
   const authContext = useContext(AuthContext);
+  const navigate = useNavigate();
   
   if (!authContext) {
     return null;
@@ -29,6 +33,14 @@ export function Header() {
 
   if (!user) return null;
 
+  // Load agency data to get logo - only for agency admins (not super admins)
+  const { data: agency } = useQuery({
+    queryKey: ["agency", "me"],
+    queryFn: getAgencyMe,
+    retry: 1,
+    enabled: !isSuperAdmin && user?.role === "agency",
+  });
+
   const initials = user.name
     .split(" ")
     .map((n) => n[0])
@@ -37,8 +49,8 @@ export function Header() {
     .slice(0, 2) || user.email[0].toUpperCase();
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="container mx-auto flex h-16 items-center justify-between px-4 md:px-6 lg:px-8">
+    <header className="sticky top-0 z-[100] w-full border-b bg-background backdrop-blur-sm">
+      <div className="container mx-auto flex h-[100px] items-center justify-between px-4 md:px-6 lg:px-8">
         <div className="flex items-center gap-2">
           <h1 className="text-lg font-semibold">LivSight</h1>
           {isSuperAdmin && (
@@ -56,8 +68,11 @@ export function Header() {
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="relative h-10 w-10 rounded-full">
-                <Avatar className="h-10 w-10">
+              <Button variant="ghost" className="relative h-[70px] w-[70px] rounded-full">
+                <Avatar className="h-[70px] w-[70px]">
+                  {agency?.logo_base64 ? (
+                    <AvatarImage src={agency.logo_base64} alt={agency.name || "Logo agence"} />
+                  ) : null}
                   <AvatarFallback>{initials}</AvatarFallback>
                 </Avatar>
               </Button>
@@ -77,7 +92,7 @@ export function Header() {
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem disabled>
+              <DropdownMenuItem onClick={() => navigate("/parametres")}>
                 <User className="mr-2 h-4 w-4" />
                 <span>Profil</span>
               </DropdownMenuItem>

@@ -36,8 +36,10 @@ import { calculateStatsFromDeliveries } from "@/lib/stats-utils";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { buildApiUrl } from "@/lib/api-config";
 
-const formatCurrency = (value: number) => {
-  return new Intl.NumberFormat("fr-FR").format(value) + " FCFA";
+const formatCurrency = (value: number | undefined | null) => {
+  // Handle NaN, undefined, null, or invalid numbers
+  const numValue = typeof value === 'number' && !isNaN(value) && isFinite(value) ? value : 0;
+  return new Intl.NumberFormat("fr-FR").format(numValue) + " FCFA";
 };
 
 const Rapports = () => {

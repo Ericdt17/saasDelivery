@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Package,
   CheckCircle,
@@ -15,16 +16,20 @@ import {
   Calendar,
   Receipt,
   HandCoins,
+  Building2,
+  X,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAgency } from "@/contexts/AgencyContext";
+import { getAgencies } from "@/services/agencies";
+import { Button } from "@/components/ui/button";
 import { StatCard } from "@/components/ui/stat-card";
 import { PerformanceChart } from "@/components/dashboard/PerformanceChart";
 import { EncaissementsChart } from "@/components/dashboard/EncaissementsChart";
 import { RecentDeliveries } from "@/components/dashboard/RecentDeliveries";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getDailyStats } from "@/services/stats";
 import { getDeliveries } from "@/services/deliveries";
@@ -33,14 +38,27 @@ import { getDateRangeLocal, getDateRangeForPreset, type DateRange } from "@/lib/
 import { calculateStatsFromDeliveries } from "@/lib/stats-utils";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 
-const formatCurrency = (value: number) => {
-  return new Intl.NumberFormat("fr-FR").format(value) + " F";
+const formatCurrency = (value: number | undefined | null) => {
+  // Handle NaN, undefined, null, or invalid numbers
+  const numValue = typeof value === 'number' && !isNaN(value) && isFinite(value) ? value : 0;
+  return new Intl.NumberFormat("fr-FR").format(numValue) + " F";
 };
 
 const Index = () => {
   const { user, isSuperAdmin } = useAuth();
+  const { selectedAgencyId, setSelectedAgencyId } = useAgency();
+  const navigate = useNavigate();
   const [period, setPeriod] = useState<"jour" | "semaine" | "mois">("jour");
   const [dateRange, setDateRange] = useState<DateRange>(() => getDateRangeForPreset("today"));
+
+  // Fetch agencies for super admin to show selected agency name
+  const { data: agencies = [] } = useQuery({
+    queryKey: ["agencies"],
+    queryFn: getAgencies,
+    enabled: isSuperAdmin,
+  });
+
+  const selectedAgency = agencies.find(a => a.id === selectedAgencyId);
 
   // Check if it's a single day (for daily stats)
   const isSingleDay = dateRange.startDate === dateRange.endDate;
@@ -54,8 +72,8 @@ const Index = () => {
     error: dailyStatsError,
     refetch: refetchDailyStats,
   } = useQuery({
-    queryKey: ["dailyStats", dateRange.startDate],
-    queryFn: () => getDailyStats(dateRange.startDate, null),
+    queryKey: ["dailyStats", dateRange.startDate, selectedAgencyId],
+    queryFn: () => getDailyStats(dateRange.startDate, null, selectedAgencyId || undefined),
     enabled: isSingleDay,
     retry: 2,
     refetchOnWindowFocus: false,
@@ -80,6 +98,7 @@ const Index = () => {
       "dashboard",
       dateRange.startDate,
       dateRange.endDate,
+      selectedAgencyId,
     ],
     queryFn: () =>
       getDeliveries({
@@ -89,6 +108,7 @@ const Index = () => {
         endDate: dateRange.endDate,
         sortBy: "created_at",
         sortOrder: "DESC",
+        agency_id: selectedAgencyId || undefined,
       }),
     enabled: !isSingleDay,
     retry: 2,
@@ -111,6 +131,7 @@ const Index = () => {
       "dashboard-day",
       dateRange.startDate,
       dateRange.endDate,
+      selectedAgencyId,
     ],
     queryFn: () =>
       getDeliveries({
@@ -120,6 +141,7 @@ const Index = () => {
         endDate: dateRange.endDate,
         sortBy: "created_at",
         sortOrder: "DESC",
+        agency_id: selectedAgencyId || undefined,
       }),
     enabled: isSingleDay,
     retry: 2,
@@ -134,21 +156,25 @@ const Index = () => {
       const dayStats = calculateStatsFromDeliveries(dayDeliveries);
       
       if (dailyStats) {
-        // For day view: dailyStats.montantEncaisse is NET (from backend total_collected)
-        // Calculate brut = NET + tarifs (from deliveries)
-        const montantBrut = (dailyStats.montantEncaisse || 0) + (dayStats.totalTarifs || 0);
+        // For day view:
+        // - Use dailyStats for counts (from backend, more accurate)
+        // - Use dayStats for amounts (calculated from deliveries with correct tariff logic)
+        // - dayStats.montantEncaisse is already brut (amount_paid + delivery_fee for delivered)
+        // - dayStats.montantRestant is already 0 for delivered deliveries
+        // - dayStats.totalTarifs is sum of delivery_fee for delivered deliveries
+        // - dayStats.montantNetEncaisse is montantEncaisse - totalTarifs (amount to reverse)
         return {
           totalLivraisons: dailyStats.totalLivraisons,
           livreesReussies: dailyStats.livreesReussies,
           echecs: dailyStats.echecs,
           enCours: dailyStats.enCours,
-          pickups: dailyStats.pickups,
-          expeditions: dailyStats.expeditions,
-          montantEncaisse: montantBrut, // Montant brut (NET + tarifs)
-          montantRestant: dayStats.montantRestant, // Use calculated restant from deliveries (takes tariff into account)
-          chiffreAffaires: montantBrut + dayStats.montantRestant,
-          totalTarifs: dayStats.totalTarifs, // Calculate from deliveries
-          montantNetEncaisse: dailyStats.montantEncaisse, // Montant NET (après tarifs)
+          pickups: dayStats.pickups,
+          expeditions: dayStats.expeditions,
+          montantEncaisse: Number(dayStats.montantEncaisse) || 0, // Brut amount (from deliveries calculation)
+          montantRestant: Number(dayStats.montantRestant) || 0, // Remaining (0 for delivered)
+          chiffreAffaires: (Number(dayStats.montantEncaisse) || 0) + (Number(dayStats.montantRestant) || 0),
+          totalTarifs: Number(dayStats.totalTarifs) || 0, // Sum of delivery_fee for delivered
+          montantNetEncaisse: Number(dayStats.montantNetEncaisse) || 0, // Net amount to reverse (montantEncaisse - totalTarifs)
         };
       }
       // Jour sans dailyStats -> utiliser les livraisons
@@ -159,11 +185,11 @@ const Index = () => {
         enCours: dayStats.enCours,
         pickups: dayStats.pickups,
         expeditions: dayStats.expeditions,
-        montantEncaisse: dayStats.montantEncaisse, // Already brut from calculateStatsFromDeliveries
-        montantRestant: dayStats.montantRestant,
-        chiffreAffaires: dayStats.chiffreAffaires,
-        totalTarifs: dayStats.totalTarifs,
-        montantNetEncaisse: dayStats.montantNetEncaisse, // Montant NET (après tarifs)
+        montantEncaisse: Number(dayStats.montantEncaisse) || 0, // Already brut from calculateStatsFromDeliveries
+        montantRestant: Number(dayStats.montantRestant) || 0,
+        chiffreAffaires: Number(dayStats.chiffreAffaires) || 0,
+        totalTarifs: Number(dayStats.totalTarifs) || 0,
+        montantNetEncaisse: Number(dayStats.montantNetEncaisse) || 0, // Montant NET (après tarifs)
       };
     }
 
@@ -278,18 +304,54 @@ const Index = () => {
   return (
     <div className="space-y-6 pb-8">
       {/* Header */}
-      <div className="flex flex-col gap-1">
-        <h1 className="text-2xl md:text-3xl font-bold">Tableau de bord</h1>
-        <p className="text-muted-foreground">
-          {isSuperAdmin
-            ? "Vue d'ensemble de toutes les agences"
-            : `Vue d'ensemble de votre agence${user?.name ? ` - ${user.name}` : ""}`}
-          {dateRange.startDate === dateRange.endDate ? (
-            <span className="ml-2">— {dateRange.startDate}</span>
-          ) : (
-            <span className="ml-2">— {dateRange.startDate} au {dateRange.endDate}</span>
-          )}
-        </p>
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-1">
+          <h1 className="text-2xl md:text-3xl font-bold">Tableau de bord</h1>
+          <p className="text-muted-foreground">
+            {isSuperAdmin
+              ? selectedAgency 
+                ? `Vue d'ensemble de l'agence ${selectedAgency.name}`
+                : "Vue d'ensemble de toutes les agences"
+              : `Vue d'ensemble de votre agence${user?.name ? ` - ${user.name}` : ""}`}
+            {dateRange.startDate === dateRange.endDate ? (
+              <span className="ml-2">— {dateRange.startDate}</span>
+            ) : (
+              <span className="ml-2">— {dateRange.startDate} au {dateRange.endDate}</span>
+            )}
+          </p>
+        </div>
+
+        {/* Agency Selector for Super Admin */}
+        {isSuperAdmin && (
+          <div className="flex items-center gap-4">
+            {selectedAgency ? (
+              <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary/10 border border-primary/20">
+                <Building2 className="w-4 h-4 text-primary" />
+                <span className="text-sm font-medium">{selectedAgency.name}</span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setSelectedAgencyId(null);
+                  }}
+                  className="h-6 w-6 p-0 hover:bg-primary/20"
+                >
+                  <X className="w-3 h-3" />
+                </Button>
+              </div>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => navigate("/agences")}
+                className="gap-2"
+              >
+                <Building2 className="w-4 h-4" />
+                Sélectionner une agence
+              </Button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Date Range Picker */}

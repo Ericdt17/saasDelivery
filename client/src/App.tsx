@@ -6,6 +6,7 @@ import { Routes, Route } from "react-router-dom";
 import { ErrorBoundary } from "@/components/errors/ErrorBoundary";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
+import { AgencyProvider } from "@/contexts/AgencyContext";
 import { handleError } from "@/lib/error-handler";
 import Login from "./pages/Login";
 import Index from "./pages/Index";
@@ -58,9 +59,10 @@ const App = () => (
     }}
   >
     <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
+      <AgencyProvider>
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
         <Routes>
           {/* Public route */}
           <Route path="/login" element={<Login />} />
@@ -95,7 +97,8 @@ const App = () => (
           </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>
-      </TooltipProvider>
+        </TooltipProvider>
+      </AgencyProvider>
     </QueryClientProvider>
   </ErrorBoundary>
 );

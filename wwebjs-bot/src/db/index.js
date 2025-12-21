@@ -193,6 +193,7 @@ const api = {
   findDeliveryByMessageId: queries.findDeliveryByMessageId,
   searchDeliveries: queries.searchDeliveries,
   saveHistory: queries.saveHistory,
+  deleteDelivery: queries.deleteDelivery,
   addHistory: (deliveryId, action, details, actor = "bot") => {
     // Backward compatibility: convert old signature (separate params) to new format (object)
     return queries.saveHistory({

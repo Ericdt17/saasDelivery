@@ -4,7 +4,7 @@
  * Each agency manages their own tariffs
  */
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getTariffs, createTariff, updateTariff, deleteTariff, type Tariff, type CreateTariffRequest, formatTariffAmount } from "@/services/tariffs";
 import { getAgencies, type Agency } from "@/services/agencies";
@@ -47,7 +47,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Receipt, Plus, Loader2, Trash2, Edit, Upload, FileSpreadsheet, FileText } from "lucide-react";
+import { Receipt, Plus, Loader2, Trash2, Edit, Upload, FileSpreadsheet, FileText, Search, Building2, X } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { importTariffs, type ImportResult } from "@/services/tariffs";
@@ -76,6 +76,8 @@ export default function Tarifs() {
     tarif_amount: 0,
     agency_id: undefined,
   });
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedAgencyFilter, setSelectedAgencyFilter] = useState<number | null>(null);
 
   const { data: tariffs = [], isLoading } = useQuery({
     queryKey: ["tariffs"],
@@ -88,6 +90,26 @@ export default function Tarifs() {
     queryFn: getAgencies,
     enabled: isSuperAdmin,
   });
+
+  // Filter tariffs by agency and quartier name
+  const filteredTariffs = useMemo(() => {
+    let filtered = tariffs;
+    
+    // Filtrer par agence si sélectionnée (super admin seulement)
+    if (isSuperAdmin && selectedAgencyFilter) {
+      filtered = filtered.filter((tariff) => tariff.agency_id === selectedAgencyFilter);
+    }
+    
+    // Filtrer par recherche de quartier
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase().trim();
+      filtered = filtered.filter((tariff) =>
+        tariff.quartier.toLowerCase().includes(query)
+      );
+    }
+    
+    return filtered;
+  }, [tariffs, searchQuery, selectedAgencyFilter, isSuperAdmin]);
 
   const createMutation = useMutation({
     mutationFn: createTariff,
@@ -557,6 +579,64 @@ export default function Tarifs() {
         </div>
       </div>
 
+      {/* Search Bar */}
+      <Card>
+        <CardContent className="pt-6">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              placeholder="Rechercher par nom de quartier..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Agency Filter (Super Admin only) */}
+      {isSuperAdmin && (
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-4">
+              <Label htmlFor="agency-filter" className="text-sm font-medium whitespace-nowrap flex items-center gap-2">
+                <Building2 className="w-4 h-4" />
+                Filtrer par agence:
+              </Label>
+              <Select
+                value={selectedAgencyFilter?.toString() || "all"}
+                onValueChange={(value) => {
+                  setSelectedAgencyFilter(value === "all" ? null : parseInt(value));
+                }}
+              >
+                <SelectTrigger className="w-[250px]">
+                  <SelectValue placeholder="Toutes les agences" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Toutes les agences</SelectItem>
+                  {agencies.map((agency) => (
+                    <SelectItem key={agency.id} value={agency.id.toString()}>
+                      {agency.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {selectedAgencyFilter && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSelectedAgencyFilter(null)}
+                  className="gap-2"
+                >
+                  <X className="w-4 h-4" />
+                  Réinitialiser
+                </Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Tariffs Table */}
       <Card>
         <CardHeader>
@@ -565,7 +645,9 @@ export default function Tarifs() {
             Liste des tarifs
           </CardTitle>
           <CardDescription>
-            {tariffs.length} tarif{tariffs.length > 1 ? "s" : ""} enregistré{tariffs.length > 1 ? "s" : ""}
+            {filteredTariffs.length} tarif{filteredTariffs.length > 1 ? "s" : ""} {searchQuery || selectedAgencyFilter ? "trouvé" : "enregistré"}{filteredTariffs.length > 1 ? "s" : ""}
+            {(searchQuery || selectedAgencyFilter) && filteredTariffs.length !== tariffs.length && ` sur ${tariffs.length}`}
+            {selectedAgencyFilter && ` pour l'agence ${agencies.find(a => a.id === selectedAgencyFilter)?.name}`}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -575,11 +657,15 @@ export default function Tarifs() {
                 <Skeleton key={i} className="h-12 w-full" />
               ))}
             </div>
-          ) : tariffs.length === 0 ? (
+          ) : filteredTariffs.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               <Receipt className="w-12 h-12 mx-auto mb-4 opacity-50" />
-              <p>Aucun tarif enregistré</p>
-              <p className="text-sm mt-2">Créez votre premier tarif pour commencer</p>
+              <p>{searchQuery ? "Aucun tarif trouvé" : "Aucun tarif enregistré"}</p>
+              <p className="text-sm mt-2">
+                {searchQuery 
+                  ? "Essayez avec un autre nom de quartier" 
+                  : "Créez votre premier tarif pour commencer"}
+              </p>
             </div>
           ) : (
             <div className="rounded-md border">
@@ -593,7 +679,7 @@ export default function Tarifs() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {tariffs.map((tariff, index) => (
+                  {filteredTariffs.map((tariff, index) => (
                     <TableRow key={tariff.id ?? `tariff-${index}`}>
                       {isSuperAdmin && (
                         <TableCell className="font-medium">

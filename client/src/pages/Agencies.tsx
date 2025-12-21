@@ -5,7 +5,9 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAgency } from "@/contexts/AgencyContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { getAgencies, createAgency, updateAgency, deleteAgency, generateAgencyCode, type Agency, type CreateAgencyRequest } from "@/services/agencies";
 import { Button } from "@/components/ui/button";
@@ -39,12 +41,14 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
-import { Building2, Plus, Edit, Trash2, Loader2, RefreshCw } from "lucide-react";
+import { Building2, Plus, Edit, Trash2, Loader2, RefreshCw, Eye } from "lucide-react";
 import { toast } from "sonner";
 import { Switch } from "@/components/ui/switch";
 
 function AgenciesPage() {
   const { isSuperAdmin } = useAuth();
+  const { selectedAgencyId, setSelectedAgencyId } = useAgency();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
@@ -331,8 +335,26 @@ function AgenciesPage() {
                 </TableRow>
               ) : (
                 agencies.map((agency) => (
-                  <TableRow key={agency.id}>
-                    <TableCell className="font-medium">{agency.name}</TableCell>
+                  <TableRow 
+                    key={agency.id}
+                    className={`cursor-pointer hover:bg-muted/50 transition-colors ${
+                      selectedAgencyId === agency.id ? "bg-primary/10 border-l-4 border-l-primary" : ""
+                    }`}
+                    onClick={() => {
+                      setSelectedAgencyId(agency.id);
+                      navigate("/");
+                    }}
+                  >
+                    <TableCell className="font-medium">
+                      <div className="flex items-center gap-2">
+                        {agency.name}
+                        {selectedAgencyId === agency.id && (
+                          <Badge variant="default" className="text-xs">
+                            Sélectionné
+                          </Badge>
+                        )}
+                      </div>
+                    </TableCell>
                     <TableCell>{agency.email}</TableCell>
                     <TableCell>
                       {agency.agency_code ? (
@@ -357,7 +379,18 @@ function AgenciesPage() {
                       {new Date(agency.created_at).toLocaleDateString("fr-FR")}
                     </TableCell>
                     <TableCell className="text-right">
-                      <div className="flex justify-end gap-2">
+                      <div className="flex justify-end gap-2" onClick={(e) => e.stopPropagation()}>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => {
+                            setSelectedAgencyId(agency.id);
+                            navigate("/");
+                          }}
+                          title="Voir le tableau de bord"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
                         <Button
                           variant="ghost"
                           size="icon"

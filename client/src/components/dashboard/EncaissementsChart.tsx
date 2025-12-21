@@ -9,16 +9,19 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
+import { useAgency } from "@/contexts/AgencyContext";
 import { getDeliveries } from "@/services/deliveries";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatDateLocal } from "@/lib/date-utils";
 
-const formatCurrency = (value: number) => {
+const formatCurrency = (value: number | undefined | null) => {
+  // Handle NaN, undefined, null, or invalid numbers
+  const numValue = typeof value === 'number' && !isNaN(value) && isFinite(value) ? value : 0;
   return (
     new Intl.NumberFormat("fr-FR", {
       style: "decimal",
       maximumFractionDigits: 0,
-    }).format(value) + " F"
+    }).format(numValue) + " F"
   );
 };
 
@@ -110,17 +113,19 @@ const calculateWeeklyEncaissements = (deliveries: any[]) => {
 
 export function EncaissementsChart() {
   const dateRange = useMemo(() => getLast7DaysRange(), []);
+  const { selectedAgencyId } = useAgency();
 
   // Fetch ALL recent deliveries (last 30 days) without date filter, then filter client-side
   // This is more reliable than server-side date filtering
   const { data: deliveriesData, isLoading } = useQuery({
-    queryKey: ["deliveries", "weekly-encaissements"],
+    queryKey: ["deliveries", "weekly-encaissements", selectedAgencyId],
     queryFn: () =>
       getDeliveries({
         page: 1,
         limit: 1000,
         sortBy: "created_at",
         sortOrder: "DESC",
+        agency_id: selectedAgencyId || undefined,
       }),
     retry: 2,
     refetchOnWindowFocus: false,

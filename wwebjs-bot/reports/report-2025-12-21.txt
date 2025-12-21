@@ -1,0 +1,80 @@
+📊 RAPPORT QUOTIDIEN - 2025-12-21
+==================================================
+
+📦 STATISTIQUES:
+   Total de livraisons: 9
+   ✅ Livrées: 3
+   ⏳ En attente: 4
+   📦 Pickup: 0
+   ❌ Échecs: 2
+   💰 Total dû: 1060000 FCFA
+   💵 Total collecté: 376500 FCFA
+   💸 Restant: 683500 FCFA
+
+📋 DÉTAILS DES LIVRAISONS (9):
+
+1. Livraison #84 ✅
+   📱 658478764
+   📦 Masque
+   💰 100000.00 FCFA (Payé: 98500.00 FCFA)
+   📍 Bonapriso
+   📊 delivered
+
+2. Livraison #83 ⏳
+   📱 658478764
+   📦 Mask
+   💰 100000.00 FCFA
+   📍 Bonapriso
+   📊 pending
+
+3. Livraison #82 ⏳
+   📱 658478764
+   📦 Masque 
+   💰 100000.00 FCFA
+   📍 Bonapriso
+   📊 pending
+
+4. Livraison #81 ⏳
+   📱 658478784
+   📦 Masque 
+   💰 100000.00 FCFA
+   📍 Bonapriso
+   📊 pending
+
+5. Livraison #80 ⏳
+   📱 658478764
+   📦 Masque 
+   💰 100000.00 FCFA
+   📍 Bonapriso
+   📊 pending
+
+6. Livraison #78 ✅
+   📱 651074050
+   📦 Crème solaire, Un masque
+   💰 140000.00 FCFA (Payé: 139000.00 FCFA)
+   📍 Akwa
+   📊 delivered
+
+7. Livraison #77 ❌
+   📱 651074050
+   📦 Crème solaire, Un masque
+   💰 140000.00 FCFA
+   📍 Akwa
+   📊 failed
+
+8. Livraison #66 ❌
+   📱 651074050
+   📦 Crème solaire, Un masque
+   💰 140000.00 FCFA
+   📍 Akwa
+   📊 failed
+
+9. Livraison #55 ✅
+   📱 651074089
+   📦 Crème solaire, Un masque
+   💰 140000.00 FCFA (Payé: 139000.00 FCFA)
+   📍 Akwa
+   📊 delivered
+
+==================================================
+Généré le 21/12/2025 20:00:01

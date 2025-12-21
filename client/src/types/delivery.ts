@@ -17,7 +17,8 @@ export type StatutLivraison =
   | "échec"
   | "pickup"
   | "expedition"
-  | "annulé";
+  | "annulé"
+  | "client_absent";
 
 /**
  * Delivery type values
@@ -33,7 +34,8 @@ export type BackendStatus =
   | "failed"
   | "pickup"
   | "expedition"
-  | "cancelled";
+  | "cancelled"
+  | "client_absent";
 
 /**
  * Modification type values
@@ -69,6 +71,7 @@ export interface BackendDelivery {
   carrier?: string | null;
   group_id?: number | null;
   agency_id?: number | null;
+  delivery_fee?: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -139,6 +142,7 @@ export interface FrontendDelivery {
   group_id?: number | null;
   group_name?: string | null;
   agency_id?: number | null;
+  frais_livraison?: number;
 }
 
 /**

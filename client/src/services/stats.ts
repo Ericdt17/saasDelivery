@@ -14,11 +14,13 @@ export type { BackendStats, FrontendStats };
  * Get daily statistics
  * @param date - Optional date string (YYYY-MM-DD format). If not provided, returns today's stats
  * @param group_id - Optional group ID to filter stats by group
+ * @param agency_id - Optional agency ID to filter stats by agency (for super admin)
  */
-export async function getDailyStats(date?: string, group_id?: number | null): Promise<FrontendStats> {
+export async function getDailyStats(date?: string, group_id?: number | null, agency_id?: number): Promise<FrontendStats> {
   const params: Record<string, string | number> = {};
   if (date) params.date = date;
   if (group_id) params.group_id = group_id;
+  if (agency_id) params.agency_id = agency_id;
   const response = await apiGet<BackendStats>(
     API_ENDPOINTS.STATS_DAILY,
     Object.keys(params).length > 0 ? params : undefined

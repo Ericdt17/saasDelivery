@@ -71,20 +71,22 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { getGroupById } from "@/services/groups";
 import { getDailyStats } from "@/services/stats";
-import { buildApiUrl } from "@/lib/api-config";
-import { getDeliveries, type GetDeliveriesParams, type CreateDeliveryRequest } from "@/services/deliveries";
+import { buildApiUrl, API_ENDPOINTS } from "@/lib/api-config";
+import { getDeliveries, type GetDeliveriesParams, type CreateDeliveryRequest, updateDelivery } from "@/services/deliveries";
 import { apiDelete } from "@/services/api";
 import { searchDeliveries } from "@/services/search";
 import { DeliveryForm } from "@/components/deliveries/DeliveryForm";
 import { calculateStatsFromDeliveries } from "@/lib/stats-utils";
 import { getDateRangeLocal, getDateRangeForPreset, type DateRange } from "@/lib/date-utils";
-import { type StatutLivraison, type TypeLivraison } from "@/lib/data-transform";
+import { mapStatusToBackend, type StatutLivraison, type TypeLivraison } from "@/lib/data-transform";
 import { toast } from "sonner";
 import type { FrontendDelivery } from "@/types/delivery";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 
-const formatCurrency = (value: number) => {
-  return new Intl.NumberFormat("fr-FR").format(value) + " F";
+const formatCurrency = (value: number | undefined | null) => {
+  // Handle NaN, undefined, null, or invalid numbers
+  const numValue = typeof value === 'number' && !isNaN(value) && isFinite(value) ? value : 0;
+  return new Intl.NumberFormat("fr-FR").format(numValue) + " F";
 };
 
 const formatDate = (dateString: string) => {
@@ -178,6 +180,7 @@ export default function GroupDetail() {
     const statusMap: Record<string, string> = {
       "en_cours": "pending",
       "livré": "delivered",
+      "client_absent": "client_absent",
       "échec": "failed",
       "pickup": "pickup",
       "expedition": "expedition",
@@ -193,6 +196,8 @@ export default function GroupDetail() {
       sortBy: "created_at",
       sortOrder: "DESC",
       group_id: groupId!,
+      startDate: dateRange.startDate,
+      endDate: dateRange.endDate,
     };
 
     const backendStatus = mapStatusFilter(statutFilter);
@@ -205,7 +210,7 @@ export default function GroupDetail() {
     }
 
     return params;
-  }, [page, statutFilter, search, groupId]);
+  }, [page, statutFilter, search, groupId, dateRange.startDate, dateRange.endDate]);
 
   const {
     data: tableDeliveriesData,
@@ -243,7 +248,13 @@ export default function GroupDetail() {
       const dayStats = calculateStatsFromDeliveries(dayDeliveries);
 
       if (dailyStats) {
-        const montantBrut = (dailyStats.montantEncaisse || 0) + (dayStats.totalTarifs || 0);
+        // For single day view:
+        // - Use dailyStats for counts (from backend, more accurate)
+        // - Use dayStats for amounts (calculated from deliveries with correct tariff logic)
+        // - dayStats.montantEncaisse is already brut (amount_paid + delivery_fee for delivered)
+        // - dayStats.montantRestant is already 0 for delivered deliveries
+        // - dayStats.totalTarifs is sum of delivery_fee for delivered deliveries
+        // - dayStats.montantNetEncaisse is montantEncaisse - totalTarifs (amount to reverse)
         return {
           totalLivraisons: dailyStats.totalLivraisons,
           livreesReussies: dailyStats.livreesReussies,
@@ -251,19 +262,21 @@ export default function GroupDetail() {
           enCours: dailyStats.enCours,
           pickups: dailyStats.pickups,
           expeditions: dailyStats.expeditions,
-          montantEncaisse: montantBrut,
-          montantRestant: dailyStats.montantRestant,
-          chiffreAffaires: montantBrut + dailyStats.montantRestant,
-          totalTarifs: dayStats.totalTarifs || 0,
-          montantNetEncaisse: dailyStats.montantEncaisse || 0,
+          montantEncaisse: Number(dayStats.montantEncaisse) || 0, // Brut amount (from deliveries calculation)
+          montantRestant: Number(dayStats.montantRestant) || 0, // Remaining (0 for delivered)
+          chiffreAffaires: (Number(dayStats.montantEncaisse) || 0) + (Number(dayStats.montantRestant) || 0),
+          totalTarifs: Number(dayStats.totalTarifs) || 0, // Sum of delivery_fee for delivered
+          montantNetEncaisse: Number(dayStats.montantNetEncaisse) || 0, // Net amount to reverse (montantEncaisse - totalTarifs)
         };
       }
+      // Fallback: use dayStats directly if dailyStats is not available
       return {
         ...dayStats,
-        montantNetEncaisse: dayStats.montantEncaisse - (dayStats.totalTarifs || 0),
+        montantNetEncaisse: dayStats.montantNetEncaisse || (dayStats.montantEncaisse - (dayStats.totalTarifs || 0)),
       };
     }
 
+    // For non-single day (semaine/mois): use deliveries data directly
     if (deliveriesData) {
       return calculateStatsFromDeliveries(deliveriesData.deliveries);
     }
@@ -326,9 +339,9 @@ export default function GroupDetail() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: number) => {
-      const response = await apiDelete(`/api/v1/deliveries/${id}`);
+      const response = await apiDelete(API_ENDPOINTS.DELIVERY_BY_ID(id));
       if (!response.success) {
-        throw new Error(response.error || "Erreur lors de la suppression");
+        throw new Error(response.message || response.error || "Erreur lors de la suppression");
       }
       return response;
     },
@@ -346,6 +359,78 @@ export default function GroupDetail() {
     },
     onError: (error: any) => {
       toast.error(error?.data?.message || error?.message || "Erreur lors de la suppression");
+    },
+  });
+
+  // Status update mutation (quick update from table)
+  const statusUpdateMutation = useMutation({
+    mutationFn: async ({ id, status }: { id: number; status: StatutLivraison }) => {
+      return updateDelivery(id, {
+        status: mapStatusToBackend(status),
+      });
+    },
+    onSuccess: async (updatedDelivery) => {
+      // Log pour debug
+      console.log("[Status Update] updatedDelivery reçu:", {
+        id: updatedDelivery?.id,
+        montant_total: updatedDelivery?.montant_total,
+        montant_encaisse: updatedDelivery?.montant_encaisse,
+        restant: updatedDelivery?.restant,
+        statut: updatedDelivery?.statut,
+      });
+
+      // Vérifier que updatedDelivery est valide avant de mettre à jour le cache
+      if (!updatedDelivery || !updatedDelivery.id) {
+        console.error("Invalid updatedDelivery:", updatedDelivery);
+        queryClient.invalidateQueries({ queryKey: ["deliveries", "group-table"] });
+        await refetchTableDeliveries();
+        toast.success("Statut mis à jour avec succès");
+        return;
+      }
+
+      // Mettre à jour UNIQUEMENT la query "group-table" avec la clé exacte
+      // Ne PAS invalider cette query pour éviter que le refetch écrase la mise à jour
+      queryClient.setQueryData(
+        ["deliveries", "group-table", apiParams],
+        (old: any) => {
+          if (!old || !old.deliveries) {
+            console.warn("[Status Update] Old data structure invalid:", old);
+            return old;
+          }
+          const updated = {
+            ...old,
+            deliveries: old.deliveries.map((d: FrontendDelivery) => 
+              d.id === updatedDelivery.id ? updatedDelivery : d
+            ),
+          };
+          console.log("[Status Update] Cache mis à jour pour group-table avec:", {
+            totalLivraisons: updated.deliveries.length,
+            livraisonUpdated: updated.deliveries.find(d => d.id === updatedDelivery.id),
+          });
+          return updated;
+        }
+      );
+      
+      // Invalider les autres queries pour refresh des stats (mais pas group-table)
+      queryClient.invalidateQueries({ queryKey: ["deliveries", "group"] });
+      queryClient.invalidateQueries({ queryKey: ["deliveries", "dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["deliveries", "reports"] });
+      queryClient.invalidateQueries({ queryKey: ["dailyStats"] });
+      
+      // Refetch les autres queries (mais pas group-table car on l'a déjà mise à jour)
+      try {
+        await Promise.all([
+          refetchDeliveries(),
+          isSingleDay ? refetchDailyStats() : Promise.resolve(),
+        ]);
+        toast.success("Statut mis à jour avec succès");
+      } catch (refetchError) {
+        console.error("Error refetching after status update:", refetchError);
+        toast.success("Statut mis à jour avec succès");
+      }
+    },
+    onError: (error: any) => {
+      toast.error(error?.data?.message || error?.message || "Erreur lors de la mise à jour du statut");
     },
   });
 
@@ -589,6 +674,7 @@ export default function GroupDetail() {
                         <SelectItem value="all">Tous statuts</SelectItem>
                         <SelectItem value="en_cours">En cours</SelectItem>
                         <SelectItem value="livré">Livré</SelectItem>
+                        <SelectItem value="client_absent">Client absent</SelectItem>
                         <SelectItem value="échec">Échec</SelectItem>
                         <SelectItem value="pickup">Pickup</SelectItem>
                         <SelectItem value="expedition">Expédition</SelectItem>
@@ -720,7 +806,32 @@ export default function GroupDetail() {
                               )}
                             </TableCell>
                             <TableCell>
-                              <StatusBadge statut={livraison.statut} />
+                              <Select
+                                value={livraison.statut}
+                                onValueChange={(value) => {
+                                  if (value !== livraison.statut) {
+                                    statusUpdateMutation.mutate({
+                                      id: livraison.id,
+                                      status: value as StatutLivraison,
+                                    });
+                                  }
+                                }}
+                                disabled={statusUpdateMutation.isPending}
+                              >
+                                <SelectTrigger className="w-[140px] h-8 border-none shadow-none hover:bg-muted/50 p-1">
+                                  <SelectValue>
+                                    <StatusBadge statut={livraison.statut} />
+                                  </SelectValue>
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="en_cours">En cours</SelectItem>
+                                  <SelectItem value="livré">Livré</SelectItem>
+                                  <SelectItem value="client_absent">Client absent</SelectItem>
+                                  <SelectItem value="échec">Échec</SelectItem>
+                                  <SelectItem value="pickup">Pickup</SelectItem>
+                                  <SelectItem value="expedition">Expédition</SelectItem>
+                                </SelectContent>
+                              </Select>
                             </TableCell>
                             <TableCell className="hidden lg:table-cell">
                               <span className="text-sm text-muted-foreground">
@@ -814,9 +925,32 @@ export default function GroupDetail() {
           <DeliveryForm
             delivery={undefined}
             groupId={groupId!}
-            onSuccess={() => {
+            onSuccess={async () => {
               setIsCreateDialogOpen(false);
-              refetchTableDeliveries();
+              toast.success("Livraison créée avec succès");
+              
+              // Petit délai pour s'assurer que le backend a bien enregistré
+              await new Promise(resolve => setTimeout(resolve, 300));
+              
+              // Invalider toutes les queries pertinentes (sans exact pour matcher toutes les variantes)
+              queryClient.invalidateQueries({ queryKey: ["deliveries"] });
+              queryClient.invalidateQueries({ queryKey: ["deliveries", "group"] });
+              queryClient.invalidateQueries({ queryKey: ["deliveries", "group-table"] });
+              queryClient.invalidateQueries({ queryKey: ["deliveries", "dashboard"] });
+              queryClient.invalidateQueries({ queryKey: ["deliveries", "reports"] });
+              queryClient.invalidateQueries({ queryKey: ["dailyStats"] });
+              
+              // Refetch explicite de toutes les queries concernées
+              try {
+                await Promise.all([
+                  refetchTableDeliveries(),
+                  refetchDeliveries(),
+                  isSingleDay ? refetchDailyStats() : Promise.resolve(),
+                ]);
+              } catch (error) {
+                console.error("Error refetching after creation:", error);
+                // Même en cas d'erreur, les queries seront invalidées et rechargées au prochain accès
+              }
             }}
             onCancel={() => setIsCreateDialogOpen(false)}
           />

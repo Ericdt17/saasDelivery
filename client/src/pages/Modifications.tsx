@@ -24,6 +24,8 @@ import { Search, History, ArrowRight, Phone, DollarSign, Package, MapPin, Plus, 
 import { getDeliveries } from "@/services/deliveries";
 import { getDeliveryHistory } from "@/services/deliveries";
 import { toast } from "sonner";
+import { getDateRangeForPreset, type DateRange } from "@/lib/date-utils";
+import { DateRangePicker } from "@/components/ui/date-range-picker";
 
 const formatDate = (dateString: string) => {
   return new Date(dateString).toLocaleDateString('fr-FR', {
@@ -106,6 +108,30 @@ const mapActionToType = (action: string, details: string | null): string | null 
   return 'produits';
 };
 
+// Helper function to format currency
+const formatCurrency = (value: number | undefined | null) => {
+  const numValue = typeof value === 'number' && !isNaN(value) && isFinite(value) ? value : 0;
+  return new Intl.NumberFormat('fr-FR').format(numValue) + " FCFA";
+};
+
+// Helper function to translate status
+const translateStatus = (status: string): string => {
+  const statusMap: Record<string, string> = {
+    "pending": "En cours",
+    "delivered": "Livré",
+    "failed": "Échec",
+    "pickup": "Pickup",
+    "expedition": "Expédition",
+    "cancelled": "Annulé",
+    "client_absent": "Client absent",
+    "en_cours": "En cours",
+    "livré": "Livré",
+    "échec": "Échec",
+    "annulé": "Annulé",
+  };
+  return statusMap[status.toLowerCase()] || status;
+};
+
 // Extract old/new values from history details
 const extractModificationValues = (action: string, details: string | null, delivery: any): { old: string; new: string } => {
   let oldValue = '';
@@ -114,23 +140,63 @@ const extractModificationValues = (action: string, details: string | null, deliv
   if (details) {
     try {
       const parsed = JSON.parse(details);
-      // If details is JSON, try to extract meaningful values
-      if (typeof parsed === 'object') {
-        // For updates, details might contain the update data
-        newValue = JSON.stringify(parsed);
-        oldValue = 'Ancienne valeur';
+      
+      // Si c'est un objet JSON, extraire old_value et new_value
+      if (typeof parsed === 'object' && parsed !== null) {
+        // Extraire le champ modifié
+        const field = parsed.field || parsed.champ || "";
+        
+        // Extraire les valeurs
+        oldValue = parsed.old_value !== undefined ? String(parsed.old_value) : 
+                   parsed.ancienne_valeur !== undefined ? String(parsed.ancienne_valeur) : 
+                   parsed.from !== undefined ? String(parsed.from) : "";
+        
+        newValue = parsed.new_value !== undefined ? String(parsed.new_value) : 
+                   parsed.nouvelle_valeur !== undefined ? String(parsed.nouvelle_valeur) : 
+                   parsed.to !== undefined ? String(parsed.to) : "";
+        
+        // Formater les valeurs selon le type de champ
+        if (field && (field.toLowerCase().includes("status") || field.toLowerCase().includes("statut"))) {
+          // Traduire les statuts
+          if (oldValue) oldValue = translateStatus(oldValue);
+          if (newValue) newValue = translateStatus(newValue);
+        } else if (field && (field.toLowerCase().includes("amount") || field.toLowerCase().includes("montant") || 
+                             field.toLowerCase().includes("fee") || field.toLowerCase().includes("frais"))) {
+          // Formater les montants
+          if (oldValue) {
+            const oldNum = parseFloat(oldValue);
+            if (!isNaN(oldNum)) oldValue = formatCurrency(oldNum);
+          }
+          if (newValue) {
+            const newNum = parseFloat(newValue);
+            if (!isNaN(newNum)) newValue = formatCurrency(newNum);
+          }
+        }
+        
+        // Si les valeurs sont toujours vides, essayer d'autres clés communes
+        if (!oldValue && !newValue) {
+          // Peut-être que les données sont structurées différemment
+          const keys = Object.keys(parsed);
+          if (keys.length > 0) {
+            // Utiliser les valeurs brutes si disponibles
+            newValue = JSON.stringify(parsed);
+          }
+        }
       } else {
+        // Si ce n'est pas un objet, utiliser directement
         newValue = String(parsed);
       }
     } catch {
       // Not JSON, use details as new value
       newValue = details;
-      oldValue = 'Ancienne valeur';
+      oldValue = '';
     }
-  } else {
-    // Use action description
-    newValue = action;
-    oldValue = 'Avant';
+  }
+  
+  // Si toujours vide, utiliser des valeurs par défaut
+  if (!oldValue && !newValue) {
+    oldValue = '';
+    newValue = action || 'Modification';
   }
   
   return { old: oldValue, new: newValue };
@@ -138,6 +204,7 @@ const extractModificationValues = (action: string, details: string | null, deliv
 
 const Modifications = () => {
   const navigate = useNavigate();
+  const [dateRange, setDateRange] = useState<DateRange>(() => getDateRangeForPreset("today"));
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
 
@@ -232,15 +299,25 @@ const Modifications = () => {
   // Filter modifications
   const filteredModifications = useMemo(() => {
     return modifications.filter((m) => {
+      // Date filter: check if modification date is within the selected range
+      const modificationDate = new Date(m.date);
+      const startDate = new Date(dateRange.startDate);
+      const endDate = new Date(dateRange.endDate);
+      // Set time to start/end of day for proper comparison
+      startDate.setHours(0, 0, 0, 0);
+      endDate.setHours(23, 59, 59, 999);
+      
+      const matchDate = modificationDate >= startDate && modificationDate <= endDate;
+      
       const matchSearch = 
         m.telephone?.toLowerCase().includes(search.toLowerCase()) ||
         m.ancienne_valeur.toLowerCase().includes(search.toLowerCase()) ||
         m.nouvelle_valeur.toLowerCase().includes(search.toLowerCase()) ||
         m.auteur.toLowerCase().includes(search.toLowerCase());
       const matchType = typeFilter === "all" || m.type === typeFilter;
-      return matchSearch && matchType;
+      return matchDate && matchSearch && matchType;
     });
-  }, [modifications, search, typeFilter]);
+  }, [modifications, search, typeFilter, dateRange.startDate, dateRange.endDate]);
 
   const isLoading = isLoadingDeliveries || historyQueries.isLoading;
   const isError = isErrorDeliveries || historyQueries.isError;
@@ -252,6 +329,11 @@ const Modifications = () => {
       <div>
         <h1 className="text-2xl md:text-3xl font-bold">Modifications</h1>
         <p className="text-muted-foreground">Historique des modifications apportées aux livraisons</p>
+      </div>
+
+      {/* Date Range Picker */}
+      <div className="flex flex-col gap-4">
+        <DateRangePicker value={dateRange} onChange={setDateRange} />
       </div>
 
       {/* Error State */}
