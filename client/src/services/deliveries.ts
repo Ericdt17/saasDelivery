@@ -29,6 +29,7 @@ export interface GetDeliveriesParams {
   sortBy?: string;
   sortOrder?: "ASC" | "DESC";
   group_id?: number | null;
+  agency_id?: number;
 }
 
 // Response type for getDeliveries
@@ -48,6 +49,8 @@ export interface CreateDeliveryRequest {
   quartier?: string;
   notes?: string;
   carrier?: string;
+  delivery_fee?: number;
+  group_id?: number | null;
 }
 
 export interface UpdateDeliveryRequest extends Partial<CreateDeliveryRequest> {}

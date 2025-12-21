@@ -1,21 +1,31 @@
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import { useAgency } from "@/contexts/AgencyContext";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ArrowRight, Phone, MapPin } from "lucide-react";
 import { getDeliveries } from "@/services/deliveries";
 
-const formatCurrency = (value: number) => {
-  return new Intl.NumberFormat('fr-FR').format(value) + " FCFA";
+const formatCurrency = (value: number | undefined | null) => {
+  // Handle NaN, undefined, null, or invalid numbers
+  const numValue = typeof value === 'number' && !isNaN(value) && isFinite(value) ? value : 0;
+  return new Intl.NumberFormat('fr-FR').format(numValue) + " FCFA";
 };
 
 export function RecentDeliveries() {
   const navigate = useNavigate();
+  const { selectedAgencyId } = useAgency();
   
   const { data, isLoading } = useQuery({
-    queryKey: ['recentDeliveries'],
-    queryFn: () => getDeliveries({ page: 1, limit: 5, sortBy: 'created_at', sortOrder: 'DESC' }),
+    queryKey: ['recentDeliveries', selectedAgencyId],
+    queryFn: () => getDeliveries({ 
+      page: 1, 
+      limit: 5, 
+      sortBy: 'created_at', 
+      sortOrder: 'DESC',
+      agency_id: selectedAgencyId || undefined,
+    }),
     refetchOnWindowFocus: false,
   });
 

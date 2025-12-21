@@ -11,7 +11,9 @@ const statutLabels: Record<StatutLivraison, string> = {
   "livré": "Livré",
   "échec": "Échec",
   "pickup": "Pickup",
-  "expedition": "Expédition"
+  "expedition": "Expédition",
+  "annulé": "Annulé",
+  "client_absent": "Client absent"
 };
 
 export function StatusBadge({ statut, className }: StatusBadgeProps) {

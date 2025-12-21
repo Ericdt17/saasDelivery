@@ -12,6 +12,7 @@ const {
   findDeliveryByMessageId,
   updateDelivery,
   addHistory,
+  getTariffByAgencyAndQuartier,
 } = require("./db");
 const { generateDailyReport } = require("./daily-report");
 const { getGroup, getAgencyIdForGroup } = require("./utils/group-manager");
@@ -465,6 +466,64 @@ client.on("message", async (msg) => {
         );
       }
 
+      // Helper function to apply tariff logic for status updates
+      const applyTariffForStatusUpdate = async (delivery, updateData, agencyId, forceAmountPaidToZero = false) => {
+        // Only apply tariff if agency_id and quartier are available
+        if (!agencyId || !delivery.quartier) {
+          console.log(`   ⚠️  Cannot apply tariff: agency_id or quartier missing`);
+          return;
+        }
+
+        // Check if delivery_fee is already set (manual fee)
+        const currentDeliveryFee = delivery.delivery_fee || 0;
+        
+        if (currentDeliveryFee > 0) {
+          // Tariff already applied, just proceed
+          if (forceAmountPaidToZero) {
+            updateData.amount_paid = 0;
+            console.log(`   💰 Tariff already applied (${currentDeliveryFee}), amount_paid forced to 0 (client_absent)`);
+          } else {
+            console.log(`   💰 Tariff already applied (${currentDeliveryFee})`);
+          }
+          return;
+        }
+
+        // Apply automatic tariff
+        try {
+          const tariffResult = await getTariffByAgencyAndQuartier(agencyId, delivery.quartier);
+          const tariff = Array.isArray(tariffResult) ? tariffResult[0] : tariffResult;
+
+          if (!tariff || !tariff.tarif_amount) {
+            console.log(`   ⚠️  No tariff found for quartier "${delivery.quartier}", status change allowed without tariff`);
+            if (forceAmountPaidToZero) {
+              updateData.amount_paid = 0;
+            }
+            return;
+          }
+
+          const tariffAmount = parseFloat(tariff.tarif_amount) || 0;
+          updateData.delivery_fee = tariffAmount;
+
+          if (forceAmountPaidToZero) {
+            // For client_absent: apply tariff but force amount_paid = 0
+            updateData.amount_paid = 0;
+            console.log(`   💰 Applied automatic tariff: ${tariffAmount} FCFA for quartier "${delivery.quartier}", amount_paid forced to 0 (client_absent)`);
+          } else {
+            // For delivered: apply tariff and calculate amount_paid
+            const currentAmountPaid = parseFloat(delivery.amount_paid) || 0;
+            const newAmountPaid = Math.max(0, Math.round((currentAmountPaid - tariffAmount) * 100) / 100);
+            updateData.amount_paid = newAmountPaid;
+            console.log(`   💰 Applied automatic tariff: ${tariffAmount} FCFA for quartier "${delivery.quartier}"`);
+            console.log(`   💵 Amount paid: ${currentAmountPaid} -> ${newAmountPaid} FCFA`);
+          }
+        } catch (tariffError) {
+          console.error(`   ❌ Error applying tariff: ${tariffError.message}`);
+          if (forceAmountPaidToZero) {
+            updateData.amount_paid = 0;
+          }
+        }
+      };
+
       // Only proceed if we have a delivery and status data
       if (delivery && statusData) {
         try {
@@ -478,6 +537,20 @@ client.on("message", async (msg) => {
               console.log(
                 `   ✅ Livraison #${delivery.id} marquée comme LIVRÉE`
               );
+              
+              // Apply tariff logic for "delivered"
+              await applyTariffForStatusUpdate(delivery, updateData, agencyId, false);
+              break;
+
+            case "client_absent":
+              updateData.status = "client_absent";
+              historyAction = "marked_client_absent";
+              console.log(
+                `   ⚠️  Livraison #${delivery.id} marquée comme CLIENT ABSENT`
+              );
+              
+              // Apply tariff logic for "client_absent" (tariff applied, amount_paid = 0)
+              await applyTariffForStatusUpdate(delivery, updateData, agencyId, true);
               break;
 
             case "failed":
@@ -486,6 +559,14 @@ client.on("message", async (msg) => {
               console.log(
                 `   ❌ Livraison #${delivery.id} marquée comme ÉCHEC`
               );
+              // Annuler le tarif et rembourser le montant si reçu
+              updateData.delivery_fee = 0;
+              const currentAmountPaidFailed = parseFloat(delivery.amount_paid) || 0;
+              if (currentAmountPaidFailed > 0) {
+                updateData.amount_paid = 0;
+                console.log(`   💰 Remboursement de ${currentAmountPaidFailed} F (amount_paid mis à 0)`);
+              }
+              console.log(`   🚫 Tarif annulé (delivery_fee mis à 0)`);
               break;
 
             case "payment":
@@ -518,12 +599,14 @@ client.on("message", async (msg) => {
                 `   💵 Total payé: ${newAmountPaid} FCFA / ${currentAmountDue} FCFA`
               );
 
-              // Auto-mark as delivered if fully paid
+              // Auto-mark as delivered if fully paid (apply tariff logic)
               if (newAmountPaid >= currentAmountDue) {
                 updateData.status = "delivered";
                 console.log(
                   `   ✅ Livraison complètement payée - marquée comme LIVRÉE`
                 );
+                // Apply tariff logic for "delivered" status
+                await applyTariffForStatusUpdate(delivery, updateData, agencyId, false);
               }
               break;
 

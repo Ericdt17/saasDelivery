@@ -104,3 +104,4 @@ console.log("\n" + "=".repeat(70));
 console.log("💡 TIP: Restart your server to see the database banner on startup");
 console.log("=".repeat(70) + "\n");
 
+

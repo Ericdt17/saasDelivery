@@ -264,3 +264,4 @@ VITE_API_BASE_URL=https://your-backend.onrender.com
 - Frontend must be rebuilt after changing `VITE_API_BASE_URL`
 - Backend must be redeployed after changing `ALLOWED_ORIGINS`
 
+

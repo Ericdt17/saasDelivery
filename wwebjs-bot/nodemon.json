@@ -1,13 +1,21 @@
 {
   "watch": ["src"],
   "ext": "js,json",
-  "ignore": ["node_modules", "auth", "data", "*.log", "qr-code.png"],
-  "delay": 1000
+  "ignore": [
+    "node_modules",
+    "auth",
+    "auth-dev",
+    "data",
+    "*.log",
+    "qr-code.png",
+    "reports"
+  ],
+  "delay": 1000,
+  "env": {
+    "NODE_ENV": "development"
+  },
+  "verbose": true
 }
-
-
-
-
 
 
 

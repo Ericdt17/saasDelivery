@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { type StatutLivraison, type TypeLivraison } from "@/lib/data-transform";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,23 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Table,
   TableBody,
@@ -32,15 +49,23 @@ import {
   PaginationPrevious,
   PaginationEllipsis,
 } from "@/components/ui/pagination";
-import { Search, Eye, Edit, CreditCard, Plus, AlertCircle, RefreshCw, ChevronLeft, ChevronRight, Users } from "lucide-react";
+import { Search, Eye, Edit, CreditCard, Plus, AlertCircle, RefreshCw, ChevronLeft, ChevronRight, Users, Trash2, Loader2 } from "lucide-react";
 import { getDeliveries, type GetDeliveriesParams } from "@/services/deliveries";
 import { searchDeliveries } from "@/services/search";
 import { getGroups } from "@/services/groups";
 import { mapStatusToBackend } from "@/lib/data-transform";
 import { toast } from "sonner";
+import { getDateRangeForPreset, type DateRange } from "@/lib/date-utils";
+import { DateRangePicker } from "@/components/ui/date-range-picker";
+import { DeliveryForm } from "@/components/deliveries/DeliveryForm";
+import { apiDelete } from "@/services/api";
+import { API_ENDPOINTS } from "@/lib/api-config";
+import type { FrontendDelivery } from "@/types/delivery";
 
-const formatCurrency = (value: number) => {
-  return new Intl.NumberFormat('fr-FR').format(value) + " F";
+const formatCurrency = (value: number | undefined | null) => {
+  // Handle NaN, undefined, null, or invalid numbers
+  const numValue = typeof value === 'number' && !isNaN(value) && isFinite(value) ? value : 0;
+  return new Intl.NumberFormat('fr-FR').format(numValue) + " F";
 };
 
 const formatDate = (dateString: string) => {
@@ -65,6 +90,7 @@ const mapStatusFilter = (frontendStatus: string): string | undefined => {
   const statusMap: Record<string, string> = {
     "en_cours": "pending",
     "livré": "delivered",
+    "client_absent": "client_absent",
     "échec": "failed",
     "pickup": "pickup",
     "expedition": "expedition",
@@ -74,12 +100,18 @@ const mapStatusFilter = (frontendStatus: string): string | undefined => {
 
 const Livraisons = () => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [dateRange, setDateRange] = useState<DateRange>(() => getDateRangeForPreset("today"));
   const [search, setSearch] = useState("");
   const [statutFilter, setStatutFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [quartierFilter, setQuartierFilter] = useState<string>("all");
   const [groupFilter, setGroupFilter] = useState<string>("all");
   const [page, setPage] = useState(1);
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [selectedDelivery, setSelectedDelivery] = useState<FrontendDelivery | null>(null);
   const limit = 20;
 
   // Fetch groups for filter dropdown
@@ -106,6 +138,8 @@ const Livraisons = () => {
       limit,
       sortBy: 'created_at',
       sortOrder: 'DESC',
+      startDate: dateRange.startDate,
+      endDate: dateRange.endDate,
     };
 
     // Map status filter
@@ -126,7 +160,7 @@ const Livraisons = () => {
     }
 
     return params;
-  }, [page, statutFilter, search, groupFilter]);
+  }, [page, statutFilter, search, groupFilter, dateRange.startDate, dateRange.endDate]);
 
   // Fetch deliveries
   const { 
@@ -136,7 +170,7 @@ const Livraisons = () => {
     error,
     refetch 
   } = useQuery({
-    queryKey: ['deliveries', apiParams],
+    queryKey: ['deliveries', apiParams, dateRange.startDate, dateRange.endDate],
     queryFn: () => {
       // If search is provided and not a phone number, use search API
       if (search && search.trim() && !/^[\d\s\+\-]+$/.test(search.trim())) {
@@ -187,6 +221,54 @@ const Livraisons = () => {
     setPage(1);
   };
 
+  // Delete mutation
+  const deleteMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const response = await apiDelete(API_ENDPOINTS.DELIVERY_BY_ID(id));
+      if (!response.success) {
+        throw new Error(response.message || response.error || "Erreur lors de la suppression");
+      }
+      return response;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["deliveries"] });
+      queryClient.invalidateQueries({ queryKey: ["delivery"] });
+      queryClient.invalidateQueries({ queryKey: ["dailyStats"] });
+      setIsDeleteDialogOpen(false);
+      setSelectedDelivery(null);
+      toast.success("Livraison supprimée avec succès");
+    },
+    onError: (error: any) => {
+      toast.error(error?.data?.message || error?.message || "Erreur lors de la suppression");
+    },
+  });
+
+  // Handlers
+  const handleCreate = () => {
+    setIsCreateDialogOpen(true);
+  };
+
+  const handleEdit = (delivery: FrontendDelivery) => {
+    setSelectedDelivery(delivery);
+    setIsEditDialogOpen(true);
+  };
+
+  const handleDelete = (delivery: FrontendDelivery) => {
+    setSelectedDelivery(delivery);
+    setIsDeleteDialogOpen(true);
+  };
+
+  const confirmDelete = () => {
+    if (selectedDelivery) {
+      deleteMutation.mutate(selectedDelivery.id);
+    }
+  };
+
+  const refetchDeliveries = () => {
+    queryClient.invalidateQueries({ queryKey: ["deliveries"] });
+    queryClient.invalidateQueries({ queryKey: ["dailyStats"] });
+  };
+
   return (
     <div className="space-y-6 pb-8">
       {/* Header */}
@@ -195,10 +277,15 @@ const Livraisons = () => {
           <h1 className="text-2xl md:text-3xl font-bold">Livraisons</h1>
           <p className="text-muted-foreground">Gérez toutes vos livraisons</p>
         </div>
-        <Button className="gap-2">
+        <Button className="gap-2" onClick={handleCreate}>
           <Plus className="w-4 h-4" />
           Nouvelle livraison
         </Button>
+      </div>
+
+      {/* Date Range Picker */}
+      <div className="flex flex-col gap-4">
+        <DateRangePicker value={dateRange} onChange={setDateRange} />
       </div>
 
       {/* Filters */}
@@ -231,6 +318,7 @@ const Livraisons = () => {
                 <SelectItem value="all">Tous statuts</SelectItem>
                 <SelectItem value="en_cours">En cours</SelectItem>
                 <SelectItem value="livré">Livré</SelectItem>
+                <SelectItem value="client_absent">Client absent</SelectItem>
                 <SelectItem value="échec">Échec</SelectItem>
                 <SelectItem value="pickup">Pickup</SelectItem>
                 <SelectItem value="expedition">Expédition</SelectItem>
@@ -320,20 +408,20 @@ const Livraisons = () => {
 
       {/* Table */}
       <div className="stat-card overflow-hidden p-0">
-        <div className="overflow-x-auto">
+        <div>
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/50">
-                <TableHead className="font-semibold">Téléphone</TableHead>
-                <TableHead className="font-semibold hidden md:table-cell">Produits</TableHead>
-                <TableHead className="font-semibold hidden lg:table-cell">Quartier</TableHead>
-                <TableHead className="font-semibold hidden xl:table-cell">Groupe</TableHead>
-                <TableHead className="font-semibold text-right">Montant</TableHead>
-                <TableHead className="font-semibold text-right hidden sm:table-cell">Encaissé</TableHead>
-                <TableHead className="font-semibold text-right hidden sm:table-cell">Reste</TableHead>
-                <TableHead className="font-semibold">Statut</TableHead>
-                <TableHead className="font-semibold hidden lg:table-cell">Type</TableHead>
-                <TableHead className="font-semibold text-right">Actions</TableHead>
+                <TableHead className="font-semibold w-[130px]">Téléphone</TableHead>
+                <TableHead className="font-semibold w-[200px]">Produits</TableHead>
+                <TableHead className="font-semibold w-[130px]">Quartier</TableHead>
+                <TableHead className="font-semibold w-[140px]">Groupe</TableHead>
+                <TableHead className="font-semibold text-right w-[110px]">Montant</TableHead>
+                <TableHead className="font-semibold text-right w-[110px]">Encaissé</TableHead>
+                <TableHead className="font-semibold text-right w-[110px]">Reste</TableHead>
+                <TableHead className="font-semibold w-[100px]">Statut</TableHead>
+                <TableHead className="font-semibold w-[100px]">Type</TableHead>
+                <TableHead className="font-semibold text-right w-[140px]">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -341,15 +429,15 @@ const Livraisons = () => {
                 Array.from({ length: 5 }).map((_, i) => (
                   <TableRow key={i}>
                     <TableCell><Skeleton className="h-4 w-24" /></TableCell>
-                    <TableCell className="hidden md:table-cell"><Skeleton className="h-4 w-32" /></TableCell>
-                    <TableCell className="hidden lg:table-cell"><Skeleton className="h-4 w-20" /></TableCell>
-                    <TableCell className="hidden xl:table-cell"><Skeleton className="h-4 w-24" /></TableCell>
+                    <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                    <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                    <TableCell><Skeleton className="h-4 w-24" /></TableCell>
                     <TableCell className="text-right"><Skeleton className="h-4 w-16 ml-auto" /></TableCell>
-                    <TableCell className="text-right hidden sm:table-cell"><Skeleton className="h-4 w-16 ml-auto" /></TableCell>
-                    <TableCell className="text-right hidden sm:table-cell"><Skeleton className="h-4 w-16 ml-auto" /></TableCell>
+                    <TableCell className="text-right"><Skeleton className="h-4 w-16 ml-auto" /></TableCell>
+                    <TableCell className="text-right"><Skeleton className="h-4 w-16 ml-auto" /></TableCell>
                     <TableCell><Skeleton className="h-6 w-20" /></TableCell>
-                    <TableCell className="hidden lg:table-cell"><Skeleton className="h-4 w-16" /></TableCell>
-                    <TableCell className="text-right"><Skeleton className="h-8 w-8 ml-auto" /></TableCell>
+                    <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+                    <TableCell className="text-right"><Skeleton className="h-8 w-24 ml-auto" /></TableCell>
                   </TableRow>
                 ))
               ) : filteredLivraisons.length === 0 ? (
@@ -366,11 +454,11 @@ const Livraisons = () => {
                     onClick={() => navigate(`/livraisons/${livraison.id}`)}
                   >
                     <TableCell className="font-medium">{livraison.telephone}</TableCell>
-                    <TableCell className="max-w-[200px] truncate hidden md:table-cell">
+                    <TableCell className="max-w-[200px] truncate">
                       {livraison.produits}
                     </TableCell>
-                    <TableCell className="hidden lg:table-cell">{livraison.quartier}</TableCell>
-                    <TableCell className="hidden xl:table-cell">
+                    <TableCell>{livraison.quartier}</TableCell>
+                    <TableCell>
                       {livraison.group_id && groupMap.has(livraison.group_id) ? (
                         <Badge variant="outline" className="gap-1">
                           <Users className="h-3 w-3" />
@@ -383,10 +471,10 @@ const Livraisons = () => {
                     <TableCell className="text-right font-medium">
                       {formatCurrency(livraison.montant_total)}
                     </TableCell>
-                    <TableCell className="text-right text-success hidden sm:table-cell">
+                    <TableCell className="text-right text-success">
                       {formatCurrency(livraison.montant_encaisse)}
                     </TableCell>
-                    <TableCell className="text-right hidden sm:table-cell">
+                    <TableCell className="text-right">
                       {livraison.restant > 0 ? (
                         <span className="text-warning font-medium">{formatCurrency(livraison.restant)}</span>
                       ) : (
@@ -396,7 +484,7 @@ const Livraisons = () => {
                     <TableCell>
                       <StatusBadge statut={livraison.statut} />
                     </TableCell>
-                    <TableCell className="hidden lg:table-cell">
+                    <TableCell>
                       <span className="text-sm text-muted-foreground">
                         {typeLabels[livraison.type]}
                       </span>
@@ -408,14 +496,27 @@ const Livraisons = () => {
                           size="icon" 
                           className="h-8 w-8"
                           onClick={() => navigate(`/livraisons/${livraison.id}`)}
+                          title="Voir les détails"
                         >
                           <Eye className="w-4 h-4" />
                         </Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 hidden sm:flex">
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-8 w-8"
+                          onClick={() => handleEdit(livraison)}
+                          title="Modifier"
+                        >
                           <Edit className="w-4 h-4" />
                         </Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 hidden md:flex">
-                          <CreditCard className="w-4 h-4" />
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-8 w-8 text-destructive hover:text-destructive"
+                          onClick={() => handleDelete(livraison)}
+                          title="Supprimer"
+                        >
+                          <Trash2 className="w-4 h-4" />
                         </Button>
                       </div>
                     </TableCell>
@@ -497,6 +598,79 @@ const Livraisons = () => {
           <p>{filteredLivraisons.length} livraison(s) trouvée(s)</p>
         </div>
       )}
+
+      {/* Create Dialog */}
+      <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Nouvelle livraison</DialogTitle>
+            <DialogDescription>
+              Créez une nouvelle livraison
+            </DialogDescription>
+          </DialogHeader>
+          <DeliveryForm
+            delivery={undefined}
+            onSuccess={() => {
+              setIsCreateDialogOpen(false);
+              refetchDeliveries();
+            }}
+            onCancel={() => setIsCreateDialogOpen(false)}
+          />
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Modifier la livraison</DialogTitle>
+            <DialogDescription>
+              Modifiez les informations de la livraison
+            </DialogDescription>
+          </DialogHeader>
+          {selectedDelivery && (
+            <DeliveryForm
+              delivery={selectedDelivery}
+              onSuccess={() => {
+                setIsEditDialogOpen(false);
+                setSelectedDelivery(null);
+                refetchDeliveries();
+              }}
+              onCancel={() => {
+                setIsEditDialogOpen(false);
+                setSelectedDelivery(null);
+              }}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Dialog */}
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Supprimer la livraison</AlertDialogTitle>
+            <AlertDialogDescription>
+              Êtes-vous sûr de vouloir supprimer cette livraison ? Cette action est irréversible.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteMutation.isPending}>
+              Annuler
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDelete}
+              disabled={deleteMutation.isPending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteMutation.isPending && (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              )}
+              Supprimer
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

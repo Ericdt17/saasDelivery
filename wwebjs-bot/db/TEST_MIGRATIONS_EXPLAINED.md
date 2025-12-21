@@ -99,3 +99,4 @@ You can clean up the `example_field` column later if you want, but it's not urge
 **Bottom line:** Your migrations are working correctly! The example migration is just documentation/example code. No action needed. ✅
 
 
+

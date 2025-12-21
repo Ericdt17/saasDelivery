@@ -5,7 +5,6 @@ import { StatCard } from "@/components/ui/stat-card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   BarChart,
   Bar,
@@ -14,12 +13,10 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  Legend,
 } from "recharts";
 import {
   FileText,
   Download,
-  Calendar,
   Package,
   CheckCircle,
   XCircle,
@@ -29,52 +26,36 @@ import {
   ArrowDownRight,
   AlertCircle,
   RefreshCw,
+  Receipt,
+  HandCoins,
 } from "lucide-react";
-import { getDailyStats } from "@/services/stats";
 import { getDeliveries } from "@/services/deliveries";
 import { toast } from "sonner";
-import { getDateRangeLocal, formatDateLocal } from "@/lib/date-utils";
+import { type DateRange, getDateRangeForPreset } from "@/lib/date-utils";
 import { calculateStatsFromDeliveries } from "@/lib/stats-utils";
+import { DateRangePicker } from "@/components/ui/date-range-picker";
+import { buildApiUrl } from "@/lib/api-config";
 
-const formatCurrency = (value: number) => {
-  return new Intl.NumberFormat("fr-FR").format(value) + " FCFA";
+const formatCurrency = (value: number | undefined | null) => {
+  // Handle NaN, undefined, null, or invalid numbers
+  const numValue = typeof value === 'number' && !isNaN(value) && isFinite(value) ? value : 0;
+  return new Intl.NumberFormat("fr-FR").format(numValue) + " FCFA";
 };
 
 const Rapports = () => {
   const { user, isSuperAdmin } = useAuth();
-  const [period, setPeriod] = useState<"jour" | "semaine" | "mois">("jour");
+  const [dateRange, setDateRange] = useState<DateRange>(() => getDateRangeForPreset("today"));
 
-  const dateRange = useMemo(() => getDateRangeLocal(period), [period]);
+  // Check if it's a single day (for chart display)
+  const isSingleDay = dateRange.startDate === dateRange.endDate;
 
-  // Fetch stats for today (for day view)
-  // Stats are automatically filtered by agency_id on backend
-  const {
-    data: dailyStats,
-    isLoading: isLoadingDailyStats,
-    isError: isErrorDailyStats,
-    error: dailyStatsError,
-    refetch: refetchDailyStats,
-  } = useQuery({
-    queryKey: ["dailyStats", dateRange.startDate],
-    queryFn: () => getDailyStats(dateRange.startDate, null),
-    enabled: period === "jour",
-    retry: 2,
-    refetchOnWindowFocus: false,
-    onError: (error) => {
-      toast.error("Erreur lors du chargement des statistiques", {
-        description:
-          error instanceof Error ? error.message : "Une erreur est survenue",
-      });
-    },
-  });
-
-  // Fetch deliveries for week/month periods
+  // Fetch deliveries for all periods
   const {
     data: deliveriesData,
-    isLoading: isLoadingDeliveries,
-    isError: isErrorDeliveries,
-    error: deliveriesError,
-    refetch: refetchDeliveries,
+    isLoading,
+    isError,
+    error,
+    refetch,
   } = useQuery({
     queryKey: ["deliveries", "reports", dateRange.startDate, dateRange.endDate],
     queryFn: () =>
@@ -86,7 +67,6 @@ const Rapports = () => {
         sortBy: "created_at",
         sortOrder: "DESC",
       }),
-    enabled: period !== "jour",
     retry: 2,
     refetchOnWindowFocus: false,
     onError: (error) => {
@@ -97,60 +77,37 @@ const Rapports = () => {
     },
   });
 
-  // Calculate current data based on period
+  // Calculate current data based on date range
   const currentData = useMemo(() => {
-    let stats;
-    if (period === "jour" && dailyStats) {
-      stats = {
-        totalLivraisons: dailyStats.totalLivraisons,
-        livreesReussies: dailyStats.livreesReussies,
-        echecs: dailyStats.echecs,
-        enCours: dailyStats.enCours,
-        pickups: dailyStats.pickups,
-        expeditions: dailyStats.expeditions,
-        montantEncaisse: dailyStats.montantEncaisse,
-        montantRestant: dailyStats.montantRestant,
-        chiffreAffaires: dailyStats.chiffreAffaires,
-      };
-    } else if (period !== "jour" && deliveriesData) {
-      stats = calculateStatsFromDeliveries(deliveriesData.deliveries);
-    } else {
-      stats = {
-        totalLivraisons: 0,
-        livreesReussies: 0,
-        echecs: 0,
-        enCours: 0,
-        pickups: 0,
-        expeditions: 0,
-        montantEncaisse: 0,
-        montantRestant: 0,
-        chiffreAffaires: 0,
+    if (deliveriesData?.deliveries) {
+      const stats = calculateStatsFromDeliveries(deliveriesData.deliveries);
+      // Convert to the format expected by Rapports page
+      return {
+        livraisons: stats.totalLivraisons,
+        livrees: stats.livreesReussies,
+        echecs: stats.echecs,
+        pickups: stats.pickups,
+        expeditions: stats.expeditions,
+        encaisse: stats.montantEncaisse, // Montant brut
+        restant: stats.montantRestant,
+        totalTarifs: stats.totalTarifs || 0,
+        montantNetEncaisse: stats.montantNetEncaisse || 0, // Montant NET (à reverser)
       };
     }
-
-    // Convert to the format expected by Rapports page (for backward compatibility)
+    
+    // Fallback empty stats
     return {
-      livraisons: stats.totalLivraisons,
-      livrees: stats.livreesReussies,
-      echecs: stats.echecs,
-      pickups: stats.pickups,
-      expeditions: stats.expeditions,
-      encaisse: stats.montantEncaisse,
-      restant: stats.montantRestant,
+      livraisons: 0,
+      livrees: 0,
+      echecs: 0,
+      pickups: 0,
+      expeditions: 0,
+      encaisse: 0,
+      restant: 0,
+      totalTarifs: 0,
+      montantNetEncaisse: 0,
     };
-  }, [period, dailyStats, deliveriesData]);
-
-  const isLoading =
-    period === "jour" ? isLoadingDailyStats : isLoadingDeliveries;
-  const isError = period === "jour" ? isErrorDailyStats : isErrorDeliveries;
-  const error = period === "jour" ? dailyStatsError : deliveriesError;
-  const refetch = period === "jour" ? refetchDailyStats : refetchDeliveries;
-
-  const periodLabels = {
-    jour: "Aujourd'hui",
-    semaine: "Cette semaine",
-    mois: "Ce mois",
-  };
+  }, [deliveriesData]);
 
   return (
     <div className="space-y-6 pb-8">
@@ -167,41 +124,34 @@ const Rapports = () => {
             <Download className="w-4 h-4" />
             Export CSV
           </Button>
-          <Button className="gap-2">
+          <Button 
+            className="gap-2"
+            onClick={() => {
+              const params = new URLSearchParams();
+              params.append("startDate", dateRange.startDate);
+              params.append("endDate", dateRange.endDate);
+              const url = buildApiUrl(`/api/v1/reports/pdf?${params.toString()}`);
+              window.open(url, "_blank");
+            }}
+          >
             <FileText className="w-4 h-4" />
             Export PDF
           </Button>
         </div>
       </div>
 
-      {/* Period Tabs */}
-      <Tabs
-        value={period}
-        onValueChange={(v) => setPeriod(v as typeof period)}
-        className="w-full"
-      >
-        <TabsList className="grid w-full max-w-md grid-cols-3">
-          <TabsTrigger value="jour" className="gap-2">
-            <Calendar className="w-4 h-4" />
-            Jour
-          </TabsTrigger>
-          <TabsTrigger value="semaine" className="gap-2">
-            <Calendar className="w-4 h-4" />
-            Semaine
-          </TabsTrigger>
-          <TabsTrigger value="mois" className="gap-2">
-            <Calendar className="w-4 h-4" />
-            Mois
-          </TabsTrigger>
-        </TabsList>
+      {/* Date Range Picker */}
+      <div className="flex flex-col gap-4">
+        <DateRangePicker value={dateRange} onChange={setDateRange} />
+      </div>
 
-        <TabsContent value={period} className="mt-6 space-y-6">
-          {/* Loading State */}
-          {isLoading && (
+      <div className="space-y-6">
+        {/* Loading State */}
+        {isLoading && (
             <div className="space-y-6">
               <Skeleton className="h-24 w-full" />
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                {Array.from({ length: 8 }).map((_, i) => (
+                {Array.from({ length: 10 }).map((_, i) => (
                   <div key={i} className="stat-card">
                     <Skeleton className="h-4 w-24 mb-2" />
                     <Skeleton className="h-8 w-32" />
@@ -212,8 +162,8 @@ const Rapports = () => {
             </div>
           )}
 
-          {/* Error State */}
-          {isError && !isLoading && (
+        {/* Error State */}
+        {isError && !isLoading && (
             <Alert variant="destructive">
               <AlertCircle className="h-4 w-4" />
               <AlertTitle>Erreur de chargement</AlertTitle>
@@ -244,14 +194,19 @@ const Rapports = () => {
                 <div className="flex items-center gap-2 mb-2">
                   <FileText className="w-5 h-5 text-primary" />
                   <h3 className="text-lg font-semibold">
-                    Rapport — {periodLabels[period]}
+                    Rapport — Période sélectionnée
                   </h3>
                 </div>
                 <p className="text-sm text-muted-foreground">
                   Résumé complet des activités pour la période sélectionnée
-                  {period !== "jour" && (
+                  {dateRange.startDate !== dateRange.endDate && (
                     <span className="ml-2">
                       ({dateRange.startDate} au {dateRange.endDate})
+                    </span>
+                  )}
+                  {dateRange.startDate === dateRange.endDate && (
+                    <span className="ml-2">
+                      ({dateRange.startDate})
                     </span>
                   )}
                 </p>
@@ -310,10 +265,22 @@ const Rapports = () => {
                   icon={ArrowDownRight}
                   variant="warning"
                 />
+                <StatCard
+                  title="Tarifs appliqués"
+                  value={formatCurrency(currentData.totalTarifs)}
+                  icon={Receipt}
+                  variant="info"
+                />
+                <StatCard
+                  title="À reverser aux groupes"
+                  value={formatCurrency(currentData.montantNetEncaisse || 0)}
+                  icon={HandCoins}
+                  variant="success"
+                />
               </div>
 
-              {/* Chart - Only show for week/month with data */}
-              {period !== "jour" &&
+              {/* Chart - Only show for date ranges (not single day) with data */}
+              {!isSingleDay &&
                 deliveriesData &&
                 deliveriesData.deliveries.length > 0 && (
                   <div className="stat-card">
@@ -414,8 +381,7 @@ const Rapports = () => {
               </div>
             </>
           )}
-        </TabsContent>
-      </Tabs>
+      </div>
     </div>
   );
 };

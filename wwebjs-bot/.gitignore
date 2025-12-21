@@ -10,7 +10,7 @@ node_modules/
 # WhatsApp session/auth data
 auth/
 auth-dev/
-
+.wwebjs_auth/
 # Database
 data/
 
@@ -27,4 +27,6 @@ Thumbs.db
 # Documentation (keep only README.md)
 *.md
 !README.md
+# WhatsApp Web JS sessions
+wwebjs-bot/.wwebjs_auth/
 

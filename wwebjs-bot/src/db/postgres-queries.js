@@ -77,12 +77,13 @@ function createPostgresQueries(pool) {
       agency_id,
       group_id,
       whatsapp_message_id,
+      delivery_fee,
     } = data;
 
     const res = await query(
       `INSERT INTO deliveries 
-        (phone, customer_name, items, amount_due, amount_paid, status, quartier, notes, carrier, agency_id, group_id, whatsapp_message_id)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        (phone, customer_name, items, amount_due, amount_paid, status, quartier, notes, carrier, agency_id, group_id, whatsapp_message_id, delivery_fee)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
         RETURNING id`,
       [
         phone,
@@ -97,6 +98,7 @@ function createPostgresQueries(pool) {
         agency_id || null,
         group_id || null,
         whatsapp_message_id || null,
+        delivery_fee !== undefined && delivery_fee !== null ? Math.round(parseFloat(delivery_fee) * 100) / 100 : null,
       ]
     );
 
@@ -171,6 +173,7 @@ function createPostgresQueries(pool) {
       "agency_id",
       "group_id",
       "whatsapp_message_id",
+      "delivery_fee",
     ];
 
     const fields = [];
@@ -185,7 +188,7 @@ function createPostgresQueries(pool) {
       
       // Round amount fields to 2 decimal places to ensure exact values
       let processedValue = value;
-      if ((key === "amount_due" || key === "amount_paid") && value != null) {
+      if ((key === "amount_due" || key === "amount_paid" || key === "delivery_fee") && value != null) {
         processedValue = Math.round(parseFloat(value) * 100) / 100;
       }
       
@@ -464,7 +467,7 @@ function createPostgresQueries(pool) {
 
   async function getAgencyById(id) {
     const result = await query(
-      `SELECT id, name, email, agency_code, role, is_active, created_at, updated_at 
+      `SELECT id, name, email, agency_code, role, is_active, address, phone, logo_base64, created_at, updated_at 
        FROM agencies 
        WHERE id = $1 LIMIT 1`,
       [id]
@@ -493,7 +496,7 @@ function createPostgresQueries(pool) {
     }
 
     const result = await query(
-      `SELECT id, name, email, agency_code, role, is_active, created_at, updated_at 
+      `SELECT id, name, email, agency_code, role, is_active, address, phone, logo_base64, created_at, updated_at 
        FROM agencies 
        WHERE UPPER(TRIM(agency_code)) = $1 AND is_active = true 
        LIMIT 1`,
@@ -506,7 +509,7 @@ function createPostgresQueries(pool) {
   async function getAllAgencies() {
     // Only return active agencies (is_active = true)
     return await query(
-      `SELECT id, name, email, agency_code, role, is_active, created_at, updated_at 
+      `SELECT id, name, email, agency_code, role, is_active, address, phone, logo_base64, created_at, updated_at 
        FROM agencies 
        WHERE is_active = true
        ORDER BY created_at DESC`
@@ -515,7 +518,7 @@ function createPostgresQueries(pool) {
 
   async function updateAgency(
     id,
-    { name, email, password_hash, role, is_active, agency_code }
+    { name, email, password_hash, role, is_active, agency_code, address, phone, logo_base64 }
   ) {
     const updates = [];
     const params = [];
@@ -551,6 +554,18 @@ function createPostgresQueries(pool) {
       params.push(normalizedCode);
     } else {
       console.log(`[Postgres UpdateAgency] agency_code is undefined, not updating`);
+    }
+    if (address !== undefined) {
+      updates.push(`address = $${paramIndex++}`);
+      params.push(address);
+    }
+    if (phone !== undefined) {
+      updates.push(`phone = $${paramIndex++}`);
+      params.push(phone);
+    }
+    if (logo_base64 !== undefined) {
+      updates.push(`logo_base64 = $${paramIndex++}`);
+      params.push(logo_base64);
     }
 
     if (updates.length === 0) {
@@ -680,6 +695,122 @@ function createPostgresQueries(pool) {
     return { changes: result.changes || 0 };
   }
 
+  // ============================================
+  // Tariff Queries
+  // ============================================
+
+  async function createTariff({
+    agency_id,
+    quartier,
+    tarif_amount,
+  }) {
+    const result = await query(
+      `INSERT INTO tariffs (agency_id, quartier, tarif_amount) 
+       VALUES ($1, $2, $3) RETURNING id`,
+      [agency_id, quartier, parseFloat(tarif_amount) || 0]
+    );
+    return result.id || result[0]?.id;
+  }
+
+  async function getTariffById(id) {
+    const result = await query(
+      `SELECT t.id, t.agency_id, t.quartier, t.tarif_amount, 
+              t.created_at, t.updated_at,
+              a.name as agency_name
+       FROM tariffs t
+       LEFT JOIN agencies a ON t.agency_id = a.id
+       WHERE t.id = $1 LIMIT 1`,
+      [id]
+    );
+    return result;
+  }
+
+  async function getTariffByAgencyAndQuartier(agency_id, quartier) {
+    const result = await query(
+      `SELECT t.id, t.agency_id, t.quartier, t.tarif_amount, 
+              t.created_at, t.updated_at
+       FROM tariffs t
+       WHERE t.agency_id = $1 AND t.quartier = $2 LIMIT 1`,
+      [agency_id, quartier]
+    );
+    return result;
+  }
+
+  async function getTariffsByAgency(agency_id) {
+    return await query(
+      `SELECT t.id, t.agency_id, t.quartier, t.tarif_amount, 
+              t.created_at, t.updated_at,
+              a.name as agency_name
+       FROM tariffs t
+       LEFT JOIN agencies a ON t.agency_id = a.id
+       WHERE t.agency_id = $1
+       ORDER BY t.quartier ASC`,
+      [agency_id]
+    );
+  }
+
+  async function getAllTariffs() {
+    return await query(
+      `SELECT t.id, t.agency_id, t.quartier, t.tarif_amount, 
+              t.created_at, t.updated_at,
+              a.name as agency_name
+       FROM tariffs t
+       LEFT JOIN agencies a ON t.agency_id = a.id
+       ORDER BY a.name ASC, t.quartier ASC`
+    );
+  }
+
+  async function updateTariff(
+    id,
+    { agency_id, quartier, tarif_amount }
+  ) {
+    const updates = [];
+    const params = [];
+    let paramIndex = 1;
+
+    if (agency_id !== undefined) {
+      updates.push(`agency_id = $${paramIndex++}`);
+      params.push(agency_id);
+    }
+    if (quartier !== undefined) {
+      updates.push(`quartier = $${paramIndex++}`);
+      params.push(quartier);
+    }
+    if (tarif_amount !== undefined) {
+      updates.push(`tarif_amount = $${paramIndex++}`);
+      params.push(parseFloat(tarif_amount) || 0);
+    }
+
+    if (updates.length === 0) {
+      return { changes: 0 };
+    }
+
+    updates.push(`updated_at = CURRENT_TIMESTAMP`);
+    params.push(id);
+
+    const sql = `UPDATE tariffs SET ${updates.join(", ")} WHERE id = $${paramIndex}`;
+    const result = await query(sql, params);
+
+    return { changes: result.changes || 0 };
+  }
+
+  async function deleteTariff(id) {
+    const result = await query(
+      `DELETE FROM tariffs WHERE id = $1`,
+      [id]
+    );
+
+    return { changes: result.changes || 0 };
+  }
+
+  async function deleteDelivery(id) {
+    const result = await query(
+      "DELETE FROM deliveries WHERE id = $1 RETURNING id",
+      [id]
+    );
+    return { changes: result.changes || 0 };
+  }
+
   return {
     type: "postgres",
     query,
@@ -697,6 +828,7 @@ function createPostgresQueries(pool) {
     getDailyStats,
     searchDeliveries,
     saveHistory,
+    deleteDelivery,
     // Agency queries
     createAgency,
     getAgencyById,
@@ -713,6 +845,14 @@ function createPostgresQueries(pool) {
     updateGroup,
     deleteGroup,
     hardDeleteGroup,
+    // Tariff queries
+    createTariff,
+    getTariffById,
+    getTariffByAgencyAndQuartier,
+    getTariffsByAgency,
+    getAllTariffs,
+    updateTariff,
+    deleteTariff,
     close: async () => pool.end(),
     getRawDb: () => pool,
     TIME_ZONE,

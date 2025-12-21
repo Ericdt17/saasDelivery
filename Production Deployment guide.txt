@@ -1,0 +1,767 @@
+# 🚀 Production Deployment Guide
+
+Complete step-by-step guide to deploy your SaaS Delivery app to production:
+
+- **Bot**: WhatsApp bot on VPS
+- **API**: Backend API on VPS (localhost:3001)
+- **Frontend**: React app on VPS (Nginx)
+- **Database**: PostgreSQL on Render
+
+---
+
+## 📋 Prerequisites
+
+- ✅ VPS with Ubuntu (your VPS: `157.173.118.238`)
+- ✅ PostgreSQL database on Render
+- ✅ SSH access to VPS
+- ✅ Domain name (optional, can use IP address)
+
+---
+
+## 🎯 Architecture Overview
+
+```
+Internet
+   │
+   └─→ VPS (157.173.118.238)
+         │
+         ├─→ Nginx (Port 80/443)
+         │     ├─→ /api/* → Proxy to localhost:3001
+         │     └─→ /* → Serve Frontend (React)
+         │
+         ├─→ WhatsApp Bot (PM2)
+         │     └─→ Calls API at localhost:3001
+         │
+         ├─→ Backend API (Port 3001, localhost only)
+         │     └─→ Connects to Render PostgreSQL
+         │
+         └─→ Render
+               └─→ PostgreSQL Database
+```
+
+**Benefits:**
+
+- ✅ Low latency (bot and API on same server)
+- ✅ No CORS issues (same origin)
+- ✅ Lower cost (no separate API service)
+- ✅ Simpler architecture
+- ✅ Better performance
+
+---
+
+## Step 1: Prepare VPS
+
+### 1.1 SSH into VPS
+
+```bash
+ssh root@157.173.118.238
+```
+
+### 1.2 Update System
+
+```bash
+sudo apt update && sudo apt upgrade -y
+```
+
+### 1.3 Install Required Software
+
+```bash
+# Install Node.js 18.x
+curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+sudo apt install -y nodejs
+
+# Install PM2 globally
+sudo npm install -g pm2
+
+# Install Nginx
+sudo apt install -y nginx
+
+# Install Git
+sudo apt install -y git
+
+# Verify installations
+node --version
+npm --version
+pm2 --version
+nginx -v
+```
+
+---
+
+## Step 2: Clone Repository
+
+### 2.1 Create Directory and Clone
+
+```bash
+# Create directory
+sudo mkdir -p /opt/saasDelivery
+cd /opt/saasDelivery
+
+# Clone your repository
+git clone <your-repo-url> wwebjs-bot
+
+# Navigate to project
+cd wwebjs-bot
+```
+
+### 2.2 Install Dependencies
+
+```bash
+# Install bot and API dependencies
+npm install
+
+# Install frontend dependencies
+cd client
+npm install
+cd ..
+```
+
+---
+
+## Step 3: Configure Environment Variables
+
+### 3.1 Create Production Environment File
+
+```bash
+cd /opt/saasDelivery/wwebjs-bot
+
+# Create production environment file
+nano .env.prod
+```
+
+Add the following (replace with your actual values):
+
+```env
+# Node Environment
+NODE_ENV=production
+
+# Database (Render PostgreSQL)
+DB_TYPE=postgres
+DATABASE_URL=postgresql://saas_delivery_db_user:Gryh4H17hHcGpaVu8tftB8V8IYdxyOzW@dpg-d4s9r7ggjchc73e8rdu0-a/saas_delivery_db
+
+# API Server (runs on VPS)
+API_PORT=3001
+
+# WhatsApp Bot
+WHATSAPP_SESSION_PATH=./sessions
+WHATSAPP_QR_PATH=./qr
+#GROUP_ID=your-group-id@g.us  # Optional: specific group, or leave empty for all groups
+
+# JWT Secret (generate a strong random string)
+JWT_SECRET=opensslrand-base6432`
+
+# Timezone
+TIME_ZONE=UTC
+
+# Logging
+LOG_LEVEL=info
+```
+
+**Important**:
+
+- Replace `DATABASE_URL` with your Render PostgreSQL **Internal Database URL**
+- Generate a strong `JWT_SECRET` (you can use: `openssl rand -base64 32`)
+- `GROUP_ID` is optional - leave empty to process all groups, or set specific group ID
+
+### 3.2 Save and Exit
+
+Press `Ctrl+X`, then `Y`, then `Enter`
+
+---
+
+## Step 4: Update PM2 Ecosystem Config
+
+### 4.1 Update ecosystem.config.js
+
+```bash
+cd /opt/saasDelivery/wwebjs-bot
+nano ecosystem.config.js
+```
+
+Replace with this configuration:
+
+```javascript
+/**
+ * PM2 Ecosystem Configuration
+ * Runs both WhatsApp Bot and API Server
+ */
+
+module.exports = {
+  apps: [
+    {
+      name: "whatsapp-bot",
+      script: "src/index.js",
+      instances: 1,
+      exec_mode: "fork",
+      env: {
+        NODE_ENV: "production",
+      },
+      autorestart: true,
+      watch: false,
+      max_memory_restart: "1G",
+      error_file: "./logs/bot-error.log",
+      out_file: "./logs/bot-out.log",
+      log_date_format: "YYYY-MM-DD HH:mm:ss Z",
+      env_file: ".env.prod",
+    },
+    {
+      name: "api-server",
+      script: "src/api/server.js",
+      instances: 1,
+      exec_mode: "fork",
+      env: {
+        NODE_ENV: "production",
+        PORT: 3001,
+      },
+      autorestart: true,
+      watch: false,
+      max_memory_restart: "1G",
+      error_file: "./logs/api-error.log",
+      out_file: "./logs/api-out.log",
+      log_date_format: "YYYY-MM-DD HH:mm:ss Z",
+      env_file: ".env.prod",
+    },
+  ],
+};
+```
+
+### 4.2 Create Logs Directory
+
+```bash
+mkdir -p logs
+```
+
+---
+
+## Step 5: Run Database Migrations
+
+### 5.1 Run Migrations (First Time Only)
+
+```bash
+cd /opt/saasDelivery/wwebjs-bot
+
+# Run database migrations
+npm run migrate
+
+# This will create all necessary tables in your Render PostgreSQL database
+# You should see: "✅ All migrations applied successfully!"
+```
+
+**Note**: Migrations only need to be run once, or when you add new migration files.
+
+---
+
+## Step 6: Start Services with PM2
+
+### 6.1 Start Both Services
+
+```bash
+cd /opt/saasDelivery/wwebjs-bot
+
+# Start both bot and API
+pm2 start ecosystem.config.js
+
+# Check status
+pm2 list
+
+# View logs
+pm2 logs
+```
+
+### 6.2 Save PM2 Configuration
+
+```bash
+# Save current process list
+pm2 save
+
+# Setup PM2 to start on boot
+pm2 startup
+# Follow the instructions it gives you (usually run a sudo command)
+```
+
+### 6.3 Verify Services are Running
+
+```bash
+# Check PM2 status
+pm2 list
+
+# Should show:
+# - whatsapp-bot (online)
+# - api-server (online)
+
+# Check API is accessible
+curl http://localhost:3001/api/v1/health
+
+# Check bot logs
+pm2 logs whatsapp-bot --lines 50
+```
+
+### 6.4 Scan QR Code for WhatsApp
+
+The bot will generate a QR code. You can:
+
+1. **View in terminal**: The QR code will appear in the terminal
+2. **View logs**: `pm2 logs whatsapp-bot` to see QR code
+3. **View QR file**: Check `./qr/qr.png` if it exists
+
+Scan the QR code with WhatsApp to connect the bot.
+
+---
+
+## Step 7: Build and Deploy Frontend
+
+### 7.1 Create Frontend Environment File
+
+```bash
+cd /opt/saasDelivery/wwebjs-bot/client
+
+# Create production environment file
+nano .env.production
+```
+
+**Important**: Since API is on the same server, use **empty or relative URLs**:
+
+```env
+# Empty = use relative URLs (recommended)
+VITE_API_BASE_URL=
+```
+
+Or if you prefer absolute URLs:
+
+```env
+# Use your VPS IP or domain
+VITE_API_BASE_URL=http://157.173.118.238
+```
+
+### 7.2 Build Frontend
+
+```bash
+# Build for production
+npm run build
+
+# Verify build
+ls -la dist/
+# Should see: index.html, assets/, etc.
+```
+
+### 7.3 Deploy to Nginx
+
+```bash
+# Create nginx directory
+sudo mkdir -p /var/www/frontend/dist
+
+# Copy built files
+sudo cp -r dist/* /var/www/frontend/dist/
+
+# Set permissions
+sudo chown -R www-data:www-data /var/www/frontend
+sudo chmod -R 755 /var/www/frontend
+
+# Verify
+ls -la /var/www/frontend/dist/
+# Should see index.html
+```
+
+---
+
+## Step 8: Configure Nginx
+
+### 8.1 Create Nginx Configuration
+
+```bash
+sudo nano /etc/nginx/sites-available/saas-delivery
+```
+
+Paste this configuration:
+
+```nginx
+# Upstream for local API server
+upstream local_api {
+    server 127.0.0.1:3001;
+    keepalive 64;
+}
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name 157.173.118.238;  # Replace with your domain if you have one
+
+    root /var/www/frontend/dist;
+    index index.html;
+
+    # Gzip compression
+    gzip on;
+    gzip_vary on;
+    gzip_min_length 1024;
+    gzip_types text/plain text/css text/xml text/javascript application/x-javascript application/xml+rss application/json application/javascript;
+
+    # Security headers
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
+    # API Proxy - Forward all /api/* requests to local API
+    location /api/ {
+        # Handle CORS preflight (OPTIONS requests)
+        if ($request_method = 'OPTIONS') {
+            add_header 'Access-Control-Allow-Origin' '*' always;
+            add_header 'Access-Control-Allow-Methods' 'GET, POST, PUT, DELETE, PATCH, OPTIONS' always;
+            add_header 'Access-Control-Allow-Headers' 'Authorization, Content-Type, X-Requested-With, Accept, Origin' always;
+            add_header 'Access-Control-Allow-Credentials' 'true' always;
+            add_header 'Access-Control-Max-Age' 86400 always;
+            add_header 'Content-Type' 'text/plain; charset=utf-8';
+            add_header 'Content-Length' 0;
+            return 204;
+        }
+
+        proxy_pass http://local_api;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection "";
+
+        # Timeouts
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+
+        # Buffer settings
+        proxy_buffering off;
+        proxy_request_buffering off;
+    }
+
+    # Cache static assets (MUST be before location /)
+    location ~* \.(jpg|jpeg|png|gif|ico|css|js|svg|woff|woff2|ttf|eot|map)$ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        access_log off;
+    }
+
+    # No cache for index.html
+    location = /index.html {
+        add_header Cache-Control "no-store, no-cache, must-revalidate, proxy-revalidate";
+        add_header Pragma "no-cache";
+        add_header Expires 0;
+    }
+
+    # React router fallback (MUST be last)
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # Deny access to hidden files
+    location ~ /\. {
+        deny all;
+        access_log off;
+        log_not_found off;
+    }
+}
+```
+
+### 8.2 Enable Site
+
+```bash
+# Create symlink
+sudo ln -s /etc/nginx/sites-available/saas-delivery /etc/nginx/sites-enabled/
+
+# Remove default site (optional)
+sudo rm /etc/nginx/sites-enabled/default
+
+# Test configuration
+sudo nginx -t
+
+# If test passes, reload nginx
+sudo systemctl reload nginx
+```
+
+---
+
+## Step 9: Verify Deployment
+
+### 9.1 Check Bot Status
+
+```bash
+# Check PM2 processes
+pm2 list
+
+# Should show both:
+# - whatsapp-bot (online)
+# - api-server (online)
+
+# Check bot logs
+pm2 logs whatsapp-bot --lines 50
+
+# Check API logs
+pm2 logs api-server --lines 50
+```
+
+### 9.2 Check API
+
+```bash
+# Test API directly (localhost)
+curl http://localhost:3001/api/v1/health
+
+# Test API through nginx
+curl http://localhost/api/v1/health
+
+# Both should return JSON response
+```
+
+### 9.3 Check Frontend
+
+```bash
+# Test locally
+curl -I http://localhost/
+
+# Should return 200 OK with HTML content
+
+# Test from browser
+# Open: http://157.173.118.238
+```
+
+### 9.4 Check Nginx Logs
+
+```bash
+# Access logs
+sudo tail -f /var/log/nginx/access.log
+
+# Error logs
+sudo tail -f /var/log/nginx/error.log
+```
+
+---
+
+## Step 10: Setup Auto-Deploy Script (Optional)
+
+### 10.1 Create Deployment Script
+
+```bash
+cd /opt/saasDelivery/wwebjs-bot
+
+nano deploy.sh
+```
+
+Add:
+
+```bash
+#!/bin/bash
+
+echo "=== Pulling latest changes ==="
+git pull origin main
+
+echo "=== Installing dependencies ==="
+npm install
+cd client && npm install && cd ..
+
+echo "=== Building frontend ==="
+cd client
+npm run build
+cd ..
+
+echo "=== Deploying frontend ==="
+sudo cp -r client/dist/* /var/www/frontend/dist/
+sudo chown -R www-data:www-data /var/www/frontend
+
+echo "=== Restarting services ==="
+pm2 restart all
+
+echo "=== Reloading nginx ==="
+sudo nginx -t && sudo systemctl reload nginx
+
+echo "=== Deployment complete ==="
+pm2 list
+```
+
+Make executable:
+
+```bash
+chmod +x deploy.sh
+```
+
+### 10.2 Use the Script
+
+```bash
+./deploy.sh
+```
+
+---
+
+## 🔧 Troubleshooting
+
+### Bot Not Connecting
+
+```bash
+# Check bot logs
+pm2 logs whatsapp-bot
+
+# Restart bot
+pm2 restart whatsapp-bot
+
+# Check QR code
+ls -la qr/
+```
+
+### API Not Working
+
+```bash
+# Check API status
+pm2 logs api-server
+
+# Test API directly
+curl http://localhost:3001/api/v1/health
+
+# Check if port 3001 is in use
+sudo netstat -tlnp | grep 3001
+
+# Restart API
+pm2 restart api-server
+```
+
+### Frontend Not Loading
+
+```bash
+# Check nginx status
+sudo systemctl status nginx
+
+# Check nginx config
+sudo nginx -t
+
+# Check frontend files
+ls -la /var/www/frontend/dist/
+
+# Check nginx error logs
+sudo tail -50 /var/log/nginx/error.log
+```
+
+### Database Connection Issues
+
+```bash
+# Check API logs for database errors
+pm2 logs api-server | grep -i database
+
+# Verify DATABASE_URL in .env.prod
+cat .env.prod | grep DATABASE_URL
+
+# Test database connection
+# (You may need to install psql client)
+```
+
+### Services Not Starting on Boot
+
+```bash
+# Re-run PM2 startup
+pm2 startup
+
+# Follow the instructions it gives you
+# Usually: sudo env PATH=$PATH:/usr/bin pm2 startup systemd -u root --hp /root
+```
+
+---
+
+## 📝 Maintenance Commands
+
+### Update Bot and API
+
+```bash
+cd /opt/saasDelivery/wwebjs-bot
+git pull
+npm install
+pm2 restart all
+```
+
+### Update Frontend
+
+```bash
+cd /opt/saasDelivery/wwebjs-bot/client
+git pull
+npm install
+npm run build
+sudo cp -r dist/* /var/www/frontend/dist/
+sudo chown -R www-data:www-data /var/www/frontend
+sudo systemctl reload nginx
+```
+
+### View Logs
+
+```bash
+# All logs
+pm2 logs
+
+# Bot logs only
+pm2 logs whatsapp-bot
+
+# API logs only
+pm2 logs api-server
+
+# Nginx logs
+sudo tail -f /var/log/nginx/error.log
+sudo tail -f /var/log/nginx/access.log
+```
+
+### Restart Services
+
+```bash
+# Restart all PM2 processes
+pm2 restart all
+
+# Restart specific service
+pm2 restart whatsapp-bot
+pm2 restart api-server
+
+# Restart nginx
+sudo systemctl restart nginx
+```
+
+### Monitor Resources
+
+```bash
+# PM2 monitoring
+pm2 monit
+
+# System resources
+htop
+# or
+top
+```
+
+---
+
+## ✅ Deployment Checklist
+
+- [ ] VPS prepared (Node.js, PM2, Nginx installed)
+- [ ] Repository cloned
+- [ ] Dependencies installed (bot, API, frontend)
+- [ ] Environment variables configured (.env.prod)
+- [ ] PM2 ecosystem.config.js updated (bot + API)
+- [ ] Bot started with PM2
+- [ ] API started with PM2
+- [ ] QR code scanned (WhatsApp connected)
+- [ ] Frontend built and deployed
+- [ ] Nginx configured and enabled
+- [ ] All services tested and working
+- [ ] PM2 startup configured
+- [ ] Deployment script created (optional)
+
+---
+
+## 🎉 You're Done!
+
+Your production deployment is complete:
+
+- **Bot**: Running on VPS with PM2
+- **API**: Running on VPS (localhost:3001) with PM2
+- **Frontend**: Served by Nginx on VPS
+- **Database**: PostgreSQL on Render
+
+**Access your app at:** `http://157.173.118.238`
+
+**Benefits of this architecture:**
+
+- ✅ Low latency (bot ↔ API on same server)
+- ✅ No CORS issues
+- ✅ Lower cost (no separate API service)
+- ✅ Simpler to manage
+- ✅ Better performance

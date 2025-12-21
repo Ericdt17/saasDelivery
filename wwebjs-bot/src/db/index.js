@@ -65,7 +65,7 @@ if (preferPostgres && hasDatabaseUrl) {
   console.log(`\n🗄️  DATABASE TYPE: ${dbInfo}`);
   console.log(`   Host: ${host}`);
   console.log(`   Database: ${dbName}`);
-  console.log(`   DATABASE_URL present: ${hasDatabaseUrl ? 'YES' : 'NO'}`);
+  console.log(`   DATABASE_URL present: ${hasDatabaseUrl ? "YES" : "NO"}`);
   console.log("   Status: Connecting...");
   client = createPostgresPool();
   queries = createPostgresQueries(client);
@@ -78,30 +78,49 @@ if (preferPostgres && hasDatabaseUrl) {
     try {
       const testQuery = "SELECT COUNT(*) as total FROM groups";
       const result = await queries.query(testQuery, []);
-      const count = dbType === "postgres" 
-        ? (Array.isArray(result) && result.length > 0 ? parseInt(result[0].total) : 0)
-        : (result ? parseInt(result.total) : 0);
+      const count =
+        dbType === "postgres"
+          ? Array.isArray(result) && result.length > 0
+            ? parseInt(result[0].total)
+            : 0
+          : result
+            ? parseInt(result.total)
+            : 0;
       console.log(`   📊 Database test: Found ${count} groups in database`);
-      
+
       // Also show active groups
-      const activeQuery = "SELECT COUNT(*) as total FROM groups WHERE is_active = true";
+      const activeQuery =
+        "SELECT COUNT(*) as total FROM groups WHERE is_active = true";
       const activeResult = await queries.query(activeQuery, []);
-      const activeCount = dbType === "postgres"
-        ? (Array.isArray(activeResult) && activeResult.length > 0 ? parseInt(activeResult[0].total) : 0)
-        : (activeResult ? parseInt(activeResult.total) : 0);
+      const activeCount =
+        dbType === "postgres"
+          ? Array.isArray(activeResult) && activeResult.length > 0
+            ? parseInt(activeResult[0].total)
+            : 0
+          : activeResult
+            ? parseInt(activeResult.total)
+            : 0;
       console.log(`   ✅ Active groups: ${activeCount}`);
-      
+
       // Show sample group IDs for debugging
-      const sampleQuery = "SELECT whatsapp_group_id, name, is_active FROM groups LIMIT 5";
+      const sampleQuery =
+        "SELECT whatsapp_group_id, name, is_active FROM groups LIMIT 5";
       const sampleResult = await queries.query(sampleQuery, []);
-      const samples = dbType === "postgres" 
-        ? (Array.isArray(sampleResult) ? sampleResult : [])
-        : (Array.isArray(sampleResult) ? sampleResult : [sampleResult].filter(Boolean));
-      
+      const samples =
+        dbType === "postgres"
+          ? Array.isArray(sampleResult)
+            ? sampleResult
+            : []
+          : Array.isArray(sampleResult)
+            ? sampleResult
+            : [sampleResult].filter(Boolean);
+
       if (samples.length > 0) {
         console.log(`   📋 Sample groups in database:`);
         samples.forEach((g, i) => {
-          console.log(`      ${i + 1}. ${g.name || 'Unnamed'} - ${g.whatsapp_group_id} (active: ${g.is_active})`);
+          console.log(
+            `      ${i + 1}. ${g.name || "Unnamed"} - ${g.whatsapp_group_id} (active: ${g.is_active})`
+          );
         });
       }
     } catch (error) {
@@ -174,6 +193,7 @@ const api = {
   findDeliveryByMessageId: queries.findDeliveryByMessageId,
   searchDeliveries: queries.searchDeliveries,
   saveHistory: queries.saveHistory,
+  deleteDelivery: queries.deleteDelivery,
   addHistory: (deliveryId, action, details, actor = "bot") => {
     // Backward compatibility: convert old signature (separate params) to new format (object)
     return queries.saveHistory({
@@ -199,6 +219,14 @@ const api = {
   updateGroup: queries.updateGroup,
   deleteGroup: queries.deleteGroup,
   hardDeleteGroup: queries.hardDeleteGroup,
+  // Tariff queries
+  createTariff: queries.createTariff,
+  getTariffById: queries.getTariffById,
+  getTariffByAgencyAndQuartier: queries.getTariffByAgencyAndQuartier,
+  getTariffsByAgency: queries.getTariffsByAgency,
+  getAllTariffs: queries.getAllTariffs,
+  updateTariff: queries.updateTariff,
+  deleteTariff: queries.deleteTariff,
   close: queries.close,
   getRawDb: queries.getRawDb,
 };
