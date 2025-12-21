@@ -26,3 +26,4 @@ CREATE INDEX IF NOT EXISTS idx_tariffs_agency_id ON tariffs(agency_id);
 -- Create index for faster lookups by quartier (for searches across agencies)
 CREATE INDEX IF NOT EXISTS idx_tariffs_quartier ON tariffs(quartier);
 
+

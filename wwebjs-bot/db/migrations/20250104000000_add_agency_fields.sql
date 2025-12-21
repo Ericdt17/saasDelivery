@@ -13,3 +13,4 @@ ALTER TABLE agencies ADD COLUMN IF NOT EXISTS phone VARCHAR(20);
 -- Add logo_base64 column (nullable TEXT - stores base64 encoded image)
 ALTER TABLE agencies ADD COLUMN IF NOT EXISTS logo_base64 TEXT;
 
+

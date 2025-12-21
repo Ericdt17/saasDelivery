@@ -1,0 +1,24 @@
+📊 RAPPORT QUOTIDIEN - 2025-12-20
+==================================================
+
+📦 STATISTIQUES:
+   Total de livraisons: 1
+   ✅ Livrées: 0
+   ⏳ En attente: 1
+   📦 Pickup: 0
+   ❌ Échecs: 0
+   💰 Total dû: 140000 FCFA
+   💵 Total collecté: 0 FCFA
+   💸 Restant: 140000 FCFA
+
+📋 DÉTAILS DES LIVRAISONS (1):
+
+1. Livraison #54 ⏳
+   📱 651074089
+   📦 Crème solaire, Un masque
+   💰 140000.00 FCFA
+   📍 Simbock 2
+   📊 pending
+
+==================================================
+Généré le 20/12/2025 20:00:06

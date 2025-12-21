@@ -47,9 +47,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Receipt, Plus, Loader2, Trash2, Edit } from "lucide-react";
+import { Receipt, Plus, Loader2, Trash2, Edit, Upload, FileSpreadsheet, FileText } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
+import { importTariffs, type ImportResult } from "@/services/tariffs";
+import * as XLSX from "xlsx";
+import Papa from "papaparse";
+
+interface PreviewRow {
+  quartier: string;
+  tarif_amount: number;
+}
 
 export default function Tarifs() {
   const { user, isSuperAdmin } = useAuth();
@@ -57,7 +65,12 @@ export default function Tarifs() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const [selectedTariff, setSelectedTariff] = useState<Tariff | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [previewData, setPreviewData] = useState<PreviewRow[]>([]);
+  const [importResult, setImportResult] = useState<ImportResult | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
   const [formData, setFormData] = useState<CreateTariffRequest>({
     quartier: "",
     tarif_amount: 0,
@@ -178,6 +191,122 @@ export default function Tarifs() {
     deleteMutation.mutate(selectedTariff.id);
   };
 
+  const handleFileSelect = async (file: File | null) => {
+    if (!file) {
+      setSelectedFile(null);
+      setPreviewData([]);
+      return;
+    }
+
+    const fileName = file.name.toLowerCase();
+    let rows: PreviewRow[] = [];
+
+    try {
+      if (fileName.endsWith(".csv")) {
+        // Parse CSV
+        const text = await file.text();
+        const parsePromise = new Promise<Papa.ParseResult<any>>((resolve, reject) => {
+          Papa.parse(text, {
+            header: true,
+            skipEmptyLines: true,
+            complete: resolve,
+            error: reject,
+          });
+        });
+        
+        const results = await parsePromise;
+        rows = results.data.map((row: any) => {
+          const quartier = row.quartier || row.Quartier || row.QUARTIER || row.neighborhood || "";
+          const tarifStr = row.tarif_amount || row.Tarif_Amount || row.tarif || row.montant || row.price || "0";
+          return {
+            quartier: String(quartier).trim(),
+            tarif_amount: parseFloat(tarifStr) || 0,
+          };
+        }).filter((row) => row.quartier && row.tarif_amount > 0);
+        
+        setPreviewData(rows);
+      } else if (fileName.endsWith(".xlsx") || fileName.endsWith(".xls")) {
+        // Parse Excel
+        const arrayBuffer = await file.arrayBuffer();
+        const workbook = XLSX.read(arrayBuffer, { type: "array" });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const data = XLSX.utils.sheet_to_json(worksheet);
+
+        rows = data.map((row: any) => {
+          const quartierKey = Object.keys(row).find(
+            (key) => /quartier|neighborhood/i.test(key)
+          ) || "quartier";
+          const tarifKey = Object.keys(row).find(
+            (key) => /tarif|montant|price|amount/i.test(key)
+          ) || "tarif_amount";
+
+          return {
+            quartier: String(row[quartierKey] || "").trim(),
+            tarif_amount: parseFloat(row[tarifKey] || "0") || 0,
+          };
+        }).filter((row) => row.quartier && row.tarif_amount > 0);
+
+        setPreviewData(rows);
+      } else {
+        toast.error("Format de fichier non supporté. Utilisez CSV ou Excel.");
+        setSelectedFile(null);
+        return;
+      }
+
+      setSelectedFile(file);
+    } catch (error) {
+      console.error("Error parsing file:", error);
+      toast.error("Erreur lors de la lecture du fichier");
+      setSelectedFile(null);
+      setPreviewData([]);
+    }
+  };
+
+  const handleImport = async () => {
+    if (!selectedFile) {
+      toast.error("Veuillez sélectionner un fichier");
+      return;
+    }
+
+    if (previewData.length === 0) {
+      toast.error("Aucune donnée valide trouvée dans le fichier");
+      return;
+    }
+
+    if (isSuperAdmin && !formData.agency_id) {
+      toast.error("Veuillez sélectionner une agence");
+      return;
+    }
+
+    setIsImporting(true);
+    setImportResult(null);
+
+    try {
+      const result = await importTariffs(selectedFile, formData.agency_id);
+      setImportResult(result);
+      queryClient.invalidateQueries({ queryKey: ["tariffs"] });
+      
+      if (result.errors.length === 0) {
+        toast.success(`Import réussi: ${result.created} créés, ${result.updated} mis à jour`);
+        setTimeout(() => {
+          setIsImportDialogOpen(false);
+          setSelectedFile(null);
+          setPreviewData([]);
+          setImportResult(null);
+          setFormData({ ...formData, agency_id: undefined });
+        }, 2000);
+      } else {
+        toast.warning(`Import partiel: ${result.created} créés, ${result.updated} mis à jour, ${result.errors.length} erreurs`);
+      }
+    } catch (error: any) {
+      console.error("Import error:", error);
+      toast.error(error.message || "Erreur lors de l'importation");
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
   return (
     <div className="space-y-6 pb-8">
       {/* Header */}
@@ -188,14 +317,168 @@ export default function Tarifs() {
             Gérez les tarifs de livraison par quartier
           </p>
         </div>
-        <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-          <DialogTrigger asChild>
-            <Button onClick={() => setFormData({ quartier: "", tarif_amount: 0, agency_id: undefined })}>
-              <Plus className="w-4 h-4 mr-2" />
-              Ajouter un tarif
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
+        <div className="flex gap-2">
+          <Dialog open={isImportDialogOpen} onOpenChange={setIsImportDialogOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" onClick={() => {
+                setSelectedFile(null);
+                setPreviewData([]);
+                setImportResult(null);
+                setFormData({ ...formData, agency_id: undefined });
+              }}>
+                <Upload className="w-4 h-4 mr-2" />
+                Importer
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Importer des tarifs</DialogTitle>
+                <DialogDescription>
+                  Téléchargez un fichier CSV ou Excel avec les colonnes: quartier, tarif_amount
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                {isSuperAdmin && (
+                  <div className="space-y-2">
+                    <Label htmlFor="import-agency_id">Agence *</Label>
+                    <Select
+                      value={formData.agency_id?.toString() || ""}
+                      onValueChange={(value) =>
+                        setFormData({ ...formData, agency_id: parseInt(value) })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Sélectionner une agence" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {agencies.map((agency) => (
+                          <SelectItem key={agency.id} value={agency.id.toString()}>
+                            {agency.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+                <div className="space-y-2">
+                  <Label htmlFor="file-input">Fichier (CSV ou Excel) *</Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      id="file-input"
+                      type="file"
+                      accept=".csv,.xlsx,.xls"
+                      onChange={(e) => handleFileSelect(e.target.files?.[0] || null)}
+                      disabled={isImporting}
+                    />
+                    {selectedFile && (
+                      <span className="text-sm text-muted-foreground">
+                        {selectedFile.name}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {previewData.length > 0 && (
+                  <div className="space-y-2">
+                    <Label>Aperçu des données ({previewData.length} lignes)</Label>
+                    <div className="rounded-md border max-h-64 overflow-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Quartier</TableHead>
+                            <TableHead className="text-right">Montant (FCFA)</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {previewData.slice(0, 10).map((row, index) => (
+                            <TableRow key={index}>
+                              <TableCell>{row.quartier}</TableCell>
+                              <TableCell className="text-right">
+                                {formatTariffAmount(row.tarif_amount)}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                          {previewData.length > 10 && (
+                            <TableRow>
+                              <TableCell colSpan={2} className="text-center text-muted-foreground">
+                                ... et {previewData.length - 10} autres lignes
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
+                )}
+
+                {importResult && (
+                  <div className="space-y-2">
+                    <Label>Résultats de l'importation</Label>
+                    <div className="rounded-md border p-4 space-y-2">
+                      <div className="flex justify-between">
+                        <span>Total:</span>
+                        <span className="font-semibold">{importResult.total}</span>
+                      </div>
+                      <div className="flex justify-between text-green-600">
+                        <span>Créés:</span>
+                        <span className="font-semibold">{importResult.created}</span>
+                      </div>
+                      <div className="flex justify-between text-blue-600">
+                        <span>Mis à jour:</span>
+                        <span className="font-semibold">{importResult.updated}</span>
+                      </div>
+                      {importResult.errors.length > 0 && (
+                        <div className="flex justify-between text-red-600">
+                          <span>Erreurs:</span>
+                          <span className="font-semibold">{importResult.errors.length}</span>
+                        </div>
+                      )}
+                      {importResult.errors.length > 0 && (
+                        <div className="mt-4 space-y-1 max-h-32 overflow-auto">
+                          <Label className="text-sm">Détails des erreurs:</Label>
+                          {importResult.errors.map((error, index) => (
+                            <div key={index} className="text-sm text-red-600">
+                              Ligne {error.row}: {error.message}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setIsImportDialogOpen(false);
+                    setSelectedFile(null);
+                    setPreviewData([]);
+                    setImportResult(null);
+                    setFormData({ ...formData, agency_id: undefined });
+                  }}
+                  disabled={isImporting}
+                >
+                  {importResult ? "Fermer" : "Annuler"}
+                </Button>
+                {!importResult && (
+                  <Button onClick={handleImport} disabled={isImporting || !selectedFile || previewData.length === 0}>
+                    {isImporting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                    Importer
+                  </Button>
+                )}
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+            <DialogTrigger asChild>
+              <Button onClick={() => setFormData({ quartier: "", tarif_amount: 0, agency_id: undefined })}>
+                <Plus className="w-4 h-4 mr-2" />
+                Ajouter un tarif
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
             <DialogHeader>
               <DialogTitle>Nouveau tarif</DialogTitle>
               <DialogDescription>
@@ -271,6 +554,7 @@ export default function Tarifs() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       {/* Tariffs Table */}

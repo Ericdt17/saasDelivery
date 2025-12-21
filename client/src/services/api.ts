@@ -174,6 +174,92 @@ export async function apiDelete<T>(
 }
 
 /**
+ * POST request with file upload (multipart/form-data)
+ */
+export async function apiPostFile<T>(
+  endpoint: string,
+  file: File,
+  additionalData?: Record<string, string | number>,
+  options?: RequestOptions
+): Promise<ApiResponse<T>> {
+  const url = buildApiUrl(endpoint);
+  
+  const formData = new FormData();
+  formData.append('file', file);
+  
+  if (additionalData) {
+    Object.entries(additionalData).forEach(([key, value]) => {
+      if (value !== null && value !== undefined) {
+        formData.append(key, String(value));
+      }
+    });
+  }
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), options?.timeout || API_CONFIG.TIMEOUT);
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      method: 'POST',
+      body: formData,
+      credentials: 'include',
+      signal: controller.signal,
+      // Don't set Content-Type header - browser will set it with boundary for multipart/form-data
+    });
+
+    clearTimeout(timeoutId);
+
+    const contentType = response.headers.get('content-type');
+    let data: ApiResponse<T>;
+    
+    if (contentType && contentType.includes('application/json')) {
+      data = await response.json();
+    } else {
+      const text = await response.text();
+      throw new ApiError(
+        text || `HTTP ${response.status}: ${response.statusText}`,
+        response.status
+      );
+    }
+
+    if (!response.ok) {
+      throw new ApiError(
+        data.error || data.message || `HTTP ${response.status}: ${response.statusText}`,
+        response.status,
+        data
+      );
+    }
+
+    return data;
+  } catch (error) {
+    clearTimeout(timeoutId);
+
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new ApiError('Request timeout', 408);
+    }
+
+    if (error instanceof ApiError) {
+      throw error;
+    }
+
+    if (error instanceof TypeError && error.message.includes('fetch')) {
+      throw new ApiError(
+        'Network error: Unable to connect to server',
+        0,
+        error
+      );
+    }
+
+    throw new ApiError(
+      error instanceof Error ? error.message : 'Unknown error occurred',
+      500,
+      error
+    );
+  }
+}
+
+/**
  * Health check - test API connection
  */
 export async function healthCheck(): Promise<boolean> {

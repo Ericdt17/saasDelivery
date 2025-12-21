@@ -6,6 +6,10 @@
 
 const express = require("express");
 const router = express.Router();
+const multer = require("multer");
+const XLSX = require("xlsx");
+const csv = require("csv-parser");
+const { Readable } = require("stream");
 const { authenticateToken } = require("../middleware/auth");
 const {
   getTariffById,
@@ -17,6 +21,14 @@ const {
   getTariffByAgencyAndQuartier,
   adapter,
 } = require("../../db");
+
+// Configure multer for file uploads
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB max
+  },
+});
 
 // All routes require authentication
 router.use(authenticateToken);
@@ -372,6 +384,211 @@ router.delete("/:id", async (req, res, next) => {
     next(error);
   }
 });
+
+/**
+ * POST /api/v1/tariffs/import
+ * Import tariffs from CSV or Excel file
+ * - Agency admins can import tariffs for their own agency only
+ * - Super admins can import tariffs for any agency (agency_id in body)
+ */
+router.post("/import", upload.single("file"), async (req, res, next) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        error: "Validation error",
+        message: "No file uploaded",
+      });
+    }
+
+    // Determine target agency
+    let targetAgencyId;
+    
+    if (req.user.role === "super_admin") {
+      // Super admin can specify agency_id in request body
+      if (!req.body.agency_id) {
+        return res.status(400).json({
+          success: false,
+          error: "Validation error",
+          message: "Agency ID is required for super admin",
+        });
+      }
+      targetAgencyId = parseInt(req.body.agency_id);
+    } else {
+      // Agency admin can only import for their own agency
+      targetAgencyId = req.user.agencyId !== null && req.user.agencyId !== undefined 
+        ? req.user.agencyId 
+        : req.user.userId;
+      
+      if (!targetAgencyId) {
+        return res.status(403).json({
+          success: false,
+          error: "Forbidden",
+          message: "Agency ID not found in token",
+        });
+      }
+    }
+
+    const file = req.file;
+    const fileName = file.originalname.toLowerCase();
+    let rows = [];
+
+    // Parse file based on extension
+    if (fileName.endsWith(".csv")) {
+      // Parse CSV
+      rows = await parseCSV(file.buffer);
+    } else if (fileName.endsWith(".xlsx") || fileName.endsWith(".xls")) {
+      // Parse Excel
+      rows = parseExcel(file.buffer);
+    } else {
+      return res.status(400).json({
+        success: false,
+        error: "Validation error",
+        message: "Unsupported file format. Only CSV and Excel files are supported.",
+      });
+    }
+
+    if (!rows || rows.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: "Validation error",
+        message: "No data found in file",
+      });
+    }
+
+    // Process rows
+    let created = 0;
+    let updated = 0;
+    const errors = [];
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const rowNumber = i + 2; // +2 because row 1 is header, and arrays are 0-indexed
+
+      // Validate row data
+      const quartier = row.quartier ? String(row.quartier).trim() : "";
+      const tarifAmountStr = row.tarif_amount || row.tarif || row.montant || row.price || "";
+
+      if (!quartier) {
+        errors.push({
+          row: rowNumber,
+          quartier: "",
+          message: "Quartier is required",
+        });
+        continue;
+      }
+
+      const tarifAmount = parseFloat(tarifAmountStr);
+      if (isNaN(tarifAmount) || tarifAmount < 0) {
+        errors.push({
+          row: rowNumber,
+          quartier: quartier,
+          message: `Invalid tarif_amount: ${tarifAmountStr}`,
+        });
+        continue;
+      }
+
+      try {
+        // Check if tariff already exists
+        const existingResult = await getTariffByAgencyAndQuartier(targetAgencyId, quartier);
+        const existing = Array.isArray(existingResult) ? existingResult[0] : existingResult;
+
+        if (existing) {
+          // Update existing tariff
+          await updateTariff(existing.id, {
+            tarif_amount: tarifAmount,
+          });
+          updated++;
+        } else {
+          // Create new tariff
+          await createTariff({
+            agency_id: targetAgencyId,
+            quartier: quartier,
+            tarif_amount: tarifAmount,
+          });
+          created++;
+        }
+      } catch (error) {
+        console.error(`[Tariffs API] Error processing row ${rowNumber}:`, error);
+        errors.push({
+          row: rowNumber,
+          quartier: quartier,
+          message: error.message || "Unknown error",
+        });
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `Import completed: ${created} created, ${updated} updated, ${errors.length} errors`,
+      data: {
+        created,
+        updated,
+        errors,
+        total: rows.length,
+      },
+    });
+  } catch (error) {
+    console.error("[Tariffs API] Import error:", error);
+    next(error);
+  }
+});
+
+/**
+ * Helper function to parse CSV buffer
+ */
+function parseCSV(buffer) {
+  return new Promise((resolve, reject) => {
+    const rows = [];
+    const stream = Readable.from(buffer.toString());
+    
+    stream
+      .pipe(csv())
+      .on("data", (row) => {
+        // Normalize column names (case-insensitive, handle variations)
+        const normalizedRow = {
+          quartier: row.quartier || row.Quartier || row.QUARTIER || row.neighborhood || row.Neighborhood || "",
+          tarif_amount: row.tarif_amount || row.Tarif_Amount || row.TARIF_AMOUNT || 
+                       row.tarif || row.Tarif || row.TARIF ||
+                       row.montant || row.Montant || row.MONTANT ||
+                       row.price || row.Price || row.PRICE || "",
+        };
+        rows.push(normalizedRow);
+      })
+      .on("end", () => resolve(rows))
+      .on("error", (error) => reject(error));
+  });
+}
+
+/**
+ * Helper function to parse Excel buffer
+ */
+function parseExcel(buffer) {
+  const workbook = XLSX.read(buffer, { type: "buffer" });
+  const sheetName = workbook.SheetNames[0];
+  const worksheet = workbook.Sheets[sheetName];
+  
+  // Convert to JSON
+  const data = XLSX.utils.sheet_to_json(worksheet);
+  
+  // Normalize column names
+  return data.map((row) => {
+    // Try to find quartier column (case-insensitive)
+    const quartierKey = Object.keys(row).find(
+      key => /quartier|neighborhood/i.test(key)
+    ) || "quartier";
+    
+    // Try to find tarif column (case-insensitive)
+    const tarifKey = Object.keys(row).find(
+      key => /tarif|montant|price|amount/i.test(key)
+    ) || "tarif_amount";
+
+    return {
+      quartier: row[quartierKey] ? String(row[quartierKey]).trim() : "",
+      tarif_amount: row[tarifKey] || "",
+    };
+  });
+}
 
 module.exports = router;
 

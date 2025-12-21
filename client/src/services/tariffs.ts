@@ -3,7 +3,7 @@
  * API calls for tariff management (pricing per quartier/neighborhood)
  */
 
-import { apiGet, apiPost, apiPut, apiDelete } from "./api";
+import { apiGet, apiPost, apiPut, apiDelete, apiPostFile } from "./api";
 
 export interface Tariff {
   id: number;
@@ -24,6 +24,18 @@ export interface CreateTariffRequest {
 export interface UpdateTariffRequest {
   quartier?: string;
   tarif_amount?: number;
+}
+
+export interface ImportResult {
+  success: boolean;
+  created: number;
+  updated: number;
+  errors: Array<{
+    row: number;
+    quartier?: string;
+    message: string;
+  }>;
+  total: number;
 }
 
 /**
@@ -90,5 +102,26 @@ export function formatTariffAmount(amount: number): string {
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,
   }).format(amount) + " F";
+}
+
+/**
+ * Import tariffs from CSV or Excel file
+ */
+export async function importTariffs(
+  file: File,
+  agencyId?: number
+): Promise<ImportResult> {
+  const additionalData = agencyId ? { agency_id: agencyId } : undefined;
+  const response = await apiPostFile<ImportResult>(
+    "/api/v1/tariffs/import",
+    file,
+    additionalData
+  );
+  
+  if (response.success && response.data) {
+    return response.data;
+  }
+  
+  throw new Error(response.message || "Failed to import tariffs");
 }
 
