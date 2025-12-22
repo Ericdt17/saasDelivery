@@ -13,7 +13,7 @@ auth-dev/
 .wwebjs_auth/
 # Database
 data/
-
+reports/
 # Logs
 *.log
 

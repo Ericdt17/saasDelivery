@@ -50,8 +50,9 @@ export function Header() {
 
   return (
     <header className="sticky top-0 z-[100] w-full border-b bg-background backdrop-blur-sm">
-      <div className="container mx-auto flex h-[100px] items-center justify-between px-4 md:px-6 lg:px-8">
-        <div className="flex items-center gap-2">
+      <div className="container mx-auto flex h-[100px] items-center justify-between px-4 md:px-6 lg:px-8 relative">
+        {/* Logo/Titre - caché sur mobile, visible sur desktop */}
+        <div className="hidden md:flex items-center gap-2">
           <h1 className="text-lg font-semibold">LivSight</h1>
           {isSuperAdmin && (
             <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-800 dark:bg-blue-900 dark:text-blue-200">
@@ -61,7 +62,15 @@ export function Header() {
           )}
         </div>
 
-        <div className="flex items-center gap-4">
+        {/* Titre centré sur mobile - position absolue pour ne pas affecter le flex */}
+        <div className="absolute left-1/2 transform -translate-x-1/2 md:hidden pointer-events-none">
+          <h1 className="text-lg font-semibold">LivSight</h1>
+        </div>
+
+        {/* Espaceur invisible sur mobile pour équilibrer avec le bouton menu à gauche */}
+        <div className="md:hidden w-12"></div>
+
+        <div className="flex items-center gap-4 ml-auto">
           <span className="hidden text-sm text-muted-foreground sm:inline-block">
             {user.name || user.email}
           </span>

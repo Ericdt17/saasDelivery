@@ -124,9 +124,9 @@ export function Sidebar() {
           <Button
             variant="ghost"
             size="icon"
-            className="fixed top-4 left-4 z-50 md:hidden bg-card shadow-md"
+            className="fixed top-4 left-4 z-[110] md:hidden bg-background border border-border shadow-lg hover:bg-accent hover:shadow-xl transition-all duration-200 rounded-lg h-[70px] w-[70px]"
           >
-            <Menu className="w-5 h-5" />
+            <Menu className="w-6 h-6 text-foreground" />
           </Button>
         </SheetTrigger>
         <SheetContent side="left" className="w-72 p-0 bg-sidebar border-sidebar-border">
