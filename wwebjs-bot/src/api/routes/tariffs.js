@@ -190,7 +190,7 @@ router.post("/", async (req, res, next) => {
     }
 
     const tariffAmount = parseFloat(tarif_amount);
-    if (isNaN(tarifAmount) || tariffAmount < 0) {
+    if (isNaN(tariffAmount) || tariffAmount < 0) {
       return res.status(400).json({
         success: false,
         error: "Validation error",
