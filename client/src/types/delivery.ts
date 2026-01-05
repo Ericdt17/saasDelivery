@@ -18,7 +18,9 @@ export type StatutLivraison =
   | "pickup"
   | "expedition"
   | "annulé"
-  | "client_absent";
+  | "client_absent"
+  | "injoignable"
+  | "ne_decroche_pas";
 
 /**
  * Delivery type values
@@ -35,7 +37,9 @@ export type BackendStatus =
   | "pickup"
   | "expedition"
   | "cancelled"
-  | "client_absent";
+  | "client_absent"
+  | "unreachable"
+  | "no_answer";
 
 /**
  * Modification type values

@@ -425,7 +425,9 @@ router.get("/groups/:groupId/pdf", async (req, res, next) => {
       pending: "En cours",
       delivered: "Livré",
       failed: "Échec",
-      client_absent: "Client absent"
+      client_absent: "Client absent",
+      unreachable: "Injoignable",
+      no_answer: "Ne décroche pas"
     };
 
     if (allLivraisonsDetails.length === 0) {

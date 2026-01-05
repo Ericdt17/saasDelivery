@@ -322,6 +322,8 @@ const Livraisons = () => {
                 <SelectItem value="échec">Échec</SelectItem>
                 <SelectItem value="pickup">Pickup</SelectItem>
                 <SelectItem value="expedition">Expédition</SelectItem>
+                <SelectItem value="injoignable">Injoignable</SelectItem>
+                <SelectItem value="ne_decroche_pas">Ne décroche pas</SelectItem>
               </SelectContent>
             </Select>
 

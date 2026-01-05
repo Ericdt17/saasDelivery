@@ -67,7 +67,7 @@ const deliveryFormSchema = z.object({
       return num;
     })
   ]).optional(),
-  statut: z.enum(["en_cours", "livré", "échec", "pickup", "expedition", "client_absent"]).optional(),
+  statut: z.enum(["en_cours", "livré", "échec", "pickup", "expedition", "client_absent", "injoignable", "ne_decroche_pas"]).optional(),
   instructions: z.string().optional(),
   carrier: z.string().optional(),
   groupe: z.union([
@@ -485,6 +485,8 @@ export function DeliveryForm({ delivery, groupId, onSuccess, onCancel }: Deliver
                     <SelectItem value="échec">Échec</SelectItem>
                     <SelectItem value="pickup">Pickup</SelectItem>
                     <SelectItem value="expedition">Expédition</SelectItem>
+                    <SelectItem value="injoignable">Injoignable</SelectItem>
+                    <SelectItem value="ne_decroche_pas">Ne décroche pas</SelectItem>
                   </SelectContent>
                 </Select>
                 <FormDescription>
