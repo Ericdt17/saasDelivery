@@ -37,6 +37,8 @@ function mapStatusToFrontend(backendStatus: string): StatutLivraison {
     expedition: "expedition",
     cancelled: "annulé",
     client_absent: "client_absent",
+    unreachable: "injoignable",
+    no_answer: "ne_decroche_pas",
   };
 
   return statusMap[backendStatus.toLowerCase()] || "en_cours";
@@ -54,6 +56,8 @@ export function mapStatusToBackend(frontendStatus: StatutLivraison): string {
     expedition: "expedition",
     annulé: "cancelled",
     client_absent: "client_absent",
+    injoignable: "unreachable",
+    ne_decroche_pas: "no_answer",
   };
 
   return statusMap[frontendStatus] || "pending";

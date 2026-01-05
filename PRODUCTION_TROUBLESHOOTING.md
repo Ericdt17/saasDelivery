@@ -265,3 +265,8 @@ VITE_API_BASE_URL=https://your-backend.onrender.com
 - Backend must be redeployed after changing `ALLOWED_ORIGINS`
 
 
+
+
+
+
+

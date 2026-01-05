@@ -13,7 +13,9 @@ const statutLabels: Record<StatutLivraison, string> = {
   "pickup": "Pickup",
   "expedition": "Expédition",
   "annulé": "Annulé",
-  "client_absent": "Client absent"
+  "client_absent": "Client absent",
+  "injoignable": "Injoignable",
+  "ne_decroche_pas": "Ne décroche pas"
 };
 
 export function StatusBadge({ statut, className }: StatusBadgeProps) {

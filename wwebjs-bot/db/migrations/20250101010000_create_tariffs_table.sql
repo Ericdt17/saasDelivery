@@ -27,3 +27,11 @@ CREATE INDEX IF NOT EXISTS idx_tariffs_agency_id ON tariffs(agency_id);
 CREATE INDEX IF NOT EXISTS idx_tariffs_quartier ON tariffs(quartier);
 
 
+
+
+
+
+
+
+
+
