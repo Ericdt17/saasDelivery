@@ -442,7 +442,7 @@ const Index = () => {
                   variant="success"
                 />
                 <StatCard
-                  title="Échecs"
+                  title="Annulés"
                   value={stats.echecs}
                   icon={XCircle}
                   variant="destructive"
@@ -454,7 +454,7 @@ const Index = () => {
                   variant="warning"
                 />
                 <StatCard
-                  title="Pickups"
+                  title="Au bureau"
                   value={stats.pickups}
                   icon={ShoppingBag}
                   variant="info"

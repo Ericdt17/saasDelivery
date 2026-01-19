@@ -222,17 +222,94 @@ router.post('/', async (req, res, next) => {
       ? req.user.agencyId 
       : req.user?.userId;
 
+    // Parse and prepare delivery data
+    const parsedAmountDue = parseFloat(amount_due);
+    const parsedAmountPaid = parseFloat(amount_paid) || 0;
+    const parsedDeliveryFee = delivery_fee !== undefined && delivery_fee !== null ? parseFloat(delivery_fee) : undefined;
+    const parsedStatus = status || 'pending';
+
+    // Apply automatic tariff logic based on status (if delivery_fee not provided)
+    // This ensures consistency with status change logic in PUT route
+    let finalDeliveryFee = parsedDeliveryFee;
+    let finalAmountPaid = parsedAmountPaid;
+
+    if (parsedDeliveryFee === undefined || parsedDeliveryFee === null) {
+      // No delivery_fee provided, apply automatic tariff based on status
+      if (parsedStatus === 'pickup') {
+        // Apply fixed pickup tariff of 1000 FCFA
+        finalDeliveryFee = 1000;
+        if (parsedAmountPaid === 0 && parsedAmountDue > 0) {
+          finalAmountPaid = Math.max(0, Math.round((parsedAmountDue - finalDeliveryFee) * 100) / 100);
+        }
+        console.log(`[Delivery Create] Applied automatic pickup tariff: ${finalDeliveryFee} FCFA`);
+      } else if (parsedStatus === 'present_ne_decroche_zone1') {
+        // Apply fixed zone1 tariff of 500 FCFA
+        finalDeliveryFee = 500;
+        finalAmountPaid = 0; // Force to 0 for this status
+        console.log(`[Delivery Create] Applied automatic zone1 tariff: ${finalDeliveryFee} FCFA`);
+      } else if (parsedStatus === 'present_ne_decroche_zone2') {
+        // Apply fixed zone2 tariff of 1000 FCFA
+        finalDeliveryFee = 1000;
+        finalAmountPaid = 0; // Force to 0 for this status
+        console.log(`[Delivery Create] Applied automatic zone2 tariff: ${finalDeliveryFee} FCFA`);
+      } else if (parsedStatus === 'delivered' || parsedStatus === 'client_absent') {
+        // Apply tariff from quartier (same as PUT route logic)
+        if (!quartier) {
+          console.log(`[Delivery Create] Warning: No quartier specified for status "${parsedStatus}", status change allowed without tariff`);
+        } else {
+          try {
+            const tariffResult = await getTariffByAgencyAndQuartier(agencyId, quartier);
+            const tariff = Array.isArray(tariffResult) ? tariffResult[0] : tariffResult;
+            
+            if (tariff && tariff.tarif_amount) {
+              finalDeliveryFee = parseFloat(tariff.tarif_amount) || 0;
+              
+              if (parsedStatus === 'delivered') {
+                // For "delivered": calculate amount_paid = amount_due - delivery_fee
+                if (parsedAmountPaid === 0 && parsedAmountDue > 0) {
+                  finalAmountPaid = Math.max(0, Math.round((parsedAmountDue - finalDeliveryFee) * 100) / 100);
+                }
+              } else if (parsedStatus === 'client_absent') {
+                // For "client_absent": force amount_paid = 0
+                finalAmountPaid = 0;
+              }
+              
+              console.log(`[Delivery Create] Applied automatic tariff: ${finalDeliveryFee} for quartier "${quartier}"`);
+            } else {
+              console.log(`[Delivery Create] Warning: No tariff found for quartier "${quartier}", status change allowed without tariff`);
+            }
+          } catch (error) {
+            console.log(`[Delivery Create] Error applying tariff: ${error.message}`);
+          }
+        }
+      }
+    } else {
+      // delivery_fee is provided manually
+      // Check if status requires amount_paid = 0 (these statuses always force amount_paid = 0)
+      if (parsedStatus === 'client_absent' || parsedStatus === 'present_ne_decroche_zone1' || parsedStatus === 'present_ne_decroche_zone2') {
+        // These statuses always force amount_paid = 0, regardless of delivery_fee
+        finalAmountPaid = 0;
+        console.log(`[Delivery Create] Applied delivery_fee: ${parsedDeliveryFee}, amount_paid forced to 0 (status: ${parsedStatus})`);
+      } else {
+        // For other statuses (delivered, pickup, etc.), calculate amount_paid if needed
+        if (parsedAmountPaid === 0 && parsedAmountDue > 0) {
+          finalAmountPaid = Math.max(0, Math.round((parsedAmountDue - parsedDeliveryFee) * 100) / 100);
+          console.log(`[Delivery Create] Applied delivery_fee: ${parsedDeliveryFee}, calculated amount_paid: ${parsedAmountDue} -> ${finalAmountPaid} (${parsedAmountDue} - ${parsedDeliveryFee})`);
+        }
+      }
+    }
+
     const deliveryId = await createDelivery({
       phone,
       customer_name,
       items,
-      amount_due: parseFloat(amount_due),
-      amount_paid: parseFloat(amount_paid) || 0,
-      status,
+      amount_due: parsedAmountDue,
+      amount_paid: finalAmountPaid,
+      status: parsedStatus,
       quartier,
       notes,
       carrier,
-      delivery_fee: delivery_fee !== undefined && delivery_fee !== null ? parseFloat(delivery_fee) : undefined,
+      delivery_fee: finalDeliveryFee,
       group_id: group_id !== undefined && group_id !== null ? parseInt(group_id) : undefined,
       agency_id: agencyId,
     });
@@ -272,7 +349,12 @@ router.put('/:id', async (req, res, next) => {
       toDelivered: updates.status === 'delivered' && delivery.status !== 'delivered',
       toClientAbsent: updates.status === 'client_absent' && delivery.status !== 'client_absent',
       toFailed: updates.status === 'failed' && delivery.status !== 'failed',
+      toPickup: updates.status === 'pickup' && delivery.status !== 'pickup',
+      toPresentZone1: updates.status === 'present_ne_decroche_zone1' && delivery.status !== 'present_ne_decroche_zone1',
+      toPresentZone2: updates.status === 'present_ne_decroche_zone2' && delivery.status !== 'present_ne_decroche_zone2',
       fromDelivered: delivery.status === 'delivered' && updates.status !== 'delivered' && updates.status !== undefined, // Passage DEPUIS "delivered"
+      fromPresentZone1: delivery.status === 'present_ne_decroche_zone1' && updates.status !== 'present_ne_decroche_zone1' && updates.status !== undefined, // Passage DEPUIS "present_ne_decroche_zone1"
+      fromPresentZone2: delivery.status === 'present_ne_decroche_zone2' && updates.status !== 'present_ne_decroche_zone2' && updates.status !== undefined, // Passage DEPUIS "present_ne_decroche_zone2"
     };
 
     // Check if delivery_fee is provided manually in the request
@@ -349,17 +431,8 @@ router.put('/:id', async (req, res, next) => {
             console.log(`[Delivery Update] Amount paid explicitly set to: ${updates.amount_paid}`);
           }
         }
-      } else if (currentDeliveryFee > 0) {
-        // Tariff already applied, keep it explicitly
-        updates.delivery_fee = currentDeliveryFee;
-        if (forceAmountPaidToZero) {
-          updates.amount_paid = 0;
-          console.log(`[Delivery Update] Tariff already applied (${currentDeliveryFee}), keeping it, amount_paid forced to 0 (client_absent)`);
-        } else {
-          console.log(`[Delivery Update] Tariff already applied (${currentDeliveryFee}), skipping tariff application`);
-        }
       } else {
-        // No manual fee provided and no existing fee, apply automatic tariff
+        // Always apply automatic tariff from quartier (replace any existing tariff)
         // Find tariff for this agency and quartier
         const tariffResult = await getTariffByAgencyAndQuartier(agencyId, quartier);
         const tariff = Array.isArray(tariffResult) ? tariffResult[0] : tariffResult;
@@ -462,24 +535,123 @@ router.put('/:id', async (req, res, next) => {
       
       console.log(`[Delivery Update] Status changed to "failed": tariff cancelled (delivery_fee set to 0)`);
     }
-    // CAS 4: Changement DEPUIS "delivered" vers un autre statut (sauf "client_absent" et "failed" déjà gérés)
-    else if (statusChange.fromDelivered && updates.status !== 'client_absent' && updates.status !== 'failed') {
-      // Annuler le tarif et rembourser le tarif (remettre le montant brut)
+    // CAS 4: Changement vers "pickup" → appliquer tarif fixe 1000 FCFA et modifier amount_paid (comme "delivered")
+    else if (statusChange.toPickup) {
+      // Apply fixed tariff of 1000 FCFA for pickup (Au bureau)
+      // Modify amount_paid like "delivered": amount_paid = amount_due - delivery_fee
+      const pickupTariff = 1000;
+      
+      // Check if delivery_fee is provided manually in the request
+      if (manualDeliveryFee && parseFloat(updates.delivery_fee) >= 0) {
+        // User provided a manual delivery_fee, use it
+        const manualFee = parseFloat(updates.delivery_fee) || 0;
+        updates.delivery_fee = manualFee;
+        
+        // Calculate amount_paid (same logic as delivered - always recalculate from amount_due)
+        if (updates.amount_paid === undefined) {
+          const currentAmountPaid = parseFloat(delivery.amount_paid) || 0;
+          const currentAmountDue = parseFloat(delivery.amount_due) || 0;
+          
+          if (currentAmountDue > 0) {
+            // Always recalculate from amount_due when changing status (like delivered logic)
+            // This ensures correct calculation when coming from "delivered" or other statuses with tariffs
+            const newAmountPaid = Math.max(0, Math.round((currentAmountDue - manualFee) * 100) / 100);
+            updates.amount_paid = newAmountPaid;
+            console.log(`[Delivery Update] Using manual delivery_fee: ${manualFee} for pickup`);
+            console.log(`[Delivery Update] Recalculated from amount_due: ${currentAmountDue} -> ${newAmountPaid} (${currentAmountDue} - ${manualFee})`);
+          }
+        } else {
+          // amount_paid is explicitly set in the request, use it as is
+          console.log(`[Delivery Update] Using manual delivery_fee: ${manualFee} for pickup`);
+          console.log(`[Delivery Update] Amount paid explicitly set to: ${updates.amount_paid}`);
+        }
+      } else {
+        // Always apply fixed pickup tariff of 1000 FCFA (replace any existing tariff)
+        updates.delivery_fee = pickupTariff;
+        
+        // Calculate amount_paid (same logic as delivered - always recalculate from amount_due)
+        if (updates.amount_paid === undefined) {
+          const currentAmountPaid = parseFloat(delivery.amount_paid) || 0;
+          const currentAmountDue = parseFloat(delivery.amount_due) || 0;
+          
+          if (currentAmountDue > 0) {
+            // Always recalculate from amount_due when changing status (like delivered logic)
+            // This ensures correct calculation when coming from "delivered" or other statuses with tariffs
+            const newAmountPaid = Math.max(0, Math.round((currentAmountDue - pickupTariff) * 100) / 100);
+            updates.amount_paid = newAmountPaid;
+            console.log(`[Delivery Update] Applied fixed pickup tariff: ${pickupTariff} FCFA`);
+            console.log(`[Delivery Update] Recalculated from amount_due: ${currentAmountDue} -> ${newAmountPaid} (${currentAmountDue} - ${pickupTariff})`);
+          }
+        } else {
+          // amount_paid is explicitly set in the request, use it as is
+          console.log(`[Delivery Update] Applied fixed pickup tariff: ${pickupTariff} FCFA`);
+          console.log(`[Delivery Update] Amount paid explicitly set to: ${updates.amount_paid}`);
+        }
+      }
+    }
+    // CAS 5: Changement vers "present_ne_decroche_zone1" → appliquer tarif fixe 500 FCFA (comme "client_absent")
+    else if (statusChange.toPresentZone1) {
+      // Apply fixed tariff of 500 FCFA for present_ne_decroche_zone1
+      // forceAmountPaidToZero = true (same as client_absent)
+      const zone1Tariff = 500;
+      
+      // Check if delivery_fee is provided manually in the request
+      if (manualDeliveryFee && parseFloat(updates.delivery_fee) >= 0) {
+        const manualFee = parseFloat(updates.delivery_fee) || 0;
+        updates.delivery_fee = manualFee;
+        updates.amount_paid = 0;
+        console.log(`[Delivery Update] Using manual delivery_fee: ${manualFee} for present_ne_decroche_zone1, amount_paid forced to 0`);
+      } else {
+        // Always apply fixed zone1 tariff of 500 FCFA (replace any existing tariff)
+        updates.delivery_fee = zone1Tariff;
+        updates.amount_paid = 0;
+        console.log(`[Delivery Update] Applied fixed zone1 tariff: ${zone1Tariff} FCFA, amount_paid forced to 0`);
+      }
+    }
+    // CAS 6: Changement vers "present_ne_decroche_zone2" → appliquer tarif fixe 1000 FCFA (comme "client_absent")
+    else if (statusChange.toPresentZone2) {
+      // Apply fixed tariff of 1000 FCFA for present_ne_decroche_zone2
+      // forceAmountPaidToZero = true (same as client_absent)
+      const zone2Tariff = 1000;
+      
+      // Check if delivery_fee is provided manually in the request
+      if (manualDeliveryFee && parseFloat(updates.delivery_fee) >= 0) {
+        const manualFee = parseFloat(updates.delivery_fee) || 0;
+        updates.delivery_fee = manualFee;
+        updates.amount_paid = 0;
+        console.log(`[Delivery Update] Using manual delivery_fee: ${manualFee} for present_ne_decroche_zone2, amount_paid forced to 0`);
+      } else {
+        // Always apply fixed zone2 tariff of 1000 FCFA (replace any existing tariff)
+        updates.delivery_fee = zone2Tariff;
+        updates.amount_paid = 0;
+        console.log(`[Delivery Update] Applied fixed zone2 tariff: ${zone2Tariff} FCFA, amount_paid forced to 0`);
+      }
+    }
+    // CAS 7: Changement DEPUIS "present_ne_decroche_zone1" ou "present_ne_decroche_zone2" vers un autre statut
+    else if (statusChange.fromPresentZone1 || statusChange.fromPresentZone2) {
+      // Annuler le tarif appliqué (500 ou 1000 FCFA)
       const currentDeliveryFee = parseFloat(delivery.delivery_fee) || 0;
-      const currentAmountPaid = parseFloat(delivery.amount_paid) || 0;
+      
+      if (currentDeliveryFee > 0) {
+        updates.delivery_fee = 0;
+        // amount_paid était déjà à 0 pour ces statuts, donc pas besoin de le modifier
+        console.log(`[Delivery Update] Status changed from "${delivery.status}" to "${updates.status}": tariff cancelled (delivery_fee: ${currentDeliveryFee} -> 0)`);
+      }
+    }
+    // CAS 8: Changement DEPUIS "delivered" vers un autre statut (sauf "client_absent", "failed", "pickup", "present_ne_decroche_zone1", "present_ne_decroche_zone2" déjà gérés)
+    else if (statusChange.fromDelivered && updates.status !== 'client_absent' && updates.status !== 'failed' && updates.status !== 'pickup' && updates.status !== 'present_ne_decroche_zone1' && updates.status !== 'present_ne_decroche_zone2') {
+      // Annuler le tarif et remettre amount_paid à 0 (pas de paiement encore fait)
+      const currentDeliveryFee = parseFloat(delivery.delivery_fee) || 0;
       
       if (currentDeliveryFee > 0) {
         // Annuler le tarif
         updates.delivery_fee = 0;
         
-        // Rembourser le tarif : remettre amount_paid au montant brut
-        // amount_paid actuel = amount_due - delivery_fee (montant net)
-        // Nouveau amount_paid = amount_paid actuel + delivery_fee = amount_due (montant brut)
-        const newAmountPaid = currentAmountPaid + currentDeliveryFee;
-        updates.amount_paid = Math.max(0, Math.round(newAmountPaid * 100) / 100);
+        // Remettre amount_paid à 0 car on revient à "en cours" (pas encore payé)
+        updates.amount_paid = 0;
         
         console.log(`[Delivery Update] Status changed from "delivered" to "${updates.status}": tariff cancelled (delivery_fee: ${currentDeliveryFee} -> 0)`);
-        console.log(`[Delivery Update] Refunding tariff: amount_paid ${currentAmountPaid} -> ${updates.amount_paid} (${currentAmountPaid} + ${currentDeliveryFee})`);
+        console.log(`[Delivery Update] Amount paid reset to 0 (back to pending status, not yet paid)`);
       }
     }
     // Autre changement de statut ou pas de changement de statut
@@ -490,13 +662,13 @@ router.put('/:id', async (req, res, next) => {
         const manualFee = parseFloat(updates.delivery_fee) || 0;
         updates.delivery_fee = manualFee;
         
-        // Recalculate amount_paid if delivery_fee changes
-        const currentAmountPaid = parseFloat(delivery.amount_paid) || 0;
+        // Recalculate amount_paid if delivery_fee changes (always from amount_due, not from current amount_paid)
+        const currentAmountDue = parseFloat(delivery.amount_due) || 0;
         const previousFee = parseFloat(delivery.delivery_fee) || 0;
         
-        // Remove old fee and add new fee
-        const amountWithoutFee = currentAmountPaid + previousFee;
-        const newAmountPaid = Math.max(0, Math.round((amountWithoutFee - manualFee) * 100) / 100);
+        // Always recalculate from amount_due when delivery_fee is changed manually
+        // This ensures correct calculation regardless of how amount_paid was previously set
+        const newAmountPaid = Math.max(0, Math.round((currentAmountDue - manualFee) * 100) / 100);
         
         // Only update amount_paid if it's not explicitly set in the request
         if (updates.amount_paid === undefined) {
@@ -504,7 +676,7 @@ router.put('/:id', async (req, res, next) => {
         }
         
         console.log(`[Delivery Update] Manual delivery_fee update: ${previousFee} -> ${manualFee}`);
-        console.log(`[Delivery Update] Amount paid: ${currentAmountPaid} -> ${newAmountPaid}`);
+        console.log(`[Delivery Update] Amount paid recalculated from amount_due: ${currentAmountDue} -> ${newAmountPaid} (${currentAmountDue} - ${manualFee})`);
       }
     }
 
@@ -633,7 +805,8 @@ router.delete('/:id', async (req, res, next) => {
         ? req.user.agencyId 
         : req.user.userId;
       
-      if (delivery.agency_id !== agencyId) {
+      // Normalize to numbers to avoid false mismatches (e.g. "1" vs 1)
+      if (Number(delivery.agency_id) !== Number(agencyId)) {
         return res.status(403).json({
           success: false,
           error: 'Forbidden',
@@ -643,7 +816,15 @@ router.delete('/:id', async (req, res, next) => {
     }
 
     // Delete delivery
-    await deleteDelivery(parseInt(id));
+    const delResult = await deleteDelivery(parseInt(id));
+    const changes = delResult && typeof delResult.changes === 'number' ? delResult.changes : 0;
+    if (changes <= 0) {
+      return res.status(500).json({
+        success: false,
+        error: 'Delete failed',
+        message: 'Delivery could not be deleted (no rows affected)',
+      });
+    }
 
     res.json({
       success: true,

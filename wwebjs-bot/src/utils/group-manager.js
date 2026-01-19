@@ -31,10 +31,10 @@ async function getGroup(whatsappGroupId) {
          WHERE g.whatsapp_group_id = ? LIMIT 1`;
     
     const allGroupResult = await adapter.query(checkAllQuery, [whatsappGroupId]);
-    // PostgreSQL returns single object (or null) for LIMIT 1, SQLite returns array
+    // PostgreSQL returns single object (or null) for LIMIT 1, SQLite also returns single object (or undefined) for LIMIT 1
     const allGroup = adapter.type === "postgres"
       ? (allGroupResult || null)  // Already a single object or null
-      : (Array.isArray(allGroupResult) && allGroupResult.length > 0 ? allGroupResult[0] : null);
+      : (allGroupResult || null);  // SQLite returns object or undefined, not array
     
     if (allGroup) {
       console.log(`   📊 Group found in database (checking active status):`);
@@ -65,10 +65,10 @@ async function getGroup(whatsappGroupId) {
     const existingGroupsResult = await adapter.query(findGroupQuery, [
       whatsappGroupId,
     ]);
-    // PostgreSQL returns single object (or null) for LIMIT 1, SQLite returns array
+    // PostgreSQL returns single object (or null) for LIMIT 1, SQLite also returns single object (or undefined) for LIMIT 1
     const existingGroup = adapter.type === "postgres"
       ? (existingGroupsResult || null)  // Already a single object or null
-      : (Array.isArray(existingGroupsResult) && existingGroupsResult.length > 0 ? existingGroupsResult[0] : null);
+      : (existingGroupsResult || null);  // SQLite returns object or undefined, not array
 
     if (existingGroup) {
       console.log(
@@ -157,12 +157,8 @@ async function getDefaultAgencyId() {
         : `SELECT id FROM agencies WHERE is_active = 1 ORDER BY id ASC LIMIT 1`;
 
     const fallbackAgencies = await adapter.query(getAgencyQuery);
-    const fallbackAgency =
-      adapter.type === "postgres"
-        ? Array.isArray(fallbackAgencies) && fallbackAgencies.length > 0
-          ? fallbackAgencies[0]
-          : null
-        : fallbackAgencies;
+    // Both PostgreSQL and SQLite return single object (or null/undefined) for LIMIT 1
+    const fallbackAgency = fallbackAgencies || null;
 
     return fallbackAgency ? fallbackAgency.id : null;
   } catch (error) {
@@ -184,12 +180,8 @@ async function getAgencyIdForGroup(groupId) {
         : `SELECT agency_id FROM groups WHERE id = ? LIMIT 1`;
 
     const groups = await adapter.query(getGroupQuery, [groupId]);
-    const group =
-      adapter.type === "postgres"
-        ? Array.isArray(groups) && groups.length > 0
-          ? groups[0]
-          : null
-        : groups;
+    // Both PostgreSQL and SQLite return single object (or null/undefined) for LIMIT 1
+    const group = groups || null;
 
     return group ? group.agency_id : null;
   } catch (error) {

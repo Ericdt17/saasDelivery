@@ -32,13 +32,16 @@ function mapStatusToFrontend(backendStatus: string): StatutLivraison {
   const statusMap: Record<string, StatutLivraison> = {
     pending: "en_cours",
     delivered: "livré",
-    failed: "échec",
+    failed: "annulé",  // Changé de "échec" à "annulé"
     pickup: "pickup",
     expedition: "expedition",
     cancelled: "annulé",
+    postponed: "renvoyé",
     client_absent: "client_absent",
     unreachable: "injoignable",
     no_answer: "ne_decroche_pas",
+    present_ne_decroche_zone1: "present_ne_decroche_zone1",
+    present_ne_decroche_zone2: "present_ne_decroche_zone2",
   };
 
   return statusMap[backendStatus.toLowerCase()] || "en_cours";
@@ -51,13 +54,16 @@ export function mapStatusToBackend(frontendStatus: StatutLivraison): string {
   const statusMap: Record<StatutLivraison, string> = {
     en_cours: "pending",
     livré: "delivered",
-    échec: "failed",
+    échec: "failed",  // Gardé pour compatibilité avec anciennes données
+    annulé: "failed",  // Changé : "annulé" mappe vers "failed" (pas "cancelled")
+    renvoyé: "postponed",
     pickup: "pickup",
     expedition: "expedition",
-    annulé: "cancelled",
     client_absent: "client_absent",
     injoignable: "unreachable",
     ne_decroche_pas: "no_answer",
+    present_ne_decroche_zone1: "present_ne_decroche_zone1",
+    present_ne_decroche_zone2: "present_ne_decroche_zone2",
   };
 
   return statusMap[frontendStatus] || "pending";
@@ -98,11 +104,13 @@ export function transformDeliveryToFrontend(
 ): FrontendDelivery {
   // Calculate restant (remaining amount)
   // For "delivered" status: restant should be 0 (completely paid)
-  // For "failed" status: restant should be 0 (cannot collect anymore)
+  // For "pickup" status: restant should be 0 (client picked up at office, applied 1000 FCFA tariff)
+  // For "failed"/"cancelled"/"postponed"/"unreachable"/"no_answer" status: restant should be 0 (no delivery made, cannot collect anymore)
   // For other statuses: restant = amount_due - amount_paid
   const backendStatus = backend.status?.toLowerCase();
   const isDelivered = backendStatus === "delivered";
-  const isFailed = backendStatus === "failed";
+  const isPickup = backendStatus === "pickup";
+  const isCancelled = backendStatus === "failed" || backendStatus === "cancelled" || backendStatus === "postponed" || backendStatus === "unreachable" || backendStatus === "no_answer";
   
   // Convertir explicitement en nombres pour éviter les problèmes avec les strings PostgreSQL
   // PostgreSQL retourne les DECIMAL/NUMERIC comme des strings en JavaScript
@@ -118,8 +126,8 @@ export function transformDeliveryToFrontend(
         ? parseFloat(String(backend.amount_paid)) || 0
         : 0);
   
-  const restant = isDelivered || isFailed
-    ? 0 // Delivered or failed: no remaining amount
+  const restant = isDelivered || isPickup || isCancelled
+    ? 0 // Delivered, pickup, or cancelled (including injoignable/ne_decroche_pas): no remaining amount
     : Math.max(0, amountDue - amountPaid);
 
   // Convertir delivery_fee aussi

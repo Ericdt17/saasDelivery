@@ -533,12 +533,22 @@ function isDeliveryMessage(text) {
     return false;
   }
 
+  // 🔒 Reject messages with no digits at all (no phone, no amount possible)
+  // This prevents false positives like "Allo mme qui est qui ? @-ongolaexpress"
+  if (!/\d/.test(text)) {
+    return false;
+  }
+
   // Check if it follows a structured format (4+ lines)
   const lines = text.split("\n").filter((line) => line.trim().length > 0);
 
   // If it has 4+ lines, try to parse it (could be Option 3 or Alternative format)
   if (lines.length >= 4) {
     const parsed = parseDeliveryMessage(text);
+    // 🔒 Even for structured formats, require phone + amount to prevent false positives
+    if (!parsed.hasPhone || !parsed.hasAmount) {
+      return false;
+    }
     return parsed.valid === true; // Return true if valid structured format
   }
 

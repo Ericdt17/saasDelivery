@@ -18,9 +18,12 @@ export type StatutLivraison =
   | "pickup"
   | "expedition"
   | "annulé"
+  | "renvoyé"
   | "client_absent"
   | "injoignable"
-  | "ne_decroche_pas";
+  | "ne_decroche_pas"
+  | "present_ne_decroche_zone1"
+  | "present_ne_decroche_zone2";
 
 /**
  * Delivery type values
@@ -37,9 +40,12 @@ export type BackendStatus =
   | "pickup"
   | "expedition"
   | "cancelled"
+  | "postponed"
   | "client_absent"
   | "unreachable"
-  | "no_answer";
+  | "no_answer"
+  | "present_ne_decroche_zone1"
+  | "present_ne_decroche_zone2";
 
 /**
  * Modification type values

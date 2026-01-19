@@ -67,7 +67,7 @@ const deliveryFormSchema = z.object({
       return num;
     })
   ]).optional(),
-  statut: z.enum(["en_cours", "livré", "échec", "pickup", "expedition", "client_absent", "injoignable", "ne_decroche_pas"]).optional(),
+  statut: z.enum(["en_cours", "livré", "annulé", "renvoyé", "pickup", "expedition", "client_absent", "injoignable", "ne_decroche_pas", "present_ne_decroche_zone1", "present_ne_decroche_zone2"]).optional(),
   instructions: z.string().optional(),
   carrier: z.string().optional(),
   groupe: z.union([
@@ -482,11 +482,14 @@ export function DeliveryForm({ delivery, groupId, onSuccess, onCancel }: Deliver
                     <SelectItem value="en_cours">En cours</SelectItem>
                     <SelectItem value="livré">Livré</SelectItem>
                     <SelectItem value="client_absent">Client absent</SelectItem>
-                    <SelectItem value="échec">Échec</SelectItem>
-                    <SelectItem value="pickup">Pickup</SelectItem>
+                    <SelectItem value="annulé">Annulé</SelectItem>
+                    <SelectItem value="renvoyé">Renvoyé</SelectItem>
+                    <SelectItem value="pickup">Au bureau</SelectItem>
                     <SelectItem value="expedition">Expédition</SelectItem>
                     <SelectItem value="injoignable">Injoignable</SelectItem>
                     <SelectItem value="ne_decroche_pas">Ne décroche pas</SelectItem>
+                    <SelectItem value="present_ne_decroche_zone1">CPCNDP Z1</SelectItem>
+                    <SelectItem value="present_ne_decroche_zone2">CPCNDP Z2</SelectItem>
                   </SelectContent>
                 </Select>
                 <FormDescription>

@@ -90,7 +90,9 @@ if (preferPostgres && hasDatabaseUrl) {
 
       // Also show active groups
       const activeQuery =
-        "SELECT COUNT(*) as total FROM groups WHERE is_active = true";
+        dbType === "postgres"
+          ? "SELECT COUNT(*) as total FROM groups WHERE is_active = true"
+          : "SELECT COUNT(*) as total FROM groups WHERE is_active = 1";
       const activeResult = await queries.query(activeQuery, []);
       const activeCount =
         dbType === "postgres"
@@ -102,26 +104,28 @@ if (preferPostgres && hasDatabaseUrl) {
             : 0;
       console.log(`   ✅ Active groups: ${activeCount}`);
 
-      // Show sample group IDs for debugging
-      const sampleQuery =
-        "SELECT whatsapp_group_id, name, is_active FROM groups LIMIT 5";
-      const sampleResult = await queries.query(sampleQuery, []);
-      const samples =
-        dbType === "postgres"
-          ? Array.isArray(sampleResult)
-            ? sampleResult
-            : []
-          : Array.isArray(sampleResult)
-            ? sampleResult
-            : [sampleResult].filter(Boolean);
+      // Show sample group IDs for debugging (only if groups exist)
+      if (count > 0) {
+        const sampleQuery =
+          "SELECT whatsapp_group_id, name, is_active FROM groups LIMIT 5";
+        const sampleResult = await queries.query(sampleQuery, []);
+        const samples =
+          dbType === "postgres"
+            ? Array.isArray(sampleResult)
+              ? sampleResult
+              : []
+            : Array.isArray(sampleResult)
+              ? sampleResult
+              : [sampleResult].filter(Boolean);
 
-      if (samples.length > 0) {
-        console.log(`   📋 Sample groups in database:`);
-        samples.forEach((g, i) => {
-          console.log(
-            `      ${i + 1}. ${g.name || "Unnamed"} - ${g.whatsapp_group_id} (active: ${g.is_active})`
-          );
-        });
+        if (samples.length > 0) {
+          console.log(`   📋 Sample groups in database:`);
+          samples.forEach((g, i) => {
+            console.log(
+              `      ${i + 1}. ${g.name || "Unnamed"} - ${g.whatsapp_group_id} (active: ${g.is_active})`
+            );
+          });
+        }
       }
     } catch (error) {
       console.error(`   ⚠️  Database test query failed: ${error.message}`);

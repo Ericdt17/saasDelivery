@@ -804,11 +804,11 @@ function createPostgresQueries(pool) {
   }
 
   async function deleteDelivery(id) {
-    const result = await query(
-      "DELETE FROM deliveries WHERE id = $1 RETURNING id",
-      [id]
-    );
-    return { changes: result.changes || 0 };
+    // Delete history first so deletion works even if FK isn't CASCADE in older schemas
+    await query("DELETE FROM delivery_history WHERE delivery_id = $1", [id]);
+    const result = await query("DELETE FROM deliveries WHERE id = $1 RETURNING id", [id]);
+    // query() returns an object with { id, changes } for RETURNING queries
+    return { changes: result?.changes || 0, deleted_id: result?.id || null };
   }
 
   return {

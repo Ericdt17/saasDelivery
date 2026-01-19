@@ -181,9 +181,12 @@ export default function GroupDetail() {
       "en_cours": "pending",
       "livré": "delivered",
       "client_absent": "client_absent",
-      "échec": "failed",
+      "annulé": "failed",  // Changé de "échec": "failed"
+      "renvoyé": "postponed",
       "pickup": "pickup",
       "expedition": "expedition",
+      "present_ne_decroche_zone1": "present_ne_decroche_zone1",
+      "present_ne_decroche_zone2": "present_ne_decroche_zone2",
     };
     return statusMap[frontendStatus];
   };
@@ -600,14 +603,14 @@ export default function GroupDetail() {
                   variant="success"
                 />
                 <StatCard
-                  title="Échecs"
+                  title="Annulés"
                   value={stats.echecs}
                   icon={XCircle}
                   variant="destructive"
                 />
                 <StatCard title="En cours" value={stats.enCours} icon={Clock} variant="warning" />
                 <StatCard
-                  title="Pickups"
+                  title="Au bureau"
                   value={stats.pickups}
                   icon={ShoppingBag}
                   variant="info"
@@ -675,11 +678,14 @@ export default function GroupDetail() {
                         <SelectItem value="en_cours">En cours</SelectItem>
                         <SelectItem value="livré">Livré</SelectItem>
                         <SelectItem value="client_absent">Client absent</SelectItem>
-                        <SelectItem value="échec">Échec</SelectItem>
-                        <SelectItem value="pickup">Pickup</SelectItem>
+                        <SelectItem value="annulé">Annulé</SelectItem>
+                        <SelectItem value="renvoyé">Renvoyé</SelectItem>
+                        <SelectItem value="pickup">Au bureau</SelectItem>
                         <SelectItem value="expedition">Expédition</SelectItem>
                         <SelectItem value="injoignable">Injoignable</SelectItem>
                         <SelectItem value="ne_decroche_pas">Ne décroche pas</SelectItem>
+                        <SelectItem value="present_ne_decroche_zone1">CPCNDP Z1</SelectItem>
+                        <SelectItem value="present_ne_decroche_zone2">CPCNDP Z2</SelectItem>
                       </SelectContent>
                     </Select>
 
@@ -829,11 +835,14 @@ export default function GroupDetail() {
                                   <SelectItem value="en_cours">En cours</SelectItem>
                                   <SelectItem value="livré">Livré</SelectItem>
                                   <SelectItem value="client_absent">Client absent</SelectItem>
-                                  <SelectItem value="échec">Échec</SelectItem>
-                                  <SelectItem value="pickup">Pickup</SelectItem>
+                                  <SelectItem value="annulé">Annulé</SelectItem>
+                                  <SelectItem value="renvoyé">Renvoyé</SelectItem>
+                                  <SelectItem value="pickup">Au bureau</SelectItem>
                                   <SelectItem value="expedition">Expédition</SelectItem>
                                   <SelectItem value="injoignable">Injoignable</SelectItem>
                                   <SelectItem value="ne_decroche_pas">Ne décroche pas</SelectItem>
+                                  <SelectItem value="present_ne_decroche_zone1">Chauffeur présent - Client ne décroche pas Zone 1</SelectItem>
+                                  <SelectItem value="present_ne_decroche_zone2">Chauffeur présent - Client ne décroche pas Zone 2</SelectItem>
                                 </SelectContent>
                               </Select>
                             </TableCell>
