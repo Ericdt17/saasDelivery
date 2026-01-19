@@ -13,9 +13,15 @@ auth-dev/
 .wwebjs_auth/
 # Database
 data/
+*.db-shm
+*.db-wal
 reports/
 # Logs
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
 
 # QR Code images
 qr-code.png
@@ -23,10 +29,32 @@ qr-code.png
 # OS files
 .DS_Store
 Thumbs.db
+desktop.ini
+
+# Cache and temporary files
+.cache/
+.temp/
+tmp/
+*.tmp
+*.temp
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Test coverage (if any)
+coverage/
+.nyc_output/
+test-results/
 
 # Documentation (keep only README.md)
 *.md
 !README.md
-# WhatsApp Web JS sessions
-wwebjs-bot/.wwebjs_auth/
+
+# Lock files (optional - uncomment if you don't want to track them)
+# yarn.lock
+# pnpm-lock.yaml
 

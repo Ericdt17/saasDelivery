@@ -1,0 +1,62 @@
+# WhatsApp sessions (if created at root level)
+.wwebjs_auth/
+auth/
+auth-dev/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Database files (if any at root)
+*.db
+*.db-shm
+*.db-wal
+
+# QR codes
+qr-code.png
+*.png
+!**/public/**/*.png
+!**/dist/**/*.png
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Dependencies (if any at root)
+node_modules/
+
+# Build outputs (if any at root)
+dist/
+build/
+
+# Reports and generated files
+reports/
+coverage/
+.nyc_output/
+test-results/
+
+# Cache and temporary files
+.cache/
+.temp/
+tmp/
+*.tmp
+*.temp
+
+# Lock files (optional - uncomment if you don't want to track them)
+# bun.lockb
+# yarn.lock
+# pnpm-lock.yaml
