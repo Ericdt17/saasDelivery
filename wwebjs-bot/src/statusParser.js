@@ -133,7 +133,23 @@ function parseStatusUpdate(text, isReply = false) {
     };
   }
 
-  // 3. FAILED - "Échec", "Echec", "Numéro ne passe pas"
+  // 3. RETURNED/POSTPONED - "Renvoyé", "Renvoyer", "Retourné" (check before FAILED)
+  if (
+    lowerText.match(/^renvoy[ée]?/i) ||
+    lowerText.includes("renvoyer") ||
+    lowerText.includes("renvoyé") ||
+    lowerText.match(/^retourn[ée]?/i)
+  ) {
+    const phone = extractPhoneFromStatus(text);
+    return {
+      type: "postponed",
+      phone: phone,
+      amount: null,
+      details: text,
+    };
+  }
+
+  // 4. FAILED - "Échec", "Echec", "Numéro ne passe pas"
   if (
     lowerText.match(/^échec|^echec/i) ||
     lowerText.includes("numéro ne passe pas") ||

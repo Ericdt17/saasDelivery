@@ -91,9 +91,12 @@ const mapStatusFilter = (frontendStatus: string): string | undefined => {
     "en_cours": "pending",
     "livré": "delivered",
     "client_absent": "client_absent",
-    "échec": "failed",
+    "annulé": "failed",  // Changé de "échec": "failed"
+    "renvoyé": "postponed",
     "pickup": "pickup",
     "expedition": "expedition",
+    "present_ne_decroche_zone1": "present_ne_decroche_zone1",
+    "present_ne_decroche_zone2": "present_ne_decroche_zone2",
   };
   return statusMap[frontendStatus];
 };
@@ -319,11 +322,14 @@ const Livraisons = () => {
                 <SelectItem value="en_cours">En cours</SelectItem>
                 <SelectItem value="livré">Livré</SelectItem>
                 <SelectItem value="client_absent">Client absent</SelectItem>
-                <SelectItem value="échec">Échec</SelectItem>
-                <SelectItem value="pickup">Pickup</SelectItem>
+                <SelectItem value="annulé">Annulé</SelectItem>
+                <SelectItem value="renvoyé">Renvoyé</SelectItem>
+                <SelectItem value="pickup">Au bureau</SelectItem>
                 <SelectItem value="expedition">Expédition</SelectItem>
                 <SelectItem value="injoignable">Injoignable</SelectItem>
                 <SelectItem value="ne_decroche_pas">Ne décroche pas</SelectItem>
+                <SelectItem value="present_ne_decroche_zone1">CPCNDP Z1</SelectItem>
+                <SelectItem value="present_ne_decroche_zone2">CPCNDP Z2</SelectItem>
               </SelectContent>
             </Select>
 

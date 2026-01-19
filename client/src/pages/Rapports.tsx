@@ -226,13 +226,13 @@ const Rapports = () => {
                   variant="success"
                 />
                 <StatCard
-                  title="Échecs"
+                  title="Annulés"
                   value={currentData.echecs}
                   icon={XCircle}
                   variant="destructive"
                 />
                 <StatCard
-                  title="Pickups"
+                  title="Au bureau"
                   value={currentData.pickups}
                   icon={ShoppingBag}
                   variant="info"
@@ -296,11 +296,11 @@ const Rapports = () => {
                               value: currentData.livrees,
                             },
                             {
-                              statut: "Échecs",
+                              statut: "Annulés",
                               value: currentData.echecs,
                             },
                             {
-                              statut: "Pickups",
+                              statut: "Au bureau",
                               value: currentData.pickups,
                             },
                             {

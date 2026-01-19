@@ -93,7 +93,7 @@ const calculateWeeklyPerformance = (deliveries: any[]) => {
     // Count by status
     if (delivery.statut === "livré") {
       dayData.livrees++;
-    } else if (delivery.statut === "échec") {
+    } else if (delivery.statut === "annulé") {
       dayData.echecs++;
     } else if (delivery.statut === "pickup") {
       dayData.pickups++;
@@ -259,8 +259,8 @@ export function PerformanceChart() {
                 formatter={(value) => {
                   const labels: Record<string, string> = {
                     livrees: "Livrées",
-                    echecs: "Échecs",
-                    pickups: "Pickups",
+                    echecs: "Annulés",
+                    pickups: "Au bureau",
                     expeditions: "Expéditions",
                   };
                   return labels[value] || value;

@@ -133,8 +133,13 @@
     @apply bg-success/15 text-success;
   }
 
-  .status-échec {
+  .status-échec,
+  .status-annulé {
     @apply bg-destructive/15 text-destructive;
+  }
+
+  .status-renvoyé {
+    @apply bg-warning/20 text-warning;
   }
 
   .status-en_cours {

@@ -837,10 +837,9 @@ function createSqliteQueries(db) {
   }
 
   async function deleteDelivery(id) {
-    return await query(
-      "DELETE FROM deliveries WHERE id = ?",
-      [id]
-    );
+    // Delete history first to avoid FK constraint issues (and keep behavior consistent with Postgres)
+    await query("DELETE FROM delivery_history WHERE delivery_id = ?", [id]);
+    return await query("DELETE FROM deliveries WHERE id = ?", [id]);
   }
 
   return {

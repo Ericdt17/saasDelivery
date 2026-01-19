@@ -77,7 +77,7 @@ const client = new Client({
       "--disable-features=VizDisplayCompositor",
     ],
     // Optimize startup
-    timeout: 60000, // 60 seconds timeout for browser launch
+    timeout: 120000, // 120 seconds timeout for browser launch
     // Ignore default args that might cause issues
     ignoreDefaultArgs: ["--disable-extensions"],
   },
@@ -168,9 +168,24 @@ client.on("qr", async (qr) => {
 // When client is ready
 client.on("ready", () => {
   const startupDuration = ((Date.now() - startupStartTime) / 1000).toFixed(1);
-  console.log("\n✅ Bot is ready!");
+  console.log("\n" + "=".repeat(60));
+  console.log("✅ BOT IS READY!");
+  console.log("=".repeat(60));
   console.log(`⏱️  Startup time: ${startupDuration} seconds`);
-  console.log("📋 Listening for messages...\n");
+  console.log("📋 Listening for messages...");
+
+  // Verify message event listener is registered
+  const listeners = client.listenerCount("message");
+  console.log(`📊 Message event listeners: ${listeners}`);
+
+  if (listeners === 0) {
+    console.error("❌ WARNING: No message event listeners found!");
+    console.error("   This means the bot won't receive messages.");
+  } else {
+    console.log("✅ Message event listener is registered");
+  }
+
+  console.log("=".repeat(60) + "\n");
   qrShown = false; // Reset for next time
 
   // Setup daily report scheduler
@@ -185,14 +200,19 @@ client.on("authenticated", async () => {
   console.log("💡 You won't need to scan QR code again next time.");
   console.log("=".repeat(60) + "\n");
 
-  // Wait a bit then check if client is ready
+  // Wait a bit then check if client is ready (in case ready event doesn't fire)
   setTimeout(async () => {
     try {
       const state = await client.getState();
-      console.log(`\n🔍 Checking client state: ${state}`);
+      console.log(
+        `\n🔍 DIAGNOSTIC: Checking client state after authentication...`
+      );
+      console.log(`   State: ${state}`);
 
       if (state === "CONNECTED") {
-        console.log("✅ Client state: CONNECTED");
+        console.log("\n" + "=".repeat(60));
+        console.log("✅ CLIENT STATE: CONNECTED");
+        console.log("=".repeat(60));
         console.log("📋 Bot should be listening for messages now.");
 
         // Verify message event listener is registered
@@ -208,20 +228,23 @@ client.on("authenticated", async () => {
 
         // Setup daily report scheduler if ready event didn't fire
         if (typeof setupDailyReportScheduler === "function") {
+          console.log("📅 Setting up daily report scheduler...");
           setupDailyReportScheduler();
         }
 
         console.log(
-          "\n💡 Test: Send a message in the group and check for 'DEBUG - Raw message received'\n"
+          "\n💡 Test: Send a message in the group and check for 'MESSAGE EVENT FIRED'\n"
         );
+        console.log("=".repeat(60) + "\n");
       } else {
-        console.log(`⚠️  Client state: ${state}`);
-        console.log("💡 Waiting for ready event...\n");
+        console.log(`\n⚠️  Client state: ${state}`);
+        console.log("💡 Waiting for ready event or CONNECTED state...\n");
       }
     } catch (error) {
       console.error("⚠️  Error checking client state:", error.message);
+      console.error("   Stack:", error.stack);
     }
-  }, 5000); // Check after 5 seconds
+  }, 3000); // Check after 3 seconds (reduced from 5)
 });
 
 // When authentication fails
@@ -249,8 +272,9 @@ client.on("disconnected", (reason) => {
 });
 
 // Listen to all incoming messages
-// Note: Some versions use "message_create" instead of "message"
 console.log("📋 Registering message event listener...");
+console.log("🔍 Listening for 'message' events");
+
 client.on("message", async (msg) => {
   try {
     console.log("🔔 MESSAGE EVENT FIRED - Bot received a message!");
@@ -287,17 +311,227 @@ client.on("message", async (msg) => {
     const trimmedMessage = messageText.trim();
     if (trimmedMessage.toLowerCase() === "#link") {
       console.log("   🔗 #link command detected - sending group ID");
+
+      const messageTextToSend =
+        `📋 ID du groupe WhatsApp:\n\n` +
+        `\`${whatsappGroupId}\`\n\n` +
+        `💡 Copiez cet ID et collez-le dans votre tableau de bord pour lier ce groupe à votre agence.\n\n` +
+        `📝 Nom du groupe: ${groupName}`;
+
+      let messageSent = false;
+      let sentMessage = null;
+      let lastError = null;
+
+      // Method 1: Patch sendSeen() temporarily to bypass markedUnread error
+      console.log("   🔄 Attempting to send with sendSeen() patch...");
       try {
-        await chat.sendMessage(
-          `📋 ID du groupe WhatsApp:\n\n` +
-            `\`${whatsappGroupId}\`\n\n` +
-            `💡 Copiez cet ID et collez-le dans votre tableau de bord pour lier ce groupe à votre agence.\n\n` +
-            `📝 Nom du groupe: ${groupName}`
-        );
-        console.log(`   ✅ Group ID sent: ${whatsappGroupId}`);
-      } catch (err) {
-        console.error(`   ⚠️  Could not send group ID message: ${err.message}`);
+        const page = client.pupPage;
+        if (page && !page.isClosed()) {
+          // Patch sendSeen() to be a no-op temporarily
+          await page.evaluate(() => {
+            if (window.WWebJS && window.WWebJS.sendSeen) {
+              // Save original
+              window._originalSendSeen = window.WWebJS.sendSeen;
+              // Replace with no-op
+              window.WWebJS.sendSeen = async function () {
+                // Do nothing - this prevents markedUnread error
+                return Promise.resolve();
+              };
+            }
+          });
+
+          try {
+            // Now try sending - sendSeen() won't fail
+            sentMessage = await client.sendMessage(
+              whatsappGroupId,
+              messageTextToSend
+            );
+            messageSent = true;
+            console.log(
+              `   ✅ Group ID sent successfully with sendSeen patch: ${whatsappGroupId}`
+            );
+            if (sentMessage?.id) {
+              console.log(
+                `   📱 Message ID: ${sentMessage.id._serialized || sentMessage.id}`
+              );
+            }
+          } finally {
+            // Restore original sendSeen() after sending
+            await page.evaluate(() => {
+              if (window._originalSendSeen) {
+                window.WWebJS.sendSeen = window._originalSendSeen;
+                delete window._originalSendSeen;
+              }
+            });
+          }
+        } else {
+          throw new Error("Puppeteer page not available");
+        }
+      } catch (patchErr) {
+        lastError = patchErr;
+        console.log(`   ⚠️  Patch method failed: ${patchErr.message}`);
+        console.log(`   🔄 Trying alternative approach...`);
+
+        // Method 2: Use WWebJS.sendMessage directly via Puppeteer
+        try {
+          const page = client.pupPage;
+          if (page && !page.isClosed()) {
+            const result = await page.evaluate(
+              async (groupId, text) => {
+                try {
+                  // Use WWebJS.sendMessage which might bypass some checks
+                  if (window.WWebJS && window.WWebJS.sendMessage) {
+                    const result = await window.WWebJS.sendMessage(
+                      groupId,
+                      text
+                    );
+                    return {
+                      success: true,
+                      messageId: result?.id?._serialized || result?.id || null,
+                    };
+                  }
+                  throw new Error("WWebJS.sendMessage not available");
+                } catch (err) {
+                  return {
+                    success: false,
+                    error: err.message,
+                  };
+                }
+              },
+              whatsappGroupId,
+              messageTextToSend
+            );
+
+            if (result.success) {
+              messageSent = true;
+              console.log(
+                `   ✅ Group ID sent via WWebJS.sendMessage: ${whatsappGroupId}`
+              );
+              if (result.messageId) {
+                console.log(`   📱 Message ID: ${result.messageId}`);
+              }
+              // Verify after delay
+              await new Promise((resolve) => setTimeout(resolve, 2000));
+              try {
+                const verifyChat = await client.getChatById(whatsappGroupId);
+                const recentMessages = await verifyChat.fetchMessages({
+                  limit: 5,
+                });
+                const ourMessage = recentMessages.find(
+                  (m) =>
+                    m.fromMe &&
+                    m.body &&
+                    m.body.includes("ID du groupe WhatsApp")
+                );
+                if (ourMessage) {
+                  sentMessage = ourMessage;
+                  console.log(`   ✅ Verified: Message confirmed in chat!`);
+                }
+              } catch (verifyErr) {
+                console.log(`   ⚠️  Could not verify, but message was sent`);
+              }
+            } else {
+              throw new Error(result.error || "WWebJS send failed");
+            }
+          } else {
+            throw new Error("Puppeteer page not available");
+          }
+        } catch (wwebjsErr) {
+          lastError = wwebjsErr;
+          console.log(`   ⚠️  WWebJS method failed: ${wwebjsErr.message}`);
+
+          // Method 3: Last resort - try standard method but catch and ignore markedUnread
+          console.log(
+            `   🔄 Trying standard method (will ignore markedUnread error)...`
+          );
+          try {
+            const sendPromise = client.sendMessage(
+              whatsappGroupId,
+              messageTextToSend
+            );
+            const timeoutPromise = new Promise((_, reject) =>
+              setTimeout(
+                () => reject(new Error("Send timeout after 15s")),
+                15000
+              )
+            );
+
+            sentMessage = await Promise.race([sendPromise, timeoutPromise]);
+            messageSent = true;
+            console.log(
+              `   ✅ Group ID sent (error suppressed): ${whatsappGroupId}`
+            );
+          } catch (stdErr) {
+            const isMarkedUnread =
+              stdErr.message?.includes("markedUnread") ||
+              stdErr.stack?.includes("markedUnread");
+
+            if (isMarkedUnread) {
+              // Even though markedUnread error occurs, wait and verify if message was sent
+              console.log(
+                `   ⚠️  markedUnread error occurred, verifying if message was sent...`
+              );
+              await new Promise((resolve) => setTimeout(resolve, 3000));
+
+              try {
+                const verifyChat = await client.getChatById(whatsappGroupId);
+                const recentMessages = await verifyChat.fetchMessages({
+                  limit: 10,
+                });
+                const ourMessage = recentMessages.find(
+                  (m) =>
+                    m.fromMe &&
+                    m.body &&
+                    m.body.includes("ID du groupe WhatsApp")
+                );
+
+                if (ourMessage) {
+                  sentMessage = ourMessage;
+                  messageSent = true;
+                  console.log(`   ✅ Message was sent despite error!`);
+                  console.log(
+                    `   📱 Message ID: ${ourMessage.id._serialized || "N/A"}`
+                  );
+                } else {
+                  throw new Error("Message verification failed");
+                }
+              } catch (verifyErr) {
+                lastError = verifyErr;
+                console.error(
+                  `   ❌ Message was not sent - verification failed`
+                );
+              }
+            } else {
+              lastError = stdErr;
+              console.error(`   ❌ Standard method failed: ${stdErr.message}`);
+            }
+          }
+        }
       }
+
+      // Final result
+      if (messageSent && sentMessage) {
+        console.log(`   ✅ Group ID message sent and confirmed!`);
+      } else if (messageSent) {
+        console.log(
+          `   ⚠️  Message sending attempted - please verify manually`
+        );
+      } else {
+        console.error(`   ❌ Failed to send group ID message`);
+        console.error(
+          `   Last error: ${lastError?.message || "Unknown error"}`
+        );
+        console.error(`   💡 Troubleshooting:`);
+        console.error(`      1. Check bot permissions in the group`);
+        console.error(
+          `      2. Try removing and re-adding the bot to the group`
+        );
+        console.error(`      3. Restart the bot to refresh the session`);
+        console.error(
+          `      4. Check if GROUP_ID in .env matches the group ID`
+        );
+      }
+
       return; // Stop processing after sending group ID
     }
 
@@ -467,21 +701,30 @@ client.on("message", async (msg) => {
       }
 
       // Helper function to apply tariff logic for status updates
-      const applyTariffForStatusUpdate = async (delivery, updateData, agencyId, forceAmountPaidToZero = false) => {
+      const applyTariffForStatusUpdate = async (
+        delivery,
+        updateData,
+        agencyId,
+        forceAmountPaidToZero = false
+      ) => {
         // Only apply tariff if agency_id and quartier are available
         if (!agencyId || !delivery.quartier) {
-          console.log(`   ⚠️  Cannot apply tariff: agency_id or quartier missing`);
+          console.log(
+            `   ⚠️  Cannot apply tariff: agency_id or quartier missing`
+          );
           return;
         }
 
         // Check if delivery_fee is already set (manual fee)
         const currentDeliveryFee = delivery.delivery_fee || 0;
-        
+
         if (currentDeliveryFee > 0) {
           // Tariff already applied, just proceed
           if (forceAmountPaidToZero) {
             updateData.amount_paid = 0;
-            console.log(`   💰 Tariff already applied (${currentDeliveryFee}), amount_paid forced to 0 (client_absent)`);
+            console.log(
+              `   💰 Tariff already applied (${currentDeliveryFee}), amount_paid forced to 0 (client_absent)`
+            );
           } else {
             console.log(`   💰 Tariff already applied (${currentDeliveryFee})`);
           }
@@ -490,11 +733,18 @@ client.on("message", async (msg) => {
 
         // Apply automatic tariff
         try {
-          const tariffResult = await getTariffByAgencyAndQuartier(agencyId, delivery.quartier);
-          const tariff = Array.isArray(tariffResult) ? tariffResult[0] : tariffResult;
+          const tariffResult = await getTariffByAgencyAndQuartier(
+            agencyId,
+            delivery.quartier
+          );
+          const tariff = Array.isArray(tariffResult)
+            ? tariffResult[0]
+            : tariffResult;
 
           if (!tariff || !tariff.tarif_amount) {
-            console.log(`   ⚠️  No tariff found for quartier "${delivery.quartier}", status change allowed without tariff`);
+            console.log(
+              `   ⚠️  No tariff found for quartier "${delivery.quartier}", status change allowed without tariff`
+            );
             if (forceAmountPaidToZero) {
               updateData.amount_paid = 0;
             }
@@ -507,14 +757,23 @@ client.on("message", async (msg) => {
           if (forceAmountPaidToZero) {
             // For client_absent: apply tariff but force amount_paid = 0
             updateData.amount_paid = 0;
-            console.log(`   💰 Applied automatic tariff: ${tariffAmount} FCFA for quartier "${delivery.quartier}", amount_paid forced to 0 (client_absent)`);
+            console.log(
+              `   💰 Applied automatic tariff: ${tariffAmount} FCFA for quartier "${delivery.quartier}", amount_paid forced to 0 (client_absent)`
+            );
           } else {
             // For delivered: apply tariff and calculate amount_paid
             const currentAmountPaid = parseFloat(delivery.amount_paid) || 0;
-            const newAmountPaid = Math.max(0, Math.round((currentAmountPaid - tariffAmount) * 100) / 100);
+            const newAmountPaid = Math.max(
+              0,
+              Math.round((currentAmountPaid - tariffAmount) * 100) / 100
+            );
             updateData.amount_paid = newAmountPaid;
-            console.log(`   💰 Applied automatic tariff: ${tariffAmount} FCFA for quartier "${delivery.quartier}"`);
-            console.log(`   💵 Amount paid: ${currentAmountPaid} -> ${newAmountPaid} FCFA`);
+            console.log(
+              `   💰 Applied automatic tariff: ${tariffAmount} FCFA for quartier "${delivery.quartier}"`
+            );
+            console.log(
+              `   💵 Amount paid: ${currentAmountPaid} -> ${newAmountPaid} FCFA`
+            );
           }
         } catch (tariffError) {
           console.error(`   ❌ Error applying tariff: ${tariffError.message}`);
@@ -537,9 +796,14 @@ client.on("message", async (msg) => {
               console.log(
                 `   ✅ Livraison #${delivery.id} marquée comme LIVRÉE`
               );
-              
+
               // Apply tariff logic for "delivered"
-              await applyTariffForStatusUpdate(delivery, updateData, agencyId, false);
+              await applyTariffForStatusUpdate(
+                delivery,
+                updateData,
+                agencyId,
+                false
+              );
               break;
 
             case "client_absent":
@@ -548,9 +812,14 @@ client.on("message", async (msg) => {
               console.log(
                 `   ⚠️  Livraison #${delivery.id} marquée comme CLIENT ABSENT`
               );
-              
+
               // Apply tariff logic for "client_absent" (tariff applied, amount_paid = 0)
-              await applyTariffForStatusUpdate(delivery, updateData, agencyId, true);
+              await applyTariffForStatusUpdate(
+                delivery,
+                updateData,
+                agencyId,
+                true
+              );
               break;
 
             case "failed":
@@ -561,10 +830,32 @@ client.on("message", async (msg) => {
               );
               // Annuler le tarif et rembourser le montant si reçu
               updateData.delivery_fee = 0;
-              const currentAmountPaidFailed = parseFloat(delivery.amount_paid) || 0;
+              const currentAmountPaidFailed =
+                parseFloat(delivery.amount_paid) || 0;
               if (currentAmountPaidFailed > 0) {
                 updateData.amount_paid = 0;
-                console.log(`   💰 Remboursement de ${currentAmountPaidFailed} F (amount_paid mis à 0)`);
+                console.log(
+                  `   💰 Remboursement de ${currentAmountPaidFailed} F (amount_paid mis à 0)`
+                );
+              }
+              console.log(`   🚫 Tarif annulé (delivery_fee mis à 0)`);
+              break;
+
+            case "postponed":
+              updateData.status = "postponed";
+              historyAction = "marked_postponed";
+              console.log(
+                `   🔄 Livraison #${delivery.id} marquée comme RENVOYÉE`
+              );
+              // Annuler le tarif et rembourser le montant si reçu (même logique que failed)
+              updateData.delivery_fee = 0;
+              const currentAmountPaidPostponed =
+                parseFloat(delivery.amount_paid) || 0;
+              if (currentAmountPaidPostponed > 0) {
+                updateData.amount_paid = 0;
+                console.log(
+                  `   💰 Remboursement de ${currentAmountPaidPostponed} F (amount_paid mis à 0)`
+                );
               }
               console.log(`   🚫 Tarif annulé (delivery_fee mis à 0)`);
               break;
@@ -606,7 +897,12 @@ client.on("message", async (msg) => {
                   `   ✅ Livraison complètement payée - marquée comme LIVRÉE`
                 );
                 // Apply tariff logic for "delivered" status
-                await applyTariffForStatusUpdate(delivery, updateData, agencyId, false);
+                await applyTariffForStatusUpdate(
+                  delivery,
+                  updateData,
+                  agencyId,
+                  false
+                );
               }
               break;
 
@@ -614,8 +910,77 @@ client.on("message", async (msg) => {
               updateData.status = "pickup";
               historyAction = "marked_pickup";
               console.log(
-                `   📦 Livraison #${delivery.id} marquée comme PICKUP`
+                `   📦 Livraison #${delivery.id} marquée comme AU BUREAU`
               );
+
+              // Apply fixed tariff of 1000 FCFA for pickup (Au bureau)
+              // Modify amount_paid like "delivered": amount_paid = amount_due - delivery_fee
+              const pickupTariff = 1000;
+
+              // Check if delivery_fee is already set
+              const currentDeliveryFeePickup = delivery.delivery_fee || 0;
+
+              if (currentDeliveryFeePickup > 0) {
+                // Tariff already applied, keep it
+                updateData.delivery_fee = currentDeliveryFeePickup;
+                console.log(
+                  `   💰 Tariff already applied (${currentDeliveryFeePickup})`
+                );
+              } else {
+                // Apply fixed pickup tariff
+                updateData.delivery_fee = pickupTariff;
+
+                // Calculate amount_paid (same logic as delivered)
+                const currentAmountPaid = parseFloat(delivery.amount_paid) || 0;
+                const currentAmountDue = parseFloat(delivery.amount_due) || 0;
+
+                if (currentAmountPaid === 0 && currentAmountDue > 0) {
+                  // No payment recorded yet, assume full payment was made
+                  const newAmountPaid = Math.max(
+                    0,
+                    Math.round((currentAmountDue - pickupTariff) * 100) / 100
+                  );
+                  updateData.amount_paid = newAmountPaid;
+                  console.log(
+                    `   💰 Applied fixed pickup tariff: ${pickupTariff} FCFA (Au bureau)`
+                  );
+                  console.log(
+                    `   💵 No payment recorded, assuming full payment: ${currentAmountDue} -> ${newAmountPaid} (${currentAmountDue} - ${pickupTariff})`
+                  );
+                } else if (
+                  currentAmountPaid > 0 &&
+                  currentAmountPaid < currentAmountDue
+                ) {
+                  // Partial payment: subtract tariff from current amount_paid
+                  const newAmountPaid = Math.max(
+                    0,
+                    Math.round((currentAmountPaid - pickupTariff) * 100) / 100
+                  );
+                  updateData.amount_paid = newAmountPaid;
+                  console.log(
+                    `   💰 Applied fixed pickup tariff: ${pickupTariff} FCFA (Au bureau)`
+                  );
+                  console.log(
+                    `   💵 Partial payment: ${currentAmountPaid} -> ${newAmountPaid}`
+                  );
+                } else if (
+                  currentAmountPaid >= currentAmountDue &&
+                  currentAmountDue > 0
+                ) {
+                  // Full payment already recorded: recalculate with tariff
+                  const newAmountPaid = Math.max(
+                    0,
+                    Math.round((currentAmountDue - pickupTariff) * 100) / 100
+                  );
+                  updateData.amount_paid = newAmountPaid;
+                  console.log(
+                    `   💰 Applied fixed pickup tariff: ${pickupTariff} FCFA (Au bureau)`
+                  );
+                  console.log(
+                    `   💵 Full payment recalculated: ${currentAmountPaid} -> ${newAmountPaid} (${currentAmountDue} - ${pickupTariff})`
+                  );
+                }
+              }
               break;
 
             case "pending":
@@ -858,14 +1223,6 @@ client.on("error", (error) => {
   console.error("   Stack:", error.stack);
 });
 
-// Fallback: Also listen for message_create event (some versions use this)
-// This ensures messages are received even if "message" event doesn't fire
-client.on("message_create", async (msg) => {
-  // Only process if not already handled by main message handler
-  // The main handler will process it, this is just a backup
-  console.log("📨 message_create event received (backup handler)");
-});
-
 // Prevent uncaught errors from crashing the bot
 process.on("uncaughtException", (error) => {
   console.error("⚠️  Uncaught Exception:", error.message);
@@ -971,7 +1328,21 @@ console.log("\n" + "=".repeat(60));
 console.log("🚀 Starting WhatsApp bot...");
 console.log("=".repeat(60));
 console.log("⏳ Initializing WhatsApp client...");
-console.log("💡 This may take 10-30 seconds (Puppeteer needs to start)");
+console.log("💡 This may take 30-60 seconds (Puppeteer needs to start)");
 console.log("💡 First startup is slower (Chrome download if needed)");
+console.log("💡 Please wait for QR code to appear...");
+console.log("🔄 Starting Puppeteer browser...");
 console.log("=".repeat(60) + "\n");
-client.initialize();
+
+// Initialize with error handling
+try {
+  console.log("🔄 Calling client.initialize()...\n");
+  client.initialize();
+  console.log("✅ client.initialize() called successfully");
+  console.log("💡 Waiting for authentication and ready event...\n");
+} catch (error) {
+  console.error("❌ CRITICAL ERROR: Failed to initialize client!");
+  console.error("   Error:", error.message);
+  console.error("   Stack:", error.stack);
+  process.exit(1);
+}

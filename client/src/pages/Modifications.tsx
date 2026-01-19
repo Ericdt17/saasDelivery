@@ -119,15 +119,19 @@ const translateStatus = (status: string): string => {
   const statusMap: Record<string, string> = {
     "pending": "En cours",
     "delivered": "Livré",
-    "failed": "Échec",
-    "pickup": "Pickup",
+    "failed": "Annulé",  // Changé de "Échec" à "Annulé"
+    "pickup": "Au bureau",
     "expedition": "Expédition",
     "cancelled": "Annulé",
+    "postponed": "Renvoyé",
     "client_absent": "Client absent",
     "en_cours": "En cours",
     "livré": "Livré",
-    "échec": "Échec",
+    "échec": "Annulé",  // Changé de "Échec" à "Annulé" (pour compatibilité)
     "annulé": "Annulé",
+    "renvoyé": "Renvoyé",
+    "present_ne_decroche_zone1": "CPCNDP Z1",
+    "present_ne_decroche_zone2": "CPCNDP Z2",
   };
   return statusMap[status.toLowerCase()] || status;
 };
