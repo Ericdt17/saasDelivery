@@ -125,11 +125,24 @@ export default function GroupDetail() {
 
   const limit = 20;
 
-  // Fetch group info
-  const { data: group, isLoading: isLoadingGroup } = useQuery({
+  // Fetch group info avec meilleure gestion d'erreur
+  const { 
+    data: group, 
+    isLoading: isLoadingGroup,
+    isError: isErrorGroup,
+    error: groupError 
+  } = useQuery({
     queryKey: ["group", groupId],
     queryFn: () => getGroupById(groupId!),
     enabled: !!groupId,
+    retry: false, // Ne pas retry sur 404/403
+    onError: (error: any) => {
+      const statusCode = error?.statusCode || error?.status;
+      console.warn(`[GroupDetail] Error loading group ${groupId}:`, {
+        statusCode,
+        message: error?.message || error?.data?.message,
+      });
+    },
   });
 
   // Check if it's a single day (for daily stats)
@@ -145,9 +158,23 @@ export default function GroupDetail() {
   } = useQuery({
     queryKey: ["dailyStats", dateRange.startDate, groupId],
     queryFn: () => getDailyStats(dateRange.startDate, groupId),
-    enabled: isSingleDay && !!groupId,
-    retry: 2,
+    enabled: isSingleDay && !!groupId && !!group, // Attendre que le groupe soit chargé
+    retry: (failureCount, error: any) => {
+      // Ne pas retry sur les erreurs 4xx
+      const statusCode = error?.statusCode || error?.status;
+      if (statusCode >= 400 && statusCode < 500) {
+        return false;
+      }
+      return failureCount < 2;
+    },
     refetchOnWindowFocus: false,
+    onError: (error: any) => {
+      // Ne pas logger les erreurs 404 comme des erreurs critiques
+      const statusCode = error?.statusCode || error?.status;
+      if (statusCode !== 404) {
+        console.error("[GroupDetail] Error loading daily stats:", error);
+      }
+    },
   });
 
   // Fetch deliveries for all periods
@@ -169,8 +196,15 @@ export default function GroupDetail() {
         sortBy: "created_at",
         sortOrder: "DESC",
       }),
-    enabled: !!groupId,
-    retry: 2,
+    enabled: !!groupId && !!group, // Attendre que le groupe soit chargé
+    retry: (failureCount, error: any) => {
+      // Ne pas retry sur les erreurs 4xx
+      const statusCode = error?.statusCode || error?.status;
+      if (statusCode >= 400 && statusCode < 500) {
+        return false;
+      }
+      return failureCount < 2;
+    },
     refetchOnWindowFocus: false,
   });
 
@@ -476,13 +510,45 @@ export default function GroupDetail() {
     );
   }
 
-  if (!group) {
+  // Afficher l'erreur si la requête a échoué
+  if (isErrorGroup && groupId) {
+    const statusCode = (groupError as any)?.statusCode || (groupError as any)?.status;
+    const errorMessage = statusCode === 403 
+      ? "Vous n'avez pas accès à ce groupe. Ce groupe appartient peut-être à une autre agence."
+      : statusCode === 404
+      ? "Le groupe demandé n'existe pas ou a été supprimé."
+      : "Une erreur est survenue lors du chargement du groupe.";
+    
+    return (
+      <Alert variant="destructive">
+        <AlertCircle className="h-4 w-4" />
+        <AlertTitle>Erreur de chargement</AlertTitle>
+        <AlertDescription>
+          <p className="mb-3">{errorMessage}</p>
+          <p className="mb-3 text-sm text-muted-foreground">
+            ID du groupe : {groupId}
+          </p>
+          <Button variant="outline" onClick={() => navigate("/groupes")}>
+            Retour aux groupes
+          </Button>
+        </AlertDescription>
+      </Alert>
+    );
+  }
+
+  // Vérifier si group est null (après le chargement)
+  if (!isLoadingGroup && !group && groupId) {
     return (
       <Alert variant="destructive">
         <AlertCircle className="h-4 w-4" />
         <AlertTitle>Groupe non trouvé</AlertTitle>
         <AlertDescription>
-          <p className="mb-3">Le groupe demandé n'existe pas ou vous n'avez pas accès.</p>
+          <p className="mb-3">
+            Le groupe demandé n'existe pas ou vous n'avez pas accès.
+          </p>
+          <p className="mb-3 text-sm text-muted-foreground">
+            ID du groupe : {groupId}
+          </p>
           <Button variant="outline" onClick={() => navigate("/groupes")}>
             Retour aux groupes
           </Button>
@@ -580,7 +646,17 @@ export default function GroupDetail() {
               <AlertTitle>Erreur de chargement</AlertTitle>
               <AlertDescription className="mt-2">
                 <p className="mb-3">
-                  {error instanceof Error ? error.message : "Impossible de charger les données"}
+                  {(() => {
+                    const statusCode = (error as any)?.statusCode || (error as any)?.status;
+                    if (statusCode === 404) {
+                      return "Aucune donnée trouvée pour cette période.";
+                    } else if (statusCode === 403) {
+                      return "Vous n'avez pas accès à ces données.";
+                    } else if (statusCode >= 500) {
+                      return "Erreur serveur. Veuillez réessayer plus tard.";
+                    }
+                    return error instanceof Error ? error.message : "Impossible de charger les données";
+                  })()}
                 </p>
                 <Button variant="outline" size="sm" onClick={() => refetch()} className="gap-2">
                   <RefreshCw className="w-4 h-4" />
