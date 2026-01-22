@@ -70,13 +70,14 @@ export function calculateStatsFromDeliveries(
   // Calculate montantRestant:
   // - For "delivered" and "pickup": 0 (completely paid)
   // - For "injoignable", "ne_decroche_pas", "annulé", "renvoyé": 0 (no delivery made, cannot collect anymore)
+  // - For "present_ne_decroche_zone1" and "present_ne_decroche_zone2": 0 (chauffeur présent, client ne décroche pas, cannot collect anymore)
   // - For others: restant as calculated (amount_due - amount_paid)
   const restant = deliveries.reduce((sum, d) => {
     if (d.statut === "livré" || d.statut === "pickup") {
       // Delivered and pickup deliveries are completely paid, no remaining amount
       return sum + 0;
-    } else if (d.statut === "annulé" || d.statut === "renvoyé" || d.statut === "injoignable" || d.statut === "ne_decroche_pas") {
-      // Cancelled/returned/injoignable/ne_decroche_pas deliveries: no delivery made, cannot collect anymore, restant = 0
+    } else if (d.statut === "annulé" || d.statut === "renvoyé" || d.statut === "injoignable" || d.statut === "ne_decroche_pas" || d.statut === "present_ne_decroche_zone1" || d.statut === "present_ne_decroche_zone2") {
+      // Cancelled/returned/injoignable/ne_decroche_pas/present zones: no delivery made or cannot collect anymore, restant = 0
       return sum + 0;
     } else {
       const remaining = Number(d.restant) || 0;

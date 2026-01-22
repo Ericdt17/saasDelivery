@@ -550,12 +550,13 @@ export default function Tarifs() {
                   step="100"
                   placeholder="Ex: 2000"
                   value={formData.tarif_amount || ""}
-                  onChange={(e) =>
+                  onChange={(e) => {
+                    const cleanedValue = e.target.value.replace(/\s/g, ''); // Enlever tous les espaces
                     setFormData({
                       ...formData,
-                      tarif_amount: parseFloat(e.target.value) || 0,
-                    })
-                  }
+                      tarif_amount: parseFloat(cleanedValue) || 0,
+                    });
+                  }}
                 />
               </div>
             </div>
@@ -747,12 +748,13 @@ export default function Tarifs() {
                 step="100"
                 placeholder="Ex: 2000"
                 value={formData.tarif_amount || ""}
-                onChange={(e) =>
+                onChange={(e) => {
+                  const cleanedValue = e.target.value.replace(/\s/g, ''); // Enlever tous les espaces
                   setFormData({
                     ...formData,
-                    tarif_amount: parseFloat(e.target.value) || 0,
-                  })
-                }
+                    tarif_amount: parseFloat(cleanedValue) || 0,
+                  });
+                }}
               />
             </div>
           </div>

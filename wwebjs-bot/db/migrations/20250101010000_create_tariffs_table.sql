@@ -35,3 +35,4 @@ CREATE INDEX IF NOT EXISTS idx_tariffs_quartier ON tariffs(quartier);
 
 
 
+

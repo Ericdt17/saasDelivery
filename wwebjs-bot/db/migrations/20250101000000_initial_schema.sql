@@ -34,7 +34,7 @@ CREATE TABLE IF NOT EXISTS deliveries (
   items TEXT,
   amount_due DECIMAL(10, 2) DEFAULT 0,
   amount_paid DECIMAL(10, 2) DEFAULT 0,
-  status VARCHAR(20) DEFAULT 'pending',
+  status VARCHAR(50) DEFAULT 'pending',
   quartier VARCHAR(255),
   notes TEXT,
   carrier VARCHAR(255),
@@ -71,6 +71,7 @@ CREATE INDEX IF NOT EXISTS idx_groups_whatsapp_id ON groups(whatsapp_group_id);
 CREATE INDEX IF NOT EXISTS idx_agencies_email ON agencies(email);
 CREATE INDEX IF NOT EXISTS idx_history_delivery_id ON delivery_history(delivery_id);
 CREATE INDEX IF NOT EXISTS idx_history_agency_id ON delivery_history(agency_id);
+
 
 
 

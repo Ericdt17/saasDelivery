@@ -12,48 +12,13 @@ dist
 dist-ssr
 *.local
 
-# Environment files
-.env
-.env.local
-.env.production
-.env.*.local
-
-# Test coverage
-coverage/
-.nyc_output/
-test-results/
-
-# Cache
-.cache/
-.vite/
-.parcel-cache/
-
-# Build info
-*.tsbuildinfo
-
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
 .idea
 .DS_Store
-Thumbs.db
-desktop.ini
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
-*.swp
-*.swo
-*~
-
-# Temporary files
-*.tmp
-*.temp
-tmp/
-.temp/
-
-# Lock files (optional - uncomment if you don't want to track them)
-# bun.lockb
-# yarn.lock
-# pnpm-lock.yaml

@@ -106,11 +106,13 @@ export function transformDeliveryToFrontend(
   // For "delivered" status: restant should be 0 (completely paid)
   // For "pickup" status: restant should be 0 (client picked up at office, applied 1000 FCFA tariff)
   // For "failed"/"cancelled"/"postponed"/"unreachable"/"no_answer" status: restant should be 0 (no delivery made, cannot collect anymore)
+  // For "present_ne_decroche_zone1" and "present_ne_decroche_zone2": restant should be 0 (chauffeur présent, client ne décroche pas, cannot collect anymore)
   // For other statuses: restant = amount_due - amount_paid
   const backendStatus = backend.status?.toLowerCase();
   const isDelivered = backendStatus === "delivered";
   const isPickup = backendStatus === "pickup";
   const isCancelled = backendStatus === "failed" || backendStatus === "cancelled" || backendStatus === "postponed" || backendStatus === "unreachable" || backendStatus === "no_answer";
+  const isPresentZone = backendStatus === "present_ne_decroche_zone1" || backendStatus === "present_ne_decroche_zone2";
   
   // Convertir explicitement en nombres pour éviter les problèmes avec les strings PostgreSQL
   // PostgreSQL retourne les DECIMAL/NUMERIC comme des strings en JavaScript
@@ -126,8 +128,8 @@ export function transformDeliveryToFrontend(
         ? parseFloat(String(backend.amount_paid)) || 0
         : 0);
   
-  const restant = isDelivered || isPickup || isCancelled
-    ? 0 // Delivered, pickup, or cancelled (including injoignable/ne_decroche_pas): no remaining amount
+  const restant = isDelivered || isPickup || isCancelled || isPresentZone
+    ? 0 // Delivered, pickup, cancelled, or present_ne_decroche zones: no remaining amount
     : Math.max(0, amountDue - amountPaid);
 
   // Convertir delivery_fee aussi

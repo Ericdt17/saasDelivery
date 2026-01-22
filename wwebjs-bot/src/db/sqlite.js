@@ -21,6 +21,7 @@ function createSqliteClient() {
   const dbPath = ensureSqliteFile(SQLITE_PATH);
   const db = new Database(dbPath);
   db.pragma("journal_mode = WAL");
+  db.pragma("foreign_keys = ON"); // Enable foreign key constraints
   return db;
 }
 
@@ -28,6 +29,7 @@ module.exports = {
   createSqliteClient,
   SQLITE_PATH,
 };
+
 
 
 

@@ -108,7 +108,7 @@ class PostgresAdapter {
           items TEXT,
           amount_due DECIMAL(10, 2) DEFAULT 0,
           amount_paid DECIMAL(10, 2) DEFAULT 0,
-          status VARCHAR(20) DEFAULT 'pending',
+          status VARCHAR(50) DEFAULT 'pending',
           quartier VARCHAR(255),
           notes TEXT,
           carrier VARCHAR(255),

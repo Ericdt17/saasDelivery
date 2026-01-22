@@ -257,10 +257,25 @@ async function runMigrations() {
           errorMessage.includes("duplicate column") ||
           errorMessage.includes("column") && errorMessage.includes("exists");
         
-        if (isAlreadyExistsError) {
-          // Column/table/index already exists - this is OK, mark as applied
-          log(`⚠️  ${filename}: ${errorMessage}`, "yellow");
-          log(`   (This is OK - already applied, marking as complete)`, "yellow");
+        // Handle SQLite ALTER COLUMN TYPE errors
+        // SQLite doesn't support ALTER COLUMN TYPE, but SQLite uses TEXT which has no length limit
+        // So migrations that only change column size can be safely ignored for SQLite
+        const isSqliteAlterColumnError = 
+          dbType === "sqlite" &&
+          (errorMessage.includes("ALTER") || 
+           errorMessage.includes("syntax error") ||
+           errorMessage.includes("near \"ALTER\"")) &&
+          (filename.includes("increase") || filename.includes("column") || filename.includes("size"));
+        
+        if (isAlreadyExistsError || isSqliteAlterColumnError) {
+          // Column/table/index already exists OR SQLite ALTER COLUMN error - this is OK
+          if (isSqliteAlterColumnError) {
+            log(`⚠️  ${filename}: SQLite doesn't support ALTER COLUMN TYPE`, "yellow");
+            log(`   (This is OK - SQLite uses TEXT with no length limit, marking as applied)`, "yellow");
+          } else {
+            log(`⚠️  ${filename}: ${errorMessage}`, "yellow");
+            log(`   (This is OK - already applied, marking as complete)`, "yellow");
+          }
           await markMigrationApplied(connection, version, dbType);
           log(`✅ Migration marked as applied: ${filename}`, "green");
         } else {

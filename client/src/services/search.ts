@@ -1,27 +1,27 @@
 /**
- * Search API Service
+ * Search Service
  * Functions for searching deliveries
  */
 
-import { apiGet } from './api';
-import { API_ENDPOINTS } from '@/lib/api-config';
+import { apiGet } from "./api";
+import { API_ENDPOINTS } from "@/lib/api-config";
 import {
   transformDeliveriesToFrontend,
   type BackendDelivery,
   type FrontendDelivery,
-} from '@/lib/data-transform';
+} from "@/lib/data-transform";
 
 /**
  * Search deliveries by query string
- * @param query - Search query (searches in phone, items, quartier, etc.)
+ * @param query - Search query string
+ * @returns Array of matching deliveries in frontend format
  */
 export async function searchDeliveries(query: string): Promise<FrontendDelivery[]> {
-  if (!query || query.trim().length === 0) {
-    return [];
-  }
+  const response = await apiGet<BackendDelivery[]>(
+    API_ENDPOINTS.SEARCH,
+    { q: query }
+  );
 
-  const response = await apiGet<BackendDelivery[]>(API_ENDPOINTS.SEARCH, { q: query });
-  
   if (!response.data) {
     return [];
   }
@@ -29,17 +29,5 @@ export async function searchDeliveries(query: string): Promise<FrontendDelivery[
   return transformDeliveriesToFrontend(response.data);
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+// Re-export FrontendDelivery type for convenience
+export type { FrontendDelivery } from "@/lib/data-transform";
