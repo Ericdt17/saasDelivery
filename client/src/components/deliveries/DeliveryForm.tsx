@@ -356,11 +356,15 @@ export function DeliveryForm({ delivery, groupId, onSuccess, onCancel }: Deliver
                 <FormLabel>Montant total (FCFA) *</FormLabel>
                 <FormControl>
                   <Input 
-                    type="number"
+                    type="text"
+                    inputMode="numeric"
                     placeholder="0" 
                     {...field}
                     value={field.value || ''}
-                    onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                    onChange={(e) => {
+                      const cleanedValue = e.target.value.replace(/\s/g, ''); // Enlever tous les espaces
+                      field.onChange(parseFloat(cleanedValue) || 0);
+                    }}
                     disabled={isLoading}
                   />
                 </FormControl>
@@ -381,11 +385,15 @@ export function DeliveryForm({ delivery, groupId, onSuccess, onCancel }: Deliver
                 <FormLabel>Montant encaissé (FCFA)</FormLabel>
                 <FormControl>
                   <Input 
-                    type="number"
+                    type="text"
+                    inputMode="numeric"
                     placeholder="0" 
                     {...field}
                     value={field.value || ''}
-                    onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                    onChange={(e) => {
+                      const cleanedValue = e.target.value.replace(/\s/g, ''); // Enlever tous les espaces
+                      field.onChange(parseFloat(cleanedValue) || 0);
+                    }}
                     disabled={isLoading}
                   />
                 </FormControl>

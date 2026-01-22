@@ -65,6 +65,7 @@ function createSqliteQueries(db) {
         agency_id INTEGER,
         group_id INTEGER,
         whatsapp_message_id TEXT,
+        delivery_fee REAL DEFAULT 0,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (agency_id) REFERENCES agencies(id) ON DELETE SET NULL,
@@ -78,7 +79,7 @@ function createSqliteQueries(db) {
         details TEXT,
         actor TEXT DEFAULT 'bot',
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (delivery_id) REFERENCES deliveries(id)
+        FOREIGN KEY (delivery_id) REFERENCES deliveries(id) ON DELETE CASCADE
       );
 
       CREATE INDEX IF NOT EXISTS idx_agencies_email ON agencies(email);
@@ -118,8 +119,13 @@ function createSqliteQueries(db) {
       agency_id,
       group_id,
       whatsapp_message_id,
-      delivery_fee,
+      delivery_fee = 0,
     } = data;
+
+    // Round amount fields to 2 decimal places to ensure exact values
+    const roundedAmountDue = amount_due != null ? Math.round(parseFloat(amount_due) * 100) / 100 : 0;
+    const roundedAmountPaid = amount_paid != null ? Math.round(parseFloat(amount_paid) * 100) / 100 : 0;
+    const roundedDeliveryFee = delivery_fee != null ? Math.round(parseFloat(delivery_fee) * 100) / 100 : 0;
 
     const result = await query(
       `INSERT INTO deliveries 
@@ -129,8 +135,8 @@ function createSqliteQueries(db) {
         phone,
         customer_name,
         items,
-        amount_due || 0,
-        amount_paid,
+        roundedAmountDue,
+        roundedAmountPaid,
         status,
         quartier,
         notes,
@@ -138,7 +144,7 @@ function createSqliteQueries(db) {
         agency_id || null,
         group_id || null,
         whatsapp_message_id || null,
-        delivery_fee !== undefined && delivery_fee !== null ? Math.round(parseFloat(delivery_fee) * 100) / 100 : null,
+        roundedDeliveryFee,
       ]
     );
 
@@ -167,12 +173,16 @@ function createSqliteQueries(db) {
     const trx = db.transaction((rows) => {
       rows.forEach((row, index) => {
         try {
+          // Round amount fields to 2 decimal places to ensure exact values
+          const roundedAmountDue = row.amount_due != null ? Math.round(parseFloat(row.amount_due) * 100) / 100 : 0;
+          const roundedAmountPaid = row.amount_paid != null ? Math.round(parseFloat(row.amount_paid) * 100) / 100 : 0;
+          
           const res = insertStmt.run(
             row.phone,
             row.customer_name,
             row.items,
-            row.amount_due || 0,
-            row.amount_paid || 0,
+            roundedAmountDue,
+            roundedAmountPaid,
             row.status || "pending",
             row.quartier,
             row.notes,
@@ -302,6 +312,18 @@ function createSqliteQueries(db) {
       "SELECT * FROM delivery_history WHERE delivery_id = ? ORDER BY created_at DESC",
       [deliveryId]
     );
+  }
+
+  async function deleteDelivery(id) {
+    // Hard delete: removes delivery and its history
+    // Delete history first to avoid foreign key constraint issues
+    await query(`DELETE FROM delivery_history WHERE delivery_id = ?`, [id]);
+    // Then delete delivery
+    const result = await query(
+      `DELETE FROM deliveries WHERE id = ?`,
+      [id]
+    );
+    return { changes: result.changes || 0 };
   }
 
   async function getDeliveries(options = {}) {
@@ -502,7 +524,7 @@ function createSqliteQueries(db) {
 
   async function getAgencyById(id) {
     return await query(
-      `SELECT id, name, email, agency_code, role, is_active, address, phone, logo_base64, created_at, updated_at 
+      `SELECT id, name, email, agency_code, role, is_active, created_at, updated_at 
        FROM agencies 
        WHERE id = ? LIMIT 1`,
       [id]
@@ -528,7 +550,7 @@ function createSqliteQueries(db) {
     }
 
     return await query(
-      `SELECT id, name, email, agency_code, role, is_active, address, phone, logo_base64, created_at, updated_at 
+      `SELECT id, name, email, agency_code, role, is_active, created_at, updated_at 
        FROM agencies 
        WHERE UPPER(TRIM(agency_code)) = ? AND is_active = 1 
        LIMIT 1`,
@@ -539,7 +561,7 @@ function createSqliteQueries(db) {
   async function getAllAgencies() {
     // Only return active agencies (is_active = 1)
     return await query(
-      `SELECT id, name, email, agency_code, role, is_active, address, phone, logo_base64, created_at, updated_at 
+      `SELECT id, name, email, agency_code, role, is_active, created_at, updated_at 
        FROM agencies 
        WHERE is_active = 1
        ORDER BY created_at DESC`
@@ -548,7 +570,7 @@ function createSqliteQueries(db) {
 
   async function updateAgency(
     id,
-    { name, email, password_hash, role, is_active, agency_code, address, phone, logo_base64 }
+    { name, email, password_hash, role, is_active, agency_code }
   ) {
     const updates = [];
     const params = [];
@@ -585,18 +607,6 @@ function createSqliteQueries(db) {
       params.push(normalizedCode);
     } else {
       console.log(`[SQLite UpdateAgency] agency_code is undefined, not updating`);
-    }
-    if (address !== undefined) {
-      updates.push("address = ?");
-      params.push(address);
-    }
-    if (phone !== undefined) {
-      updates.push("phone = ?");
-      params.push(phone);
-    }
-    if (logo_base64 !== undefined) {
-      updates.push("logo_base64 = ?");
-      params.push(logo_base64);
     }
 
     if (updates.length === 0) {
@@ -660,31 +670,26 @@ function createSqliteQueries(db) {
     );
   }
 
-  async function getGroupsByAgency(agency_id, includeInactive = false) {
-    const whereClause = includeInactive 
-      ? 'WHERE g.agency_id = ?'
-      : 'WHERE g.agency_id = ? AND g.is_active = 1';
+  async function getGroupsByAgency(agency_id) {
     return await query(
       `SELECT g.id, g.agency_id, g.whatsapp_group_id, g.name, g.is_active, 
               g.created_at, g.updated_at,
               a.name as agency_name
        FROM groups g
        LEFT JOIN agencies a ON g.agency_id = a.id
-       ${whereClause}
+       WHERE g.agency_id = ?
        ORDER BY g.created_at DESC`,
       [agency_id]
     );
   }
 
-  async function getAllGroups(includeInactive = false) {
-    const whereClause = includeInactive ? '' : 'WHERE g.is_active = 1';
+  async function getAllGroups() {
     return await query(
       `SELECT g.id, g.agency_id, g.whatsapp_group_id, g.name, g.is_active, 
               g.created_at, g.updated_at,
               a.name as agency_name
        FROM groups g
        LEFT JOIN agencies a ON g.agency_id = a.id
-       ${whereClause}
        ORDER BY g.created_at DESC`
     );
   }
@@ -711,16 +716,10 @@ function createSqliteQueries(db) {
     updates.push("updated_at = CURRENT_TIMESTAMP");
     params.push(id);
 
-    const sql = `UPDATE groups SET ${updates.join(", ")} WHERE id = ?`;
-    console.log(`[SQLite updateGroup] Executing SQL: ${sql}`);
-    console.log(`[SQLite updateGroup] Parameters:`, params);
-    console.log(`[SQLite updateGroup] This is an UPDATE query, NOT a DELETE`);
-    
-    const result = await query(sql, params);
-    
-    console.log(`[SQLite updateGroup] Query result:`, result);
-    console.log(`[SQLite updateGroup] Changes: ${result?.changes || 0}`);
-    
+    const result = await query(
+      `UPDATE groups SET ${updates.join(", ")} WHERE id = ?`,
+      params
+    );
     return result;
   }
 
@@ -729,117 +728,85 @@ function createSqliteQueries(db) {
     return await updateGroup(id, { is_active: 0 });
   }
 
-  async function hardDeleteGroup(id) {
-    // Hard delete: permanently remove from database
-    const result = await query(`DELETE FROM groups WHERE id = ?`, [id]);
-    return result;
-  }
-
   // ============================================
   // Tariff Queries
   // ============================================
 
-  async function createTariff({
-    agency_id,
-    quartier,
-    tarif_amount,
-  }) {
+  async function createTariff({ agency_id, quartier, tarif_amount }) {
     const result = await query(
       `INSERT INTO tariffs (agency_id, quartier, tarif_amount) 
        VALUES (?, ?, ?)`,
-      [agency_id, quartier, parseFloat(tarif_amount) || 0]
+      [agency_id, quartier, tarif_amount]
     );
-    return result.lastInsertRowid;
+    return result.lastID || result.id;
   }
 
   async function getTariffById(id) {
-    return await query(
-      `SELECT t.id, t.agency_id, t.quartier, t.tarif_amount, 
-              t.created_at, t.updated_at,
-              a.name as agency_name
-       FROM tariffs t
-       LEFT JOIN agencies a ON t.agency_id = a.id
-       WHERE t.id = ? LIMIT 1`,
+    const result = await query(
+      `SELECT * FROM tariffs WHERE id = ? LIMIT 1`,
       [id]
     );
+    return Array.isArray(result) ? result[0] || null : result || null;
   }
 
   async function getTariffByAgencyAndQuartier(agency_id, quartier) {
-    return await query(
-      `SELECT t.id, t.agency_id, t.quartier, t.tarif_amount, 
-              t.created_at, t.updated_at
-       FROM tariffs t
-       WHERE t.agency_id = ? AND t.quartier = ? LIMIT 1`,
+    const result = await query(
+      `SELECT * FROM tariffs 
+       WHERE agency_id = ? AND quartier = ? LIMIT 1`,
       [agency_id, quartier]
     );
+    return Array.isArray(result) ? result[0] || null : result || null;
   }
 
   async function getTariffsByAgency(agency_id) {
     return await query(
-      `SELECT t.id, t.agency_id, t.quartier, t.tarif_amount, 
-              t.created_at, t.updated_at,
-              a.name as agency_name
-       FROM tariffs t
-       LEFT JOIN agencies a ON t.agency_id = a.id
-       WHERE t.agency_id = ?
-       ORDER BY t.quartier ASC`,
+      `SELECT * FROM tariffs 
+       WHERE agency_id = ? 
+       ORDER BY quartier ASC`,
       [agency_id]
     );
   }
 
   async function getAllTariffs() {
     return await query(
-      `SELECT t.id, t.agency_id, t.quartier, t.tarif_amount, 
-              t.created_at, t.updated_at,
-              a.name as agency_name
+      `SELECT t.*, a.name as agency_name 
        FROM tariffs t
        LEFT JOIN agencies a ON t.agency_id = a.id
-       ORDER BY a.name ASC, t.quartier ASC`
+       ORDER BY t.agency_id, t.quartier ASC`
     );
   }
 
-  async function updateTariff(
-    id,
-    { agency_id, quartier, tarif_amount }
-  ) {
+  async function updateTariff(id, { quartier, tarif_amount }) {
     const updates = [];
     const params = [];
 
-    if (agency_id !== undefined) {
-      updates.push(`agency_id = ?`);
-      params.push(agency_id);
-    }
     if (quartier !== undefined) {
-      updates.push(`quartier = ?`);
+      updates.push("quartier = ?");
       params.push(quartier);
     }
     if (tarif_amount !== undefined) {
-      updates.push(`tarif_amount = ?`);
-      params.push(parseFloat(tarif_amount) || 0);
+      updates.push("tarif_amount = ?");
+      params.push(tarif_amount);
     }
 
     if (updates.length === 0) {
       return { changes: 0 };
     }
 
-    updates.push(`updated_at = CURRENT_TIMESTAMP`);
+    updates.push("updated_at = CURRENT_TIMESTAMP");
     params.push(id);
 
     const sql = `UPDATE tariffs SET ${updates.join(", ")} WHERE id = ?`;
-    return await query(sql, params);
+    const result = await query(sql, params);
+    return { changes: result.changes || 0 };
   }
 
   async function deleteTariff(id) {
-    return await query(
+    const result = await query(
       `DELETE FROM tariffs WHERE id = ?`,
       [id]
     );
-  }
-
-  async function deleteDelivery(id) {
-    // Delete history first to avoid FK constraint issues (and keep behavior consistent with Postgres)
-    await query("DELETE FROM delivery_history WHERE delivery_id = ?", [id]);
-    return await query("DELETE FROM deliveries WHERE id = ?", [id]);
+    return { changes: result.changes || 0 };
   }
 
   return {
@@ -875,7 +842,6 @@ function createSqliteQueries(db) {
     getAllGroups,
     updateGroup,
     deleteGroup,
-    hardDeleteGroup,
     // Tariff queries
     createTariff,
     getTariffById,
