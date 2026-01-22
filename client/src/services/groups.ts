@@ -43,11 +43,31 @@ export async function getGroups(): Promise<Group[]> {
  * Get group by ID
  */
 export async function getGroupById(id: number): Promise<Group | null> {
-  const response = await apiGet<Group>(`/api/v1/groups/${id}`);
-  if (response.success && response.data) {
-    return response.data;
+  try {
+    const response = await apiGet<Group>(`/api/v1/groups/${id}`);
+    if (response.success && response.data) {
+      return response.data;
+    }
+    return null;
+  } catch (error: any) {
+    const statusCode = error?.statusCode || error?.status;
+    
+    // Logger pour debug
+    console.warn(`[Groups] Error fetching group ${id}:`, {
+      statusCode,
+      message: error?.message || error?.data?.message,
+    });
+    
+    // 404 = groupe non trouvé
+    // 403 = pas d'accès au groupe
+    if (statusCode === 404 || statusCode === 403) {
+      return null; // Retourner null pour que React Query gère l'erreur
+    }
+    
+    // Autres erreurs (500, network, etc.)
+    console.error(`[Groups] Unexpected error fetching group ${id}:`, error);
+    throw error; // Re-throw pour que React Query gère l'erreur
   }
-  return null;
 }
 
 /**

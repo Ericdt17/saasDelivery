@@ -82,6 +82,14 @@ router.get("/:id", async (req, res, next) => {
     const { id } = req.params;
     const group = await getGroupById(parseInt(id));
 
+    console.log("[Groups API GET /:id] Group found:", {
+      groupId: id,
+      groupAgencyId: group?.agency_id,
+      userAgencyId: req.user.agencyId,
+      userId: req.user.userId,
+      userRole: req.user.role,
+    });
+
     if (!group) {
       return res.status(404).json({
         success: false,
@@ -95,6 +103,12 @@ router.get("/:id", async (req, res, next) => {
       const agencyId = req.user.agencyId !== null && req.user.agencyId !== undefined 
         ? req.user.agencyId 
         : req.user.userId;
+      
+      console.log("[Groups API GET /:id] Checking access:", {
+        groupAgencyId: group.agency_id,
+        userAgencyId: agencyId,
+        hasAccess: group.agency_id === agencyId,
+      });
       
       if (group.agency_id !== agencyId) {
         return res.status(403).json({
