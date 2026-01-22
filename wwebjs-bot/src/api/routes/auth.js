@@ -156,15 +156,27 @@ router.get("/me", authenticateToken, async (req, res, next) => {
          FROM agencies 
          WHERE id = ? LIMIT 1`;
 
-    const agencies = await adapter.query(getAgencyQuery, [req.user.userId]);
-    const agency =
-      adapter.type === "postgres" ? agencies[0] || null : agencies || null;
+    const result = await adapter.query(getAgencyQuery, [req.user.userId]);
+    
+    // PostgreSQL adapter returns single object (or null) for LIMIT 1
+    // SQLite adapter returns single object (or undefined) for LIMIT 1
+    const agency = adapter.type === "postgres" 
+      ? (result || null)  // PostgreSQL already returns object or null
+      : (result || null);  // SQLite returns object or undefined
 
     if (!agency) {
-      return res.status(404).json({
+      console.error("[Auth /me] User not found in database:", {
+        userId: req.user.userId,
+        email: req.user.email,
+        role: req.user.role,
+        dbType: adapter.type,
+        queryResult: result,
+      });
+      
+      return res.status(401).json({
         success: false,
-        error: "User not found",
-        message: "User account not found",
+        error: "Authentication failed",
+        message: "User account not found. Please login again.",
       });
     }
 
