@@ -487,7 +487,8 @@ function createPostgresQueries(pool) {
        WHERE id = $1 LIMIT 1`,
       [id]
     );
-    return result[0] || null;
+    // query() with LIMIT 1 already returns object or null
+    return result || null;
   }
 
   async function getAgencyByEmail(email) {
@@ -518,7 +519,8 @@ function createPostgresQueries(pool) {
       [normalizedCode]
     );
     
-    return result[0] || null;
+    // query() with LIMIT 1 already returns object or null
+    return result || null;
   }
 
   async function getAllAgencies() {
@@ -627,7 +629,8 @@ function createPostgresQueries(pool) {
        WHERE g.id = $1 LIMIT 1`,
       [id]
     );
-    return result[0] || null;
+    // query() with LIMIT 1 already returns object or null
+    return result || null;
   }
 
   async function getGroupsByAgency(agency_id) {
@@ -705,7 +708,8 @@ function createPostgresQueries(pool) {
       `SELECT * FROM tariffs WHERE id = $1 LIMIT 1`,
       [id]
     );
-    return result[0] || null;
+    // query() with LIMIT 1 already returns object or null
+    return result || null;
   }
 
   async function getTariffByAgencyAndQuartier(agency_id, quartier) {
@@ -714,7 +718,8 @@ function createPostgresQueries(pool) {
        WHERE agency_id = $1 AND quartier = $2 LIMIT 1`,
       [agency_id, quartier]
     );
-    return result[0] || null;
+    // query() with LIMIT 1 already returns object or null
+    return result || null;
   }
 
   async function getTariffsByAgency(agency_id) {
