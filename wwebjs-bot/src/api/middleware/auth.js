@@ -13,13 +13,31 @@ function authenticateToken(req, res, next) {
   try {
     let token = null;
 
+    const originalUrl = String(req.originalUrl || "");
+    const isLogoutRoute =
+      req.path === "/logout" ||
+      req.path === "/signout" ||
+      originalUrl.endsWith("/api/v1/auth/logout") ||
+      originalUrl.endsWith("/api/v1/auth/signout") ||
+      originalUrl.endsWith("/auth/logout") ||
+      originalUrl.endsWith("/auth/signout");
+
     // First, try to get token from HTTP-only cookie (preferred method)
     token = extractTokenFromCookie(req.cookies, 'auth_token');
 
-    // If no cookie token, fall back to Authorization header (backward compatibility)
+    // If no cookie token, optionally fall back to Authorization header (transition/backward compatibility)
+    // Disabled by default in production.
     if (!token) {
-      const authHeader = req.headers.authorization;
-      token = extractTokenFromHeader(authHeader);
+      const isProduction = process.env.NODE_ENV === "production";
+      const allowHeaderFallback =
+        !isProduction &&
+        (process.env.AUTH_HEADER_FALLBACK === "true" ||
+          process.env.AUTH_HEADER_FALLBACK === "1");
+
+      if (allowHeaderFallback) {
+        const authHeader = req.headers.authorization;
+        token = extractTokenFromHeader(authHeader);
+      }
     }
 
     if (!token) {
@@ -31,7 +49,18 @@ function authenticateToken(req, res, next) {
     }
 
     // Verify token
-    const decoded = verifyToken(token);
+    let decoded;
+    try {
+      decoded = verifyToken(token);
+    } catch (error) {
+      // Special-case: logout/signout should clear cookie even if token is expired/invalid.
+      // This keeps the endpoint protected (cookie must exist), but guarantees revocation.
+      if (isLogoutRoute) {
+        req.user = null;
+        return next();
+      }
+      throw error;
+    }
 
     // Debug: Log decoded token
     console.log("[Auth Middleware] Decoded token:", {

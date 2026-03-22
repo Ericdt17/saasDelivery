@@ -102,14 +102,99 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (email: string, password: string): Promise<boolean> => {
     try {
+      // #region agent log
+      fetch("http://127.0.0.1:7588/ingest/6825cdfb-0c66-4b26-9ab0-cf89f3b6ed2d", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Debug-Session-Id": "c77180",
+        },
+        body: JSON.stringify({
+          sessionId: "c77180",
+          runId: "pre-crash-1",
+          hypothesisId: "H6",
+          location: "client/src/contexts/AuthContext.tsx:login:beforeService",
+          message: "AuthContext login called",
+          data: {
+            emailLen: email?.length ?? 0,
+            emailDomain: (email?.split("@")[1] ?? "").toLowerCase(),
+            passwordLen: password?.length ?? 0,
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
+
       const response = await loginService(email, password);
+      // #region agent log
+      fetch("http://127.0.0.1:7588/ingest/6825cdfb-0c66-4b26-9ab0-cf89f3b6ed2d", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Debug-Session-Id": "c77180",
+        },
+        body: JSON.stringify({
+          sessionId: "c77180",
+          runId: "pre-crash-1",
+          hypothesisId: "H6",
+          location: "client/src/contexts/AuthContext.tsx:login:afterService",
+          message: "AuthContext login service returned",
+          data: {
+            success: !!response?.success,
+            hasData: !!response?.data,
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
       if (response.success && response.data) {
         setUser(response.data.user);
+        // #region agent log
+        fetch("http://127.0.0.1:7588/ingest/6825cdfb-0c66-4b26-9ab0-cf89f3b6ed2d", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Debug-Session-Id": "c77180",
+          },
+          body: JSON.stringify({
+            sessionId: "c77180",
+            runId: "pre-crash-1",
+            hypothesisId: "H6",
+            location: "client/src/contexts/AuthContext.tsx:login:beforeNavigate",
+            message: "AuthContext navigating after successful login",
+            data: {
+              userRole: response.data.user?.role ?? null,
+            },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+        // #endregion
         navigate("/");
         return true;
       }
       return false;
     } catch (error) {
+      // #region agent log
+      fetch("http://127.0.0.1:7588/ingest/6825cdfb-0c66-4b26-9ab0-cf89f3b6ed2d", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Debug-Session-Id": "c77180",
+        },
+        body: JSON.stringify({
+          sessionId: "c77180",
+          runId: "pre-crash-1",
+          hypothesisId: "H6",
+          location: "client/src/contexts/AuthContext.tsx:login:catch",
+          message: "AuthContext login caught error",
+          data: {
+            errType: error instanceof Error ? error.name : typeof error,
+            errMessage: error instanceof Error ? error.message : String(error),
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
       console.error("Login error:", error);
       return false;
     }

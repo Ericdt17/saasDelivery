@@ -51,9 +51,27 @@ function createDatabaseConnection(dbType) {
         "DATABASE_URL is required for PostgreSQL. Set DATABASE_URL environment variable."
       );
     }
+
+    // Local dev often uses docker Postgres without SSL enabled.
+    // Auto-disable SSL for localhost unless explicitly requested with PG_SSL=true.
+    const hostname = (() => {
+      try {
+        return new URL(connectionString).hostname;
+      } catch {
+        return "";
+      }
+    })();
+
+    const useSsl =
+      process.env.PG_SSL === "true"
+        ? true
+        : process.env.PG_SSL === "false"
+          ? false
+          : hostname && !["localhost", "127.0.0.1"].includes(hostname);
+
     return new Pool({
       connectionString,
-      ssl: { rejectUnauthorized: false },
+      ...(useSsl ? { ssl: { rejectUnauthorized: false } } : {}),
     });
   } else {
     // SQLite

@@ -43,6 +43,13 @@ export function DateRangePicker({ value, onChange, className }: DateRangePickerP
   const [isStartOpen, setIsStartOpen] = useState(false);
   const [isEndOpen, setIsEndOpen] = useState(false);
 
+  useEffect(() => {
+    if (preset !== "custom") {
+      if (isStartOpen) setIsStartOpen(false);
+      if (isEndOpen) setIsEndOpen(false);
+    }
+  }, [preset, isStartOpen, isEndOpen]);
+
   // Sync local state with value prop
   useEffect(() => {
     if (value.startDate) {
@@ -80,6 +87,10 @@ export function DateRangePicker({ value, onChange, className }: DateRangePickerP
   }, [value]);
 
   const handlePresetChange = (newPreset: DateRangePreset) => {
+    if (newPreset !== "custom") {
+      if (isStartOpen) setIsStartOpen(false);
+      if (isEndOpen) setIsEndOpen(false);
+    }
     setPreset(newPreset);
     if (newPreset !== "custom") {
       const range = getDateRangeForPreset(newPreset);
@@ -135,11 +146,21 @@ export function DateRangePicker({ value, onChange, className }: DateRangePickerP
         </SelectContent>
       </Select>
 
-      {/* Custom Date Range (only show when custom is selected) */}
-      {preset === "custom" && (
-        <div className="flex gap-2">
+      {/* Custom Date Range (kept mounted for portal stability) */}
+      <div
+        className={cn(
+          "flex gap-2 transition-opacity",
+          preset === "custom" ? "opacity-100" : "opacity-0 pointer-events-none w-0 overflow-hidden"
+        )}
+        aria-hidden={preset !== "custom"}
+      >
           {/* Start Date */}
-          <Popover open={isStartOpen} onOpenChange={setIsStartOpen}>
+          <Popover
+            open={preset === "custom" && isStartOpen}
+            onOpenChange={(open) => {
+              if (preset === "custom") setIsStartOpen(open);
+            }}
+          >
             <PopoverTrigger asChild>
               <Button
                 variant="outline"
@@ -170,7 +191,12 @@ export function DateRangePicker({ value, onChange, className }: DateRangePickerP
           </Popover>
 
           {/* End Date */}
-          <Popover open={isEndOpen} onOpenChange={setIsEndOpen}>
+          <Popover
+            open={preset === "custom" && isEndOpen}
+            onOpenChange={(open) => {
+              if (preset === "custom") setIsEndOpen(open);
+            }}
+          >
             <PopoverTrigger asChild>
               <Button
                 variant="outline"
@@ -205,8 +231,7 @@ export function DateRangePicker({ value, onChange, className }: DateRangePickerP
               />
             </PopoverContent>
           </Popover>
-        </div>
-      )}
+      </div>
 
       {/* Display selected range when not custom */}
       {preset !== "custom" && (

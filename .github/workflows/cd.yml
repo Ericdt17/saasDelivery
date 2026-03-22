@@ -1,0 +1,40 @@
+name: CD
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'wwebjs-bot/**'
+
+jobs:
+  deploy:
+    name: Deploy to VPS
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy backend & bot
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            set -e
+
+            cd /opt/saasDelivery/wwebjs-bot
+
+            echo "→ Pulling latest code..."
+            git pull origin main
+
+            echo "→ Installing dependencies..."
+            npm install --omit=dev
+
+            echo "→ Running migrations..."
+            npm run migrate
+
+            echo "→ Restarting services..."
+            pm2 restart api-server
+            pm2 restart whatsapp-bot
+
+            echo "✓ Deploy complete"

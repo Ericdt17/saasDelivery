@@ -21,7 +21,7 @@ sudo npm install -g pm2
 
 ```bash
 sudo mkdir -p /opt/saasDelivery
-cd /opt/saasDelivery
+ww
 git clone <your-repo-url> wwebjs-bot
 cd wwebjs-bot
 npm install
@@ -179,3 +179,14 @@ VPS:
 **Total Time**: ~20 minutes
 
 **See PRODUCTION_DEPLOYMENT_GUIDE.md for detailed instructions**
+To check your bot’s logs, follow the Verification → Check logs section in PRODUCTION_DEPLOYMENT_CHECKLIST.md.
+
+First confirm the bot process name is up:
+
+pm2 list
+(You should see whatsapp-bot listed as online.)
+View logs:
+
+For both processes: pm2 logs
+For the bot only: pm2 logs whatsapp-bot
+If you tell me what pm2 list shows for your bot (the exact process name), I can give the precise pm2 logs <name> command to use.

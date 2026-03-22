@@ -38,6 +38,27 @@ import { toast } from "sonner";
 import { getAgencyMe, updateAgency } from "@/services/agencies";
 import { useAuth } from "@/contexts/AuthContext";
 
+function debugLog(hypothesisId: string, location: string, message: string, data: Record<string, unknown>) {
+  // #region agent log
+  fetch("http://127.0.0.1:7588/ingest/6825cdfb-0c66-4b26-9ab0-cf89f3b6ed2d", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Debug-Session-Id": "c77180",
+    },
+    body: JSON.stringify({
+      sessionId: "c77180",
+      runId: "parametres-pre-fix-1",
+      hypothesisId,
+      location,
+      message,
+      data,
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {});
+  // #endregion
+}
+
 const Parametres = () => {
   const { user, isSuperAdmin } = useAuth();
   const queryClient = useQueryClient();
@@ -63,6 +84,34 @@ const Parametres = () => {
   });
 
   useEffect(() => {
+    // #region agent log
+    debugLog("H7_H8", "client/src/pages/Parametres.tsx:mount", "Parametres mounted", {
+      userRole: user?.role ?? null,
+      isSuperAdmin,
+    });
+    return () => {
+      debugLog("H7_H8", "client/src/pages/Parametres.tsx:unmount", "Parametres unmounted", {
+        userRole: user?.role ?? null,
+        isSuperAdmin,
+      });
+    };
+    // #endregion
+  }, [user?.role, isSuperAdmin]);
+
+  useEffect(() => {
+    // #region agent log
+    debugLog("H7", "client/src/pages/Parametres.tsx:renderState", "Parametres render state changed", {
+      isSuperAdmin,
+      isLoadingAgency,
+      isErrorAgency,
+      hasAgency: !!agency,
+      hasAgencyId: !!agency?.id,
+      hasUserAgencyId: !!user?.agencyId,
+    });
+    // #endregion
+  }, [isSuperAdmin, isLoadingAgency, isErrorAgency, agency, user?.agencyId]);
+
+  useEffect(() => {
     if (agency) {
       setAgencyName(agency.name || "");
       setAddress(agency.address || "");
@@ -76,6 +125,12 @@ const Parametres = () => {
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    // #region agent log
+    debugLog("H8", "client/src/pages/Parametres.tsx:handleLogoUpload", "Logo upload selected", {
+      fileSize: file.size,
+      fileType: file.type,
+    });
+    // #endregion
 
     // Validate file type
     if (!file.type.startsWith("image/")) {
@@ -122,6 +177,14 @@ const Parametres = () => {
   });
 
   const handleSave = () => {
+    // #region agent log
+    debugLog("H6_H8", "client/src/pages/Parametres.tsx:handleSave:start", "Save clicked", {
+      hasAgencyId: !!agencyId,
+      agencyNameLen: agencyName.length,
+      isLoadingAgency,
+      savePending: saveMutation.isPending,
+    });
+    // #endregion
     if (!agencyId) {
       toast.error("Impossible de déterminer l'ID de l'agence. Veuillez vous reconnecter.");
       return;

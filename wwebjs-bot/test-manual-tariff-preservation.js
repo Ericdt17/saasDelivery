@@ -10,9 +10,55 @@ const path = require('path');
 const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3000';
 const API_VERSION = '/api/v1';
 
-// Token d'authentification et ID de l'agence de test
-let authToken = null;
+// ID de l'agence de test
 let testAgencyId = null;
+
+class CookieJar {
+  constructor() {
+    this.cookies = new Map();
+  }
+
+  parseSetCookie(setCookieHeader) {
+    if (!setCookieHeader) return null;
+
+    const parts = String(setCookieHeader).split(';').map(p => p.trim());
+    const [nameValue] = parts;
+    const [name, value] = nameValue.split('=');
+
+    let maxAge = null;
+    for (const part of parts.slice(1)) {
+      const lower = part.toLowerCase();
+      if (lower.startsWith('max-age=')) {
+        maxAge = parseInt(part.split('=')[1], 10);
+      }
+    }
+
+    return { name, value, maxAge };
+  }
+
+  setCookie(setCookieHeader) {
+    const cookie = this.parseSetCookie(setCookieHeader);
+    if (!cookie || !cookie.name) return;
+
+    // If server clears cookie (Max-Age=0), remove from jar
+    if (typeof cookie.maxAge === 'number' && cookie.maxAge === 0) {
+      this.cookies.delete(cookie.name);
+      return;
+    }
+
+    this.cookies.set(cookie.name, cookie);
+  }
+
+  getCookieString() {
+    const cookieStrings = [];
+    for (const [_, cookie] of this.cookies) {
+      cookieStrings.push(`${cookie.name}=${cookie.value}`);
+    }
+    return cookieStrings.join('; ');
+  }
+}
+
+const cookieJar = new CookieJar();
 
 // Helper pour faire des requêtes HTTP avec authentification
 async function makeRequest(endpoint, options = {}, skipAuth = false) {
@@ -22,9 +68,12 @@ async function makeRequest(endpoint, options = {}, skipAuth = false) {
     ...options.headers,
   };
   
-  // Ajouter le token d'authentification si disponible et si skipAuth est false
-  if (!skipAuth && authToken) {
-    headers['Authorization'] = `Bearer ${authToken}`;
+  // Inject cookies if available and auth isn't skipped
+  if (!skipAuth) {
+    const cookieString = cookieJar.getCookieString();
+    if (cookieString) {
+      headers['Cookie'] = cookieString;
+    }
   }
   
   const response = await fetch(url, {
@@ -32,6 +81,12 @@ async function makeRequest(endpoint, options = {}, skipAuth = false) {
     headers,
     credentials: 'include', // Pour les cookies HTTP-only
   });
+
+  // Persist cookies from response (mainly auth_token)
+  const setCookieHeader = response.headers.get('set-cookie');
+  if (setCookieHeader) {
+    cookieJar.setCookie(setCookieHeader);
+  }
   
   const data = await response.json().catch(() => ({}));
   return { response, data, status: response.status };
@@ -84,7 +139,7 @@ async function createTestUser() {
 
 // Fonction pour se connecter
 async function login() {
-  log('  🔐 Connexion pour obtenir un token d\'authentification...');
+  log('  🔐 Connexion pour obtenir une session (auth cookie)...');
   
   const testEmail = 'test-tariff@example.com';
   const testPassword = 'test123456';
@@ -98,24 +153,15 @@ async function login() {
   }, true); // skipAuth = true pour la requête de login
   
   if (loginResponse.status === 200 && loginResponse.data.success) {
-    // Le token est dans la réponse JSON (data.data.token)
-    if (loginResponse.data.data && loginResponse.data.data.token) {
-      authToken = loginResponse.data.data.token;
-      logPass('Token obtenu avec succès');
-      // Mettre à jour testAgencyId depuis la réponse
-      if (loginResponse.data.data.user && loginResponse.data.data.user.id) {
-        testAgencyId = loginResponse.data.data.user.id;
-      }
-      return true;
-    } else if (loginResponse.data.token) {
-      // Fallback pour une structure de réponse différente
-      authToken = loginResponse.data.token;
-      logPass('Token obtenu avec succès (format alternatif)');
-      return true;
-    } else {
-      logFail('Token non trouvé dans la réponse de connexion');
-      return false;
+    logPass('Connexion réussie (cookie d\'authentification défini)');
+
+    // Mettre à jour testAgencyId depuis la réponse
+    const user = loginResponse.data.data?.user;
+    if (user?.id) {
+      testAgencyId = user.id;
     }
+
+    return true;
   } else if (loginResponse.status === 401) {
     // L'utilisateur n'existe pas, on doit le créer
     const userCreated = await createTestUser();
@@ -420,7 +466,7 @@ async function runAllTests() {
   
   // Se connecter d'abord
   const loggedIn = await login();
-  if (!loggedIn || !authToken) {
+  if (!loggedIn) {
     log('❌ Impossible de se connecter. Les tests ne peuvent pas continuer.', 'red');
     log('💡 Assurez-vous que le serveur backend est démarré et qu\'un utilisateur de test existe.', 'yellow');
     process.exit(1);

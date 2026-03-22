@@ -6,29 +6,171 @@
 const express = require("express");
 const router = express.Router();
 const { comparePassword } = require("../../utils/password");
+const { hashPassword } = require("../../utils/password");
 const { generateToken } = require("../../utils/jwt");
 const { authenticateToken } = require("../middleware/auth");
-const { adapter } = require("../../db");
+const { createAgency, getAgencyByEmail, adapter } = require("../../db");
+const fs = require("fs");
+const path = require("path");
+const { z } = require("zod");
+
+const DEBUG_LOG_PATH = path.join(
+  __dirname,
+  "../../../../.cursor/debug-c77180.log"
+);
+
+function writeDebugLine(payload) {
+  try {
+    fs.mkdirSync(path.dirname(DEBUG_LOG_PATH), { recursive: true });
+    fs.appendFileSync(DEBUG_LOG_PATH, JSON.stringify(payload) + "\n");
+  } catch {
+    // ignore logging failures
+  }
+}
+
+const emailSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .email({ message: "Invalid email address" });
+
+const passwordSchema = z
+  .string()
+  .min(6, { message: "Password must be at least 6 characters long" })
+  .max(72, { message: "Password is too long" });
+
+const loginSchema = z.object({
+  email: emailSchema,
+  password: passwordSchema,
+});
+
+const signupSchema = z.object({
+  name: z
+    .string()
+    .trim()
+    .min(2, { message: "Name is required" })
+    .max(100, { message: "Name is too long" }),
+  email: emailSchema,
+  password: passwordSchema,
+  // Security: allow only agency self-signup. Super admin accounts should be created via seed scripts.
+  role: z.enum(["agency"]).optional().default("agency"),
+  is_active: z.boolean().optional().default(true),
+  agency_code: z
+    .string()
+    .trim()
+    .min(4, { message: "Agency code must be at least 4 characters" })
+    .max(20, { message: "Agency code must be at most 20 characters" })
+    .regex(/^[A-Za-z0-9]+$/, { message: "Agency code must be alphanumeric" })
+    .optional()
+    .nullable(),
+});
+
+function getIsHTTPS(req) {
+  // Detect HTTPS from environment or request headers (for proxy setups)
+  return (
+    process.env.HTTPS === "true" ||
+    process.env.PROTOCOL === "https" ||
+    req.secure || // Direct HTTPS connection
+    req.headers["x-forwarded-proto"] === "https" // Behind proxy (nginx, etc.)
+  );
+}
+
+function getCookieOptions(req) {
+  const isHTTPS = getIsHTTPS(req);
+  return {
+    httpOnly: true,
+    secure: isHTTPS,
+    sameSite: "strict",
+    maxAge: 15 * 60 * 1000, // 15 minutes
+    path: "/",
+  };
+}
 
 /**
  * POST /api/v1/auth/login
  * Login with email and password
  */
-router.post("/login", async (req, res, next) => {
+async function handleLogin(req, res, next) {
   try {
     const { email, password } = req.body;
+    // #region agent log
+    writeDebugLine({
+      sessionId: "c77180",
+      runId: "pre-login-2",
+      hypothesisId: "H1",
+      location: "auth.js:/login:receivedBody",
+      message: "Login body received (masked)",
+      data: {
+        hasEmail: email != null,
+        hasPassword: password != null,
+        emailLen: email ? String(email).length : 0,
+        emailDomain: email ? String(email).split("@")[1]?.toLowerCase() : "",
+        passwordLen: password ? String(password).length : 0,
+      },
+      timestamp: Date.now(),
+    });
+    // #endregion
+    // #region agent log
+    try {
+      // Note: avoid logging PII; only log masked lengths + domain
+      const emailDomain = (email && String(email).split("@")[1]) ? String(email).split("@")[1].toLowerCase() : "";
+      fetch("http://127.0.0.1:7588/ingest/6825cdfb-0c66-4b26-9ab0-cf89f3b6ed2d", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Debug-Session-Id": "c77180",
+        },
+        body: JSON.stringify({
+          sessionId: "c77180",
+          runId: "pre-login-1",
+          hypothesisId: "H1",
+          location: "wwebjs-bot/src/api/routes/auth.js:login:received",
+          message: "Login request received (masked)",
+          data: {
+            emailLen: email ? String(email).length : 0,
+            emailDomain,
+            passwordLen: password ? String(password).length : 0,
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+    } catch {
+      // ignore instrumentation errors
+    }
+    // #endregion
 
-    // Validate input
-    if (!email || !password) {
+    // Strict validation (zod)
+    const loginParsed = loginSchema.safeParse({ email, password });
+    if (!loginParsed.success) {
+      // #region agent log
+      writeDebugLine({
+        sessionId: "c77180",
+        runId: "pre-login-2",
+        hypothesisId: "H4",
+        location: "auth.js:/login:validationFailed",
+        message: "Login validation failed (masked)",
+        data: {
+          hasEmail: email != null,
+          hasPassword: password != null,
+          emailLen: email ? String(email).length : 0,
+          passwordLen: password ? String(password).length : 0,
+        },
+        timestamp: Date.now(),
+      });
+      // #endregion
+
+      const firstIssue = loginParsed.error?.issues?.[0];
       return res.status(400).json({
         success: false,
         error: "Validation error",
-        message: "Email and password are required",
+        message: firstIssue?.message || "Invalid email or password",
       });
     }
 
-    // Normalize email (lowercase and trim) to match how it's stored in seed script
-    const normalizedEmail = email.trim().toLowerCase();
+    // Normalize email (lowercase and trim) and validate password length/format
+    const validatedEmail = loginParsed.data.email;
+    const validatedPassword = loginParsed.data.password;
+    const normalizedEmail = validatedEmail;
 
     // Find agency by email (emails are stored as lowercase in seed script)
     // Note: adapter.query() with LIMIT 1 returns the object directly (or null), not an array
@@ -44,6 +186,21 @@ router.post("/login", async (req, res, next) => {
     const agency = await adapter.query(findAgencyQuery, [normalizedEmail]);
 
     if (!agency) {
+      // #region agent log
+      writeDebugLine({
+        sessionId: "c77180",
+        runId: "pre-login-2",
+        hypothesisId: "H2",
+        location: "auth.js:/login:agencyNotFound",
+        message: "Agency not found",
+        data: {
+          normalizedEmail,
+          emailLen: email ? String(email).length : 0,
+          emailDomain: email ? String(email).split("@")[1]?.toLowerCase() : "",
+        },
+        timestamp: Date.now(),
+      });
+      // #endregion
       return res.status(401).json({
         success: false,
         error: "Authentication failed",
@@ -65,11 +222,52 @@ router.post("/login", async (req, res, next) => {
 
     // Verify password
     const isPasswordValid = await comparePassword(
-      password,
+      validatedPassword,
       agency.password_hash
     );
 
+    // #region agent log
+    try {
+      fetch("http://127.0.0.1:7588/ingest/6825cdfb-0c66-4b26-9ab0-cf89f3b6ed2d", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Debug-Session-Id": "c77180",
+        },
+        body: JSON.stringify({
+          sessionId: "c77180",
+          runId: "pre-login-1",
+          hypothesisId: "H2",
+          location: "wwebjs-bot/src/api/routes/auth.js:login:afterPasswordCheck",
+          message: "Login agency lookup + password validation result",
+          data: {
+            agencyFound: !!agency,
+            isPasswordValid: !!isPasswordValid,
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+    } catch {
+      // ignore instrumentation errors
+    }
+    // #endregion
+
     if (!isPasswordValid) {
+      // #region agent log
+      writeDebugLine({
+        sessionId: "c77180",
+        runId: "pre-login-2",
+        hypothesisId: "H2",
+        location: "auth.js:/login:passwordInvalid",
+        message: "Password invalid (masked)",
+        data: {
+          agencyFound: true,
+          emailLen: email ? String(email).length : 0,
+          passwordLen: password ? String(password).length : 0,
+        },
+        timestamp: Date.now(),
+      });
+      // #endregion
       return res.status(401).json({
         success: false,
         error: "Authentication failed",
@@ -87,22 +285,7 @@ router.post("/login", async (req, res, next) => {
     });
 
     // Set HTTP-only cookie with JWT token
-    // Detect HTTPS from environment or request headers (for proxy setups)
-    const isProduction = process.env.NODE_ENV === "production";
-    const isHTTPS =
-      process.env.HTTPS === "true" ||
-      process.env.PROTOCOL === "https" ||
-      req.secure || // Direct HTTPS connection
-      req.headers["x-forwarded-proto"] === "https"; // Behind proxy (nginx, etc.)
-
-    const cookieOptions = {
-      httpOnly: true, // Prevents JavaScript access (XSS protection)
-      secure: isHTTPS, // HTTPS only when actually using HTTPS
-      sameSite: isHTTPS ? "none" : "lax", // none requires secure, lax works with HTTP
-      maxAge: 24 * 60 * 60 * 1000, // 24 hours (matches JWT_EXPIRES_IN default)
-      path: "/", // Available for all paths
-      // Don't set domain - let browser handle it automatically
-    };
+    const cookieOptions = getCookieOptions(req);
 
     console.log("[Auth] Setting cookie with options:", cookieOptions);
     res.cookie("auth_token", token, cookieOptions);
@@ -112,7 +295,6 @@ router.post("/login", async (req, res, next) => {
     res.json({
       success: true,
       data: {
-        token,
         user: {
           id: agency.id,
           name: agency.name,
@@ -125,20 +307,111 @@ router.post("/login", async (req, res, next) => {
   } catch (error) {
     next(error);
   }
+}
+
+router.post("/login", handleLogin);
+router.post("/signin", handleLogin);
+
+/**
+ * POST /api/v1/auth/signup
+ * Create a new agency account
+ */
+router.post("/signup", async (req, res, next) => {
+  try {
+    const signupParsed = signupSchema.safeParse(req.body);
+    if (!signupParsed.success) {
+      const firstIssue = signupParsed.error?.issues?.[0];
+      return res.status(400).json({
+        success: false,
+        error: "Validation error",
+        message: firstIssue?.message || "Invalid signup input",
+      });
+    }
+
+    const { name, email, password, role = "agency", is_active, agency_code } =
+      signupParsed.data;
+
+    // Security: allow only agency self-signup (super admin accounts should be created via seed scripts)
+    if (role !== "agency") {
+      return res.status(403).json({
+        success: false,
+        error: "Forbidden",
+        message: "Super admin signup is not allowed",
+      });
+    }
+
+    const normalizedEmail = email;
+    const password_hash = await hashPassword(password);
+
+    // Duplicate user prevention (proactive lookup)
+    const existing = await getAgencyByEmail(normalizedEmail);
+    if (existing) {
+      return res.status(409).json({
+        success: false,
+        error: "Conflict",
+        message: "An account with this email already exists",
+      });
+    }
+
+    const agencyId = await createAgency({
+      name,
+      email: normalizedEmail,
+      password_hash,
+      role: "agency",
+      is_active: is_active === true || is_active === 1,
+      agency_code: agency_code ? String(agency_code) : null,
+    });
+
+    // Generate JWT token
+    const token = generateToken({
+      id: agencyId,
+      userId: agencyId,
+      agencyId: agencyId,
+      email: normalizedEmail,
+      role: "agency",
+    });
+
+    const cookieOptions = getCookieOptions(req);
+    res.cookie("auth_token", token, cookieOptions);
+
+    res.status(201).json({
+      success: true,
+      data: {
+        user: {
+          id: agencyId,
+          name: String(name),
+          email: normalizedEmail,
+          role: "agency",
+          agencyId: agencyId,
+        },
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
 });
 
 /**
  * POST /api/v1/auth/logout
  * Logout (client-side token removal, but we can track it if needed)
  */
-router.post("/logout", authenticateToken, async (req, res) => {
-  // For JWT, logout is handled client-side by removing the token
-  // We could implement token blacklisting here if needed
+async function handleLogout(req, res) {
+  // Revoke access by clearing the authentication cookie
+  const clearCookieOptions = {
+    ...getCookieOptions(req),
+    maxAge: 0,
+  };
+
+  res.clearCookie("auth_token", clearCookieOptions);
+
   res.json({
     success: true,
     message: "Logged out successfully",
   });
-});
+}
+
+router.post("/logout", authenticateToken, handleLogout);
+router.post("/signout", authenticateToken, handleLogout);
 
 /**
  * GET /api/v1/auth/me

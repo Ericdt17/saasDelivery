@@ -21,7 +21,8 @@ Before starting tests, ensure:
     1. POST to `/api/v1/auth/login` with `{ email: "admin@livrexpress.com", password: "admin123" }`
   - **Expected**: 
     - Status: 200
-    - Response contains `token` and `user` object
+    - Response contains `user` object only (JWT is stored in HTTP-only cookie)
+    - `auth_token` cookie is set (HTTP-only)
     - User role is `"super_admin"`
     - `agencyId` is `null`
 
@@ -46,40 +47,51 @@ Before starting tests, ensure:
     2. Login with agency credentials
   - **Expected**: 
     - Status: 200
-    - Response contains `token` and `user` object
+    - Response contains `user` object only (JWT is stored in HTTP-only cookie)
+    - `auth_token` cookie is set (HTTP-only)
     - User role is `"agency"`
     - `agencyId` matches the created agency
 
 ### 1.3 Token Validation
 - [ ] **Test**: Access protected route with valid token
   - **Steps**: 
-    1. Login to get token
-    2. GET `/api/v1/auth/me` with `Authorization: Bearer <token>`
+    1. Login (cookie set automatically)
+    2. GET `/api/v1/auth/me` (no `Authorization` header required)
   - **Expected**: 
     - Status: 200
     - Returns user information
 
 - [ ] **Test**: Access protected route with expired token
   - **Steps**: 
-    1. Use an expired token (modify JWT expiry or wait)
-    2. GET `/api/v1/auth/me` with expired token
+    1. Use an expired/invalid `auth_token` cookie value (modify JWT expiry or wait)
+    2. GET `/api/v1/auth/me` with the expired cookie
   - **Expected**: 
     - Status: 401
-    - Error: "Your session has expired. Please login again."
+    - Error message: "Token has expired"
 
 - [ ] **Test**: Access protected route with invalid token
   - **Steps**: 
-    1. GET `/api/v1/auth/me` with `Authorization: Bearer invalid_token`
+    1. GET `/api/v1/auth/me` with an invalid `auth_token` cookie value
   - **Expected**: 
     - Status: 401
-    - Error: "Invalid authentication token. Please login again."
+    - Error message: "Invalid token"
 
 - [ ] **Test**: Access protected route without token
   - **Steps**: 
-    1. GET `/api/v1/auth/me` without Authorization header
+    1. GET `/api/v1/auth/me` without `auth_token` cookie
   - **Expected**: 
     - Status: 401
     - Error: "No token provided. Please login first."
+
+- [ ] **Test**: Logout clears cookie even with invalid/expired JWT
+  - **Steps**:
+    1. Set an invalid/expired `auth_token` cookie value
+    2. POST `/api/v1/auth/logout`
+    3. Then call `GET /api/v1/auth/me` using the same cookie
+  - **Expected**:
+    - Logout Status: 200
+    - `auth_token` cookie is cleared (revocation)
+    - `/api/v1/auth/me` returns `401`
 
 ### 1.4 Get Current User
 - [ ] **Test**: Get current user info
@@ -684,14 +696,13 @@ curl http://localhost:3000/api/v1/health
 cd wwebjs-bot
 npm run seed:admin
 
-# 3. Test login
-curl -X POST http://localhost:3000/api/v1/auth/login \
+# 3. Test login (stores HTTP-only auth cookie in cookies.txt)
+curl -c cookies.txt -X POST http://localhost:3000/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"admin@livrexpress.com","password":"admin123"}'
 
-# 4. Test protected route (use token from step 3)
-curl http://localhost:3000/api/v1/auth/me \
-  -H "Authorization: Bearer YOUR_TOKEN_HERE"
+# 4. Test protected route (cookie is sent automatically via cookies.txt)
+curl -b cookies.txt http://localhost:3000/api/v1/auth/me
 ```
 
 ---

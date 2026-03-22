@@ -50,6 +50,14 @@ class CookieJar {
         cookie.sameSite = part.split('=')[1].toLowerCase();
       } else if (lowerPart.startsWith('max-age=')) {
         cookie.maxAge = parseInt(part.split('=')[1], 10);
+      } else if (lowerPart.startsWith('expires=')) {
+        // `res.clearCookie()` may use `Expires=` instead of `Max-Age=0`.
+        // If the expiry date is in the past, simulate cookie deletion.
+        const expiresValue = part.substring(part.indexOf('=') + 1).trim();
+        const expiresMs = Date.parse(expiresValue);
+        if (!Number.isNaN(expiresMs) && expiresMs <= Date.now()) {
+          cookie.maxAge = 0;
+        }
       } else if (lowerPart.startsWith('path=')) {
         cookie.path = part.split('=')[1];
       }
@@ -61,7 +69,12 @@ class CookieJar {
   setCookie(setCookieHeader) {
     const cookie = this.parseSetCookie(setCookieHeader);
     if (cookie) {
-      this.cookies.set(cookie.name, cookie);
+      // If server clears the cookie (Max-Age=0), remove it from the jar.
+      if (typeof cookie.maxAge === 'number' && cookie.maxAge === 0) {
+        this.cookies.delete(cookie.name);
+      } else {
+        this.cookies.set(cookie.name, cookie);
+      }
     }
   }
 
@@ -326,11 +339,11 @@ async function testLoginFlow() {
       logWarn('Cookie Secure flag (development mode - may be false)');
     }
 
-    if (NODE_ENV === 'production' && authCookie.sameSite !== 'none') {
-      logFail(`Cookie SameSite should be 'none' in production (cross-domain), got '${authCookie.sameSite}'`);
+    if (NODE_ENV === 'production' && authCookie.sameSite !== 'strict') {
+      logFail(`Cookie SameSite should be 'strict' in production, got '${authCookie.sameSite}'`);
       recordResult(false, 'Cookie SameSite');
-    } else if (NODE_ENV === 'production' && authCookie.sameSite === 'none') {
-      logPass("Cookie SameSite is 'none' (cross-domain) ✅");
+    } else if (NODE_ENV === 'production' && authCookie.sameSite === 'strict') {
+      logPass("Cookie SameSite is 'strict' ✅");
     } else {
       logWarn(`Cookie SameSite: ${authCookie.sameSite || 'not set'} (development mode)`);
     }
@@ -501,6 +514,61 @@ async function testLogoutFlow(cookieJar) {
   } catch (error) {
     logFail('Logout test failed', error.message);
     recordResult(false, 'Logout flow');
+    return false;
+  }
+}
+
+// ============================================================================
+// TEST SUITE 4.5: Logout should clear cookie even with invalid/expired JWT
+// ============================================================================
+async function testLogoutWithInvalidCookieClears(cookieJar) {
+  logTest('6.5. Logout with invalid cookie - Cookie Clearing');
+
+  try {
+    if (!cookieJar || !cookieJar.hasCookie('auth_token')) {
+      logFail('Skipping - no auth cookie available');
+      recordResult(false, 'Logout invalid cookie precondition');
+      return false;
+    }
+
+    const { status } = await makeRequest(
+      '/api/v1/auth/logout',
+      { method: 'POST' },
+      cookieJar
+    );
+
+    if (status !== 200) {
+      logFail(`Expected status 200, got ${status}`);
+      recordResult(false, 'Logout invalid cookie status');
+      return false;
+    }
+
+    // clearCookie should remove auth_token from the cookie jar
+    if (cookieJar.hasCookie('auth_token')) {
+      logFail('auth_token cookie should be cleared after logout');
+      recordResult(false, 'Logout invalid cookie clearing');
+      return false;
+    }
+
+    // Protected endpoint should be rejected
+    const { status: meStatus } = await makeRequest(
+      '/api/v1/auth/me',
+      { method: 'GET' },
+      cookieJar
+    );
+
+    if (meStatus === 401) {
+      logPass('Invalid-cookie logout cleared auth cookie and revoked access ✅');
+      recordResult(true, 'Logout invalid cookie revocation');
+      return true;
+    }
+
+    logWarn(`Expected 401 after logout invalid-cookie revocation, got ${meStatus}`);
+    recordResult(false, 'Logout invalid cookie revocation');
+    return false;
+  } catch (error) {
+    logFail('Logout invalid cookie test failed', error.message);
+    recordResult(false, 'Logout invalid cookie revocation');
     return false;
   }
 }
@@ -715,8 +783,8 @@ async function testEnvironmentConsistency() {
     if (loginResult.status === 200) {
       const authCookie = cookieJar.getCookie('auth_token');
       if (authCookie) {
-        if (isProduction && authCookie.secure && authCookie.sameSite === 'none') {
-          logPass('Cookie settings correct for production (Secure, SameSite=None) ✅');
+        if (isProduction && authCookie.secure && authCookie.sameSite === 'strict') {
+          logPass('Cookie settings correct for production (Secure, SameSite=Strict) ✅');
         } else if (!isProduction) {
           logPass('Cookie settings appropriate for development');
         } else {
@@ -758,6 +826,19 @@ async function runAllTests() {
 
   // Test 4: Logout Flow
   await testLogoutFlow(cookieJar);
+
+  // Test 4.5: Logout should clear cookie even with invalid/expired cookie
+  const invalidCookieJar = new CookieJar();
+  invalidCookieJar.cookies.set('auth_token', {
+    name: 'auth_token',
+    value: 'invalid.expired.token',
+    httpOnly: true,
+    secure: false,
+    sameSite: 'strict',
+    maxAge: null,
+    path: '/',
+  });
+  await testLogoutWithInvalidCookieClears(invalidCookieJar);
 
   // Test 5: Negative Cases
   await testInvalidCredentials();
