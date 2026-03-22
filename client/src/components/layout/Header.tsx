@@ -24,7 +24,16 @@ export function Header() {
   // Use useContext directly to avoid hook error if context is not available
   const authContext = useContext(AuthContext);
   const navigate = useNavigate();
-  
+
+  // Load agency data to get logo - only for agency admins (not super admins)
+  // Must be called unconditionally before any early returns
+  const { data: agency } = useQuery({
+    queryKey: ["agency", "me"],
+    queryFn: getAgencyMe,
+    retry: 1,
+    enabled: !!authContext?.user && !authContext?.isSuperAdmin && authContext?.user?.role === "agency",
+  });
+
   if (!authContext) {
     return null;
   }
@@ -32,14 +41,6 @@ export function Header() {
   const { user, logout, isSuperAdmin } = authContext;
 
   if (!user) return null;
-
-  // Load agency data to get logo - only for agency admins (not super admins)
-  const { data: agency } = useQuery({
-    queryKey: ["agency", "me"],
-    queryFn: getAgencyMe,
-    retry: 1,
-    enabled: !isSuperAdmin && user?.role === "agency",
-  });
 
   const initials = user.name
     .split(" ")

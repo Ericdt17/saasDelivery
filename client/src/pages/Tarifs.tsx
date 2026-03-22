@@ -59,6 +59,8 @@ interface PreviewRow {
   tarif_amount: number;
 }
 
+type MutErr = Error & { data?: { message?: string } };
+
 export default function Tarifs() {
   const { user, isSuperAdmin } = useAuth();
   const queryClient = useQueryClient();
@@ -123,7 +125,7 @@ export default function Tarifs() {
       });
       toast.success("Tarif créé avec succès");
     },
-    onError: (error: any) => {
+    onError: (error: MutErr) => {
       const errorMessage = error?.data?.message || error?.message || "Erreur lors de la création du tarif";
       toast.error(errorMessage);
     },
@@ -138,7 +140,7 @@ export default function Tarifs() {
       setSelectedTariff(null);
       toast.success("Tarif mis à jour avec succès");
     },
-    onError: (error: any) => {
+    onError: (error: MutErr) => {
       const errorMessage = error?.data?.message || error?.message || "Erreur lors de la mise à jour";
       toast.error(errorMessage);
     },
@@ -152,7 +154,7 @@ export default function Tarifs() {
       setSelectedTariff(null);
       toast.success("Tarif supprimé avec succès");
     },
-    onError: (error: any) => {
+    onError: (error: MutErr) => {
       const errorMessage = error?.data?.message || error?.message || "Erreur lors de la suppression";
       toast.error(errorMessage);
     },
@@ -227,7 +229,7 @@ export default function Tarifs() {
       if (fileName.endsWith(".csv")) {
         // Parse CSV
         const text = await file.text();
-        const parsePromise = new Promise<Papa.ParseResult<any>>((resolve, reject) => {
+        const parsePromise = new Promise<Papa.ParseResult<Record<string, unknown>>>((resolve, reject) => {
           Papa.parse(text, {
             header: true,
             skipEmptyLines: true,
@@ -237,7 +239,7 @@ export default function Tarifs() {
         });
         
         const results = await parsePromise;
-        rows = results.data.map((row: any) => {
+        rows = results.data.map((row: Record<string, unknown>) => {
           const quartier = row.quartier || row.Quartier || row.QUARTIER || row.neighborhood || "";
           const tarifStr = row.tarif_amount || row.Tarif_Amount || row.tarif || row.montant || row.price || "0";
           return {
@@ -255,7 +257,7 @@ export default function Tarifs() {
         const worksheet = workbook.Sheets[sheetName];
         const data = XLSX.utils.sheet_to_json(worksheet);
 
-        rows = data.map((row: any) => {
+        rows = data.map((row: Record<string, unknown>) => {
           const quartierKey = Object.keys(row).find(
             (key) => /quartier|neighborhood/i.test(key)
           ) || "quartier";
@@ -321,9 +323,9 @@ export default function Tarifs() {
       } else {
         toast.warning(`Import partiel: ${result.created} créés, ${result.updated} mis à jour, ${result.errors.length} erreurs`);
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error("Import error:", error);
-      toast.error(error.message || "Erreur lors de l'importation");
+      toast.error(error instanceof Error ? error.message : "Erreur lors de l'importation");
     } finally {
       setIsImporting(false);
     }

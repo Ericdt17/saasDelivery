@@ -78,7 +78,7 @@ const Parametres = () => {
     queryFn: getAgencyMe,
     retry: 1,
     enabled: !isSuperAdmin && user?.role === "agency", // Only enable for agency role users
-    onError: (error: any) => {
+    onError: (error: Error) => {
       console.error("[Parametres] Error loading agency:", error);
     },
   });
@@ -171,7 +171,7 @@ const Parametres = () => {
       queryClient.invalidateQueries({ queryKey: ["agency", "me"] });
       toast.success("Paramètres enregistrés avec succès");
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
       toast.error(error?.message || "Erreur lors de la sauvegarde");
     },
   });

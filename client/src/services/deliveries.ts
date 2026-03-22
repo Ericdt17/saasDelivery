@@ -53,7 +53,7 @@ export interface CreateDeliveryRequest {
   group_id?: number | null;
 }
 
-export interface UpdateDeliveryRequest extends Partial<CreateDeliveryRequest> {}
+export type UpdateDeliveryRequest = Partial<CreateDeliveryRequest>;
 
 /**
  * Get all deliveries with optional filters and pagination

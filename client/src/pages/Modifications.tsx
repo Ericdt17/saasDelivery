@@ -81,7 +81,7 @@ const mapActionToType = (action: string, details: string | null): string | null 
   const actionLower = action.toLowerCase();
   
   // Try to parse details as JSON to extract field changes
-  let parsedDetails: any = null;
+  let parsedDetails: Record<string, unknown> | null = null;
   if (details) {
     try {
       parsedDetails = JSON.parse(details);
@@ -137,7 +137,7 @@ const translateStatus = (status: string): string => {
 };
 
 // Extract old/new values from history details
-const extractModificationValues = (action: string, details: string | null, delivery: any): { old: string; new: string } => {
+const extractModificationValues = (action: string, details: string | null, delivery: Record<string, unknown>): { old: string; new: string } => {
   let oldValue = '';
   let newValue = '';
   
@@ -245,12 +245,12 @@ const Modifications = () => {
       );
       
       // Combine all histories with their delivery IDs
-      const results: Array<{ deliveryId: number; history: any[] }> = [];
+      const results: Array<{ deliveryId: number; history: Record<string, unknown>[] }> = [];
       histories.forEach((result, index) => {
         if (result.status === 'fulfilled') {
           results.push({
             deliveryId: deliveryIds[index],
-            history: result.value
+            history: result.value as Record<string, unknown>[]
           });
         }
       });
@@ -272,7 +272,7 @@ const Modifications = () => {
       const delivery = deliveryMap.get(deliveryId);
       if (!delivery) return;
       
-      history.forEach((entry: any) => {
+      history.forEach((entry: Record<string, unknown>) => {
         // Skip "created" actions as they're not modifications
         if (entry.action === 'created') return;
         

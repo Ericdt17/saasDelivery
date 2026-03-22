@@ -54,6 +54,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 
+type MutErr = Error & { data?: { message?: string } };
+
 export default function Groups() {
   const navigate = useNavigate();
   const { user, isSuperAdmin } = useAuth();
@@ -97,7 +99,7 @@ export default function Groups() {
       });
       toast.success("Groupe créé avec succès");
     },
-    onError: (error: any) => {
+    onError: (error: MutErr) => {
       const errorMessage = error?.data?.message || error?.message || "Erreur lors de la création du groupe";
       toast.error(errorMessage);
     },
@@ -113,7 +115,7 @@ export default function Groups() {
       setEditFormData({ name: "" });
       toast.success("Groupe modifié avec succès");
     },
-    onError: (error: any) => {
+    onError: (error: MutErr) => {
       const errorMessage = error?.data?.message || error?.message || "Erreur lors de la modification du groupe";
       toast.error(errorMessage);
     },
@@ -126,7 +128,7 @@ export default function Groups() {
       queryClient.invalidateQueries({ queryKey: ["groups"] });
       toast.success("Statut du groupe mis à jour");
     },
-    onError: (error: any) => {
+    onError: (error: MutErr) => {
       const errorMessage = error?.data?.message || error?.message || "Erreur lors de la mise à jour du statut";
       toast.error(errorMessage);
     },
@@ -140,7 +142,7 @@ export default function Groups() {
       setSelectedGroup(null);
       toast.success("Groupe désactivé avec succès");
     },
-    onError: (error: any) => {
+    onError: (error: MutErr) => {
       const errorMessage = error?.data?.message || error?.message || "Erreur lors de la désactivation du groupe";
       toast.error(errorMessage);
     },
@@ -154,7 +156,7 @@ export default function Groups() {
       setSelectedGroup(null);
       toast.success("Groupe supprimé définitivement");
     },
-    onError: (error: any) => {
+    onError: (error: MutErr) => {
       const errorMessage = error?.data?.message || error?.message || "Erreur lors de la suppression définitive";
       toast.error(errorMessage);
     },

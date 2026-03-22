@@ -101,6 +101,8 @@ const mapStatusFilter = (frontendStatus: string): string | undefined => {
   return statusMap[frontendStatus];
 };
 
+type MutErr = Error & { data?: { message?: string } };
+
 const Livraisons = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -158,7 +160,7 @@ const Livraisons = () => {
 
     // If search is provided and it looks like a phone number, use phone filter
     // Otherwise, we'll use search API
-    if (search && /^[\d\s\+\-]+$/.test(search.trim())) {
+    if (search && /^[\d\s+-]+$/.test(search.trim())) {
       params.phone = search.trim();
     }
 
@@ -176,7 +178,7 @@ const Livraisons = () => {
     queryKey: ['deliveries', apiParams, dateRange.startDate, dateRange.endDate],
     queryFn: () => {
       // If search is provided and not a phone number, use search API
-      if (search && search.trim() && !/^[\d\s\+\-]+$/.test(search.trim())) {
+      if (search && search.trim() && !/^[\d\s+-]+$/.test(search.trim())) {
         return searchDeliveries(search.trim()).then(results => ({
           deliveries: results,
           pagination: {
@@ -241,7 +243,7 @@ const Livraisons = () => {
       setSelectedDelivery(null);
       toast.success("Livraison supprimée avec succès");
     },
-    onError: (error: any) => {
+    onError: (error: MutErr) => {
       toast.error(error?.data?.message || error?.message || "Erreur lors de la suppression");
     },
   });

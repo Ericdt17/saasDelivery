@@ -37,7 +37,7 @@ import { getGroups, getGroupById } from "@/services/groups";
 const deliveryFormSchema = z.object({
   telephone: z.string()
     .min(1, "Le numéro de téléphone est requis")
-    .regex(/^[\d\s\+\-]+$/, "Format de téléphone invalide"),
+    .regex(/^[\d\s+-]+$/, "Format de téléphone invalide"),
   quartier: z.string().optional(),
   produits: z.string()
     .min(1, "Les produits sont requis"),

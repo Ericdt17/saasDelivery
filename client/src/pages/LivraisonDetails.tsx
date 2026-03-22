@@ -193,6 +193,8 @@ const typeLabels = {
   expedition: "Expédition"
 };
 
+type MutErr = Error & { data?: { message?: string } };
+
 const LivraisonDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -254,7 +256,7 @@ const LivraisonDetails = () => {
       toast.success("Statut mis à jour avec succès");
       refetchDelivery();
     },
-    onError: (error: any) => {
+    onError: (error: MutErr) => {
       toast.error(error?.data?.message || error?.message || "Erreur lors de la mise à jour du statut");
     },
   });

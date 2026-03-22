@@ -45,6 +45,8 @@ import { Building2, Plus, Edit, Trash2, Loader2, RefreshCw, Eye } from "lucide-r
 import { toast } from "sonner";
 import { Switch } from "@/components/ui/switch";
 
+type MutErr = Error & { data?: { message?: string } };
+
 function AgenciesPage() {
   const { isSuperAdmin } = useAuth();
   const { selectedAgencyId, setSelectedAgencyId } = useAgency();
@@ -77,7 +79,7 @@ function AgenciesPage() {
       setFormData({ name: "", email: "", password: "", role: "agency", is_active: true, agency_code: null });
       toast.success("Agence créée avec succès");
     },
-    onError: (error: any) => {
+    onError: (error: MutErr) => {
       toast.error(error.message || "Erreur lors de la création de l'agence");
     },
   });
@@ -91,7 +93,7 @@ function AgenciesPage() {
       setSelectedAgency(null);
       toast.success("Agence mise à jour avec succès");
     },
-    onError: (error: any) => {
+    onError: (error: MutErr) => {
       toast.error(error.message || "Erreur lors de la mise à jour");
     },
   });
@@ -104,7 +106,7 @@ function AgenciesPage() {
       setSelectedAgency(null);
       toast.success("Agence supprimée avec succès");
     },
-    onError: (error: any) => {
+    onError: (error: MutErr) => {
       toast.error(error.message || "Erreur lors de la suppression");
     },
   });
@@ -146,7 +148,7 @@ function AgenciesPage() {
       toast.error("Veuillez remplir tous les champs requis");
       return;
     }
-    const updateData: any = {
+    const updateData: Partial<CreateAgencyRequest> & { password?: string } = {
       name: formData.name,
       email: formData.email,
       role: formData.role,

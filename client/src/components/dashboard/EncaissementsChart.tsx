@@ -11,6 +11,7 @@ import {
 } from "recharts";
 import { useAgency } from "@/contexts/AgencyContext";
 import { getDeliveries } from "@/services/deliveries";
+import type { FrontendDelivery } from "@/lib/data-transform";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatDateLocal } from "@/lib/date-utils";
 
@@ -47,7 +48,7 @@ const getDayName = (date: Date): string => {
 };
 
 // Calculate weekly encaissements from deliveries
-const calculateWeeklyEncaissements = (deliveries: any[]) => {
+const calculateWeeklyEncaissements = (deliveries: FrontendDelivery[]) => {
   // Get last 7 days, starting from the oldest day
   const daysMap = new Map<
     string,

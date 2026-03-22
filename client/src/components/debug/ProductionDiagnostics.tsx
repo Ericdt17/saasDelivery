@@ -81,12 +81,12 @@ export function ProductionDiagnostics() {
           details: "Unable to reach backend API",
         };
       }
-    } catch (error: any) {
+    } catch (error) {
       newResults[1] = {
         name: "Backend API Health",
         status: "fail",
         message: "Backend API is not reachable",
-        details: error.message || "Network error or CORS issue",
+        details: error instanceof Error ? error.message : "Network error or CORS issue",
       };
     }
     setResults([...newResults]);
@@ -140,20 +140,21 @@ export function ProductionDiagnostics() {
           details: `API returned status ${response.status}`,
         };
       }
-    } catch (error: any) {
-      if (error.message.includes("CORS") || error.message.includes("fetch")) {
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : "Unknown error";
+      if (msg.includes("CORS") || msg.includes("fetch")) {
         newResults[3] = {
           name: "CORS Configuration",
           status: "fail",
           message: "CORS error detected",
-          details: error.message,
+          details: msg,
         };
       } else {
         newResults[3] = {
           name: "CORS Configuration",
           status: "fail",
           message: "Unable to test CORS",
-          details: error.message,
+          details: msg,
         };
       }
     }

@@ -65,10 +65,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setUser(null);
           }
         }
-      } catch (error: any) {
+      } catch (error) {
         console.error("Initial auth check failed or timed out:", error);
         // On error, use cached user info if available
         const cachedUser = getUser();
+        const apiError = error as { statusCode?: number; status?: number };
         if (cachedUser) {
           setUser(cachedUser);
           // Try to verify in background (don't logout on network errors)
@@ -79,7 +80,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               } else {
                 // Only logout if we get a clear 401 (invalid session)
                 // Don't logout on network errors or timeouts
-                if (error?.statusCode === 401 || error?.status === 401) {
+                if (apiError?.statusCode === 401 || apiError?.status === 401) {
                   logoutService();
                   setUser(null);
                 }

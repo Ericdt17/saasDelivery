@@ -105,6 +105,8 @@ const typeLabels: Record<TypeLivraison, string> = {
   expedition: "Expédition",
 };
 
+type ApiErr = Error & { data?: { message?: string }; statusCode?: number; status?: number };
+
 export default function GroupDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -136,7 +138,7 @@ export default function GroupDetail() {
     queryFn: () => getGroupById(groupId!),
     enabled: !!groupId,
     retry: false, // Ne pas retry sur 404/403
-    onError: (error: any) => {
+    onError: (error: ApiErr) => {
       const statusCode = error?.statusCode || error?.status;
       console.warn(`[GroupDetail] Error loading group ${groupId}:`, {
         statusCode,
@@ -159,7 +161,7 @@ export default function GroupDetail() {
     queryKey: ["dailyStats", dateRange.startDate, groupId],
     queryFn: () => getDailyStats(dateRange.startDate, groupId),
     enabled: isSingleDay && !!groupId && !!group, // Attendre que le groupe soit chargé
-    retry: (failureCount, error: any) => {
+    retry: (failureCount, error: ApiErr) => {
       // Ne pas retry sur les erreurs 4xx
       const statusCode = error?.statusCode || error?.status;
       if (statusCode >= 400 && statusCode < 500) {
@@ -168,7 +170,7 @@ export default function GroupDetail() {
       return failureCount < 2;
     },
     refetchOnWindowFocus: false,
-    onError: (error: any) => {
+    onError: (error: ApiErr) => {
       // Ne pas logger les erreurs 404 comme des erreurs critiques
       const statusCode = error?.statusCode || error?.status;
       if (statusCode !== 404) {
@@ -197,7 +199,7 @@ export default function GroupDetail() {
         sortOrder: "DESC",
       }),
     enabled: !!groupId && !!group, // Attendre que le groupe soit chargé
-    retry: (failureCount, error: any) => {
+    retry: (failureCount, error: ApiErr) => {
       // Ne pas retry sur les erreurs 4xx
       const statusCode = error?.statusCode || error?.status;
       if (statusCode >= 400 && statusCode < 500) {
@@ -242,7 +244,7 @@ export default function GroupDetail() {
       params.status = backendStatus;
     }
 
-    if (search && /^[\d\s\+\-]+$/.test(search.trim())) {
+    if (search && /^[\d\s+-]+$/.test(search.trim())) {
       params.phone = search.trim();
     }
 
@@ -256,7 +258,7 @@ export default function GroupDetail() {
   } = useQuery({
     queryKey: ["deliveries", "group-table", apiParams],
     queryFn: () => {
-      if (search && search.trim() && !/^[\d\s\+\-]+$/.test(search.trim())) {
+      if (search && search.trim() && !/^[\d\s+-]+$/.test(search.trim())) {
         return searchDeliveries(search.trim()).then((results) => {
           // Filter by group_id client-side
           const filtered = results.filter((d) => d.group_id === groupId);
@@ -369,7 +371,7 @@ export default function GroupDetail() {
       setSelectedDelivery(null);
       toast.success("Livraison modifiée avec succès");
     },
-    onError: (error: any) => {
+    onError: (error: ApiErr) => {
       toast.error(error?.data?.message || error?.message || "Erreur lors de la modification");
     },
   });
@@ -394,7 +396,7 @@ export default function GroupDetail() {
       setSelectedDelivery(null);
       toast.success("Livraison supprimée avec succès");
     },
-    onError: (error: any) => {
+    onError: (error: ApiErr) => {
       toast.error(error?.data?.message || error?.message || "Erreur lors de la suppression");
     },
   });
@@ -429,7 +431,7 @@ export default function GroupDetail() {
       // Ne PAS invalider cette query pour éviter que le refetch écrase la mise à jour
       queryClient.setQueryData(
         ["deliveries", "group-table", apiParams],
-        (old: any) => {
+        (old: { deliveries: FrontendDelivery[]; pagination: unknown } | undefined) => {
           if (!old || !old.deliveries) {
             console.warn("[Status Update] Old data structure invalid:", old);
             return old;
@@ -466,7 +468,7 @@ export default function GroupDetail() {
         toast.success("Statut mis à jour avec succès");
       }
     },
-    onError: (error: any) => {
+    onError: (error: ApiErr) => {
       toast.error(error?.data?.message || error?.message || "Erreur lors de la mise à jour du statut");
     },
   });
@@ -512,7 +514,7 @@ export default function GroupDetail() {
 
   // Afficher l'erreur si la requête a échoué
   if (isErrorGroup && groupId) {
-    const statusCode = (groupError as any)?.statusCode || (groupError as any)?.status;
+    const statusCode = (groupError as ApiErr)?.statusCode || (groupError as ApiErr)?.status;
     const errorMessage = statusCode === 403 
       ? "Vous n'avez pas accès à ce groupe. Ce groupe appartient peut-être à une autre agence."
       : statusCode === 404
@@ -647,7 +649,7 @@ export default function GroupDetail() {
               <AlertDescription className="mt-2">
                 <p className="mb-3">
                   {(() => {
-                    const statusCode = (error as any)?.statusCode || (error as any)?.status;
+                    const statusCode = (error as ApiErr)?.statusCode || (error as ApiErr)?.status;
                     if (statusCode === 404) {
                       return "Aucune donnée trouvée pour cette période.";
                     } else if (statusCode === 403) {

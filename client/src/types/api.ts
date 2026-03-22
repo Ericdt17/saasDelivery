@@ -22,8 +22,8 @@ export interface ApiResponse<T> {
   created?: number;
   failed?: number;
   results?: {
-    success: any[];
-    failed: any[];
+    success: Record<string, unknown>[];
+    failed: Record<string, unknown>[];
   };
 }
 
@@ -46,9 +46,9 @@ export interface PaginationInfo {
  */
 export class ApiError extends Error {
   statusCode: number;
-  data: any;
+  data: Record<string, unknown> | null;
 
-  constructor(message: string, statusCode: number = 500, data: any = null) {
+  constructor(message: string, statusCode: number = 500, data: Record<string, unknown> | null = null) {
     super(message);
     this.name = 'ApiError';
     this.statusCode = statusCode;

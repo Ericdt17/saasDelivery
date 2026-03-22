@@ -57,7 +57,7 @@ export interface ReportData {
   startDate: string;
   endDate: string;
   stats: FrontendStats;
-  deliveries?: any[]; // Can be typed more specifically if needed
+  deliveries?: Record<string, unknown>[]; // Can be typed more specifically if needed
 }
 
 

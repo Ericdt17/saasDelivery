@@ -73,7 +73,7 @@ export async function login(email: string, password: string): Promise<LoginRespo
     }
 
     return response as LoginResponse;
-  } catch (error: any) {
+  } catch (error) {
     // #region agent log
     fetch("http://127.0.0.1:7588/ingest/6825cdfb-0c66-4b26-9ab0-cf89f3b6ed2d", {
       method: "POST",
@@ -88,9 +88,7 @@ export async function login(email: string, password: string): Promise<LoginRespo
         location: "client/src/services/auth.ts:login:catch",
         message: "Login failed",
         data: {
-          statusCode: error?.statusCode ?? error?.status,
-          name: error?.name,
-          errorMessage: error?.message,
+          errorMessage: error instanceof Error ? error.message : String(error),
         },
         timestamp: Date.now(),
       }),
@@ -100,8 +98,8 @@ export async function login(email: string, password: string): Promise<LoginRespo
     // Handle API errors (401, 400, etc.)
     return {
       success: false,
-      error: error.message || "Authentication failed",
-      data: undefined as any,
+      error: error instanceof Error ? error.message : "Authentication failed",
+      data: null as unknown as LoginResponse['data'],
     };
   }
 }
@@ -150,17 +148,18 @@ export async function getCurrentUser(): Promise<UserInfo | null> {
     }
     console.warn("[Auth] getCurrentUser: Response not successful", response);
     return null;
-  } catch (error: any) {
+  } catch (error) {
+    const apiErr = error as { statusCode?: number; status?: number; message?: string; name?: string };
     // Log error for debugging
     console.error("[Auth] getCurrentUser error:", {
-      message: error?.message,
-      statusCode: error?.statusCode || error?.status,
-      name: error?.name,
+      message: apiErr?.message,
+      statusCode: apiErr?.statusCode || apiErr?.status,
+      name: apiErr?.name,
     });
-    
+
     // Only clear localStorage on 401 (invalid session)
     // Don't clear on network errors or other issues
-    if (error?.statusCode === 401 || error?.status === 401) {
+    if (apiErr?.statusCode === 401 || apiErr?.status === 401) {
       // 401 means invalid/expired session - clear cache
       console.warn("[Auth] 401 Unauthorized - clearing cached user");
       localStorage.removeItem(USER_KEY);
