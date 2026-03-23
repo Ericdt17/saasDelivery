@@ -37,7 +37,12 @@ jobs:
             npm run migrate
 
             echo "→ Restarting services..."
-            pm2 restart api-server
-            pm2 restart whatsapp-bot
+            pm2 restart api-server || pm2 start src/api/server.js --name api-server
+            pm2 restart whatsapp-bot || pm2 start src/index.js --name whatsapp-bot
+            pm2 save
+
+            echo "→ Verifying services..."
+            sleep 3
+            pm2 list | grep -E "api-server|whatsapp-bot"
 
             echo "✓ Deploy complete"
