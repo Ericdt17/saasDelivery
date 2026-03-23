@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Package,
@@ -77,12 +77,6 @@ const Index = () => {
     enabled: isSingleDay,
     retry: 2,
     refetchOnWindowFocus: false,
-    onError: (error) => {
-      toast.error("Erreur lors du chargement des statistiques", {
-        description:
-          error instanceof Error ? error.message : "Une erreur est survenue",
-      });
-    },
   });
 
   // Fetch deliveries for week/month periods
@@ -113,12 +107,6 @@ const Index = () => {
     enabled: !isSingleDay,
     retry: 2,
     refetchOnWindowFocus: false,
-    onError: (error) => {
-      toast.error("Erreur lors du chargement des livraisons", {
-        description:
-          error instanceof Error ? error.message : "Une erreur est survenue",
-      });
-    },
   });
 
   // Fetch deliveries for day period to calculate tariffs (since dailyStats doesn't include tariffs yet)
@@ -220,6 +208,13 @@ const Index = () => {
   const isError = isSingleDay ? isErrorDailyStats : isErrorDeliveries;
   const error = isSingleDay ? dailyStatsError : deliveriesError;
   const refetch = isSingleDay ? refetchDailyStats : refetchDeliveries;
+
+  useEffect(() => {
+    if (isError && error) {
+      const message = error instanceof Error ? error.message : "Une erreur est survenue";
+      toast.error("Erreur lors du chargement des données", { description: message });
+    }
+  }, [isError, error]);
 
   const periodLabels = {
     jour: "Aujourd'hui",

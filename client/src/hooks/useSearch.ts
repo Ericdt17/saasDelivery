@@ -3,6 +3,7 @@
  */
 
 import { useQuery } from "@tanstack/react-query";
+import { useEffect } from "react";
 import { searchDeliveries, type FrontendDelivery } from "@/services/search";
 import { toast } from "sonner";
 
@@ -20,21 +21,24 @@ export function useSearch(
 ) {
   const { enabled = true, onError } = options;
 
-  return useQuery({
+  const result = useQuery({
     queryKey: ['search', query],
     queryFn: () => searchDeliveries(query),
     enabled: enabled && !!query && query.trim().length > 0,
     retry: 1,
     refetchOnWindowFocus: false,
     staleTime: 10000,
-    onError: (error) => {
-      const errorMessage = error instanceof Error ? error.message : 'Une erreur est survenue';
-      toast.error('Erreur lors de la recherche', {
-        description: errorMessage
-      });
-      onError?.(error as Error);
-    }
   });
+
+  useEffect(() => {
+    if (result.isError) {
+      const errorMessage = result.error instanceof Error ? result.error.message : 'Une erreur est survenue';
+      toast.error('Erreur lors de la recherche', { description: errorMessage });
+      onError?.(result.error as Error);
+    }
+  }, [result.isError, result.error, onError]);
+
+  return result;
 }
 
 

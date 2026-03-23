@@ -7,27 +7,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle, Loader2 } from "lucide-react";
 
-function debugLog(hypothesisId: string, location: string, message: string, data: Record<string, unknown>) {
-  // #region agent log
-  fetch("http://127.0.0.1:7588/ingest/6825cdfb-0c66-4b26-9ab0-cf89f3b6ed2d", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Debug-Session-Id": "c77180",
-    },
-    body: JSON.stringify({
-      sessionId: "c77180",
-      runId: "pre-crash-1",
-      hypothesisId,
-      location,
-      message,
-      data,
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {});
-  // #endregion
-}
-
 const Login = () => {
   const { login } = useAuth();
   const [email, setEmail] = useState("");
@@ -37,33 +16,17 @@ const Login = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    debugLog("H6", "client/src/pages/Login.tsx:handleSubmit:start", "Submit started", {
-      emailLen: email.length,
-      emailDomain: (email.split("@")[1] || "").toLowerCase(),
-      passwordLen: password.length,
-      hadError: !!error,
-    });
     setError("");
     setIsLoading(true);
 
     try {
       const success = await login(email, password);
-      debugLog("H6", "client/src/pages/Login.tsx:handleSubmit:afterLogin", "Login result returned", {
-        success,
-      });
       if (!success) {
         setError("Email ou mot de passe incorrect");
       }
-    } catch (err) {
-      debugLog("H6", "client/src/pages/Login.tsx:handleSubmit:catch", "Login threw exception", {
-        errType: err instanceof Error ? err.name : typeof err,
-        errMessage: err instanceof Error ? err.message : String(err),
-      });
+    } catch {
       setError("Une erreur est survenue lors de la connexion");
     } finally {
-      debugLog("H6", "client/src/pages/Login.tsx:handleSubmit:finally", "Submit finished", {
-        nextIsLoading: false,
-      });
       setIsLoading(false);
     }
   };

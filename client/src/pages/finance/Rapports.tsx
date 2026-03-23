@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { StatCard } from "@/components/ui/stat-card";
@@ -69,13 +69,15 @@ const Rapports = () => {
       }),
     retry: 2,
     refetchOnWindowFocus: false,
-    onError: (error) => {
-      toast.error("Erreur lors du chargement des livraisons", {
-        description:
-          error instanceof Error ? error.message : "Une erreur est survenue",
-      });
-    },
   });
+
+  useEffect(() => {
+    if (isError && error) {
+      toast.error("Erreur lors du chargement des livraisons", {
+        description: error instanceof Error ? error.message : "Une erreur est survenue",
+      });
+    }
+  }, [isError, error]);
 
   // Calculate current data based on date range
   const currentData = useMemo(() => {

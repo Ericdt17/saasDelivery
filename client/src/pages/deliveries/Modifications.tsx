@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -224,12 +224,15 @@ const Modifications = () => {
     queryFn: () => getDeliveries({ page: 1, limit: 200, sortBy: 'updated_at', sortOrder: 'DESC' }),
     retry: 2,
     refetchOnWindowFocus: false,
-    onError: (error) => {
+  });
+
+  useEffect(() => {
+    if (isErrorDeliveries && deliveriesError) {
       toast.error('Erreur lors du chargement des livraisons', {
-        description: error instanceof Error ? error.message : 'Une erreur est survenue'
+        description: deliveriesError instanceof Error ? deliveriesError.message : 'Une erreur est survenue',
       });
     }
-  });
+  }, [isErrorDeliveries, deliveriesError]);
 
   // Fetch history for all deliveries (in parallel, but limit to avoid too many requests)
   const deliveryIds = useMemo(() => {

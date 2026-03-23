@@ -3,6 +3,7 @@
  */
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useEffect } from "react";
 import {
   getDeliveries,
   getDeliveryById,
@@ -25,21 +26,23 @@ export function useDeliveries(
 ) {
   const { enabled = true } = options || {};
 
-  return useQuery({
+  const result = useQuery({
     queryKey: ["deliveries", params],
     queryFn: () => getDeliveries(params),
     enabled,
     retry: 2,
     refetchOnWindowFocus: false,
-    staleTime: 10000, // Consider data fresh for 10 seconds
-    onError: (error: unknown) => {
-      const errorMessage =
-        error instanceof Error ? error.message : "Une erreur est survenue";
-      toast.error("Erreur lors du chargement des livraisons", {
-        description: errorMessage,
-      });
-    },
+    staleTime: 10000,
   });
+
+  useEffect(() => {
+    if (result.isError) {
+      const errorMessage = result.error instanceof Error ? result.error.message : "Une erreur est survenue";
+      toast.error("Erreur lors du chargement des livraisons", { description: errorMessage });
+    }
+  }, [result.isError, result.error]);
+
+  return result;
 }
 
 /**
@@ -51,21 +54,23 @@ export function useDelivery(
 ) {
   const { enabled = true } = options || {};
 
-  return useQuery({
+  const result = useQuery({
     queryKey: ["delivery", id],
     queryFn: () => getDeliveryById(id!),
     enabled: enabled && !!id,
     retry: 2,
     refetchOnWindowFocus: false,
     staleTime: 10000,
-    onError: (error: unknown) => {
-      const errorMessage =
-        error instanceof Error ? error.message : "Une erreur est survenue";
-      toast.error("Erreur lors du chargement de la livraison", {
-        description: errorMessage,
-      });
-    },
   });
+
+  useEffect(() => {
+    if (result.isError) {
+      const errorMessage = result.error instanceof Error ? result.error.message : "Une erreur est survenue";
+      toast.error("Erreur lors du chargement de la livraison", { description: errorMessage });
+    }
+  }, [result.isError, result.error]);
+
+  return result;
 }
 
 /**

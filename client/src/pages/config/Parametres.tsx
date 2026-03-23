@@ -22,42 +22,18 @@ import { Separator } from "@/components/ui/separator";
 import {
   Building2,
   Upload,
-  Users,
   Clock,
   Download,
   Key,
   Bell,
   Shield,
   Save,
-  Trash2,
-  Plus,
   Truck,
   Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { getAgencyMe, updateAgency } from "@/services/agencies";
 import { useAuth } from "@/contexts/AuthContext";
-
-function debugLog(hypothesisId: string, location: string, message: string, data: Record<string, unknown>) {
-  // #region agent log
-  fetch("http://127.0.0.1:7588/ingest/6825cdfb-0c66-4b26-9ab0-cf89f3b6ed2d", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Debug-Session-Id": "c77180",
-    },
-    body: JSON.stringify({
-      sessionId: "c77180",
-      runId: "parametres-pre-fix-1",
-      hypothesisId,
-      location,
-      message,
-      data,
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {});
-  // #endregion
-}
 
 const Parametres = () => {
   const { user, isSuperAdmin } = useAuth();
@@ -78,38 +54,7 @@ const Parametres = () => {
     queryFn: getAgencyMe,
     retry: 1,
     enabled: !isSuperAdmin && user?.role === "agency", // Only enable for agency role users
-    onError: (error: Error) => {
-      console.error("[Parametres] Error loading agency:", error);
-    },
   });
-
-  useEffect(() => {
-    // #region agent log
-    debugLog("H7_H8", "client/src/pages/Parametres.tsx:mount", "Parametres mounted", {
-      userRole: user?.role ?? null,
-      isSuperAdmin,
-    });
-    return () => {
-      debugLog("H7_H8", "client/src/pages/Parametres.tsx:unmount", "Parametres unmounted", {
-        userRole: user?.role ?? null,
-        isSuperAdmin,
-      });
-    };
-    // #endregion
-  }, [user?.role, isSuperAdmin]);
-
-  useEffect(() => {
-    // #region agent log
-    debugLog("H7", "client/src/pages/Parametres.tsx:renderState", "Parametres render state changed", {
-      isSuperAdmin,
-      isLoadingAgency,
-      isErrorAgency,
-      hasAgency: !!agency,
-      hasAgencyId: !!agency?.id,
-      hasUserAgencyId: !!user?.agencyId,
-    });
-    // #endregion
-  }, [isSuperAdmin, isLoadingAgency, isErrorAgency, agency, user?.agencyId]);
 
   useEffect(() => {
     if (agency) {
@@ -125,12 +70,6 @@ const Parametres = () => {
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    // #region agent log
-    debugLog("H8", "client/src/pages/Parametres.tsx:handleLogoUpload", "Logo upload selected", {
-      fileSize: file.size,
-      fileType: file.type,
-    });
-    // #endregion
 
     // Validate file type
     if (!file.type.startsWith("image/")) {
@@ -177,14 +116,6 @@ const Parametres = () => {
   });
 
   const handleSave = () => {
-    // #region agent log
-    debugLog("H6_H8", "client/src/pages/Parametres.tsx:handleSave:start", "Save clicked", {
-      hasAgencyId: !!agencyId,
-      agencyNameLen: agencyName.length,
-      isLoadingAgency,
-      savePending: saveMutation.isPending,
-    });
-    // #endregion
     if (!agencyId) {
       toast.error("Impossible de déterminer l'ID de l'agence. Veuillez vous reconnecter.");
       return;
@@ -202,18 +133,6 @@ const Parametres = () => {
       logo_base64: logoBase64 || null,
     });
   };
-
-  // TODO: Replace with API call to fetch users
-  // const { data: users, isLoading } = useQuery({
-  //   queryKey: ['users'],
-  //   queryFn: () => getUsers(),
-  // });
-  const users: Array<{
-    id: number;
-    name: string;
-    role: string;
-    email: string;
-  }> = [];
 
   return (
     <div className="space-y-6 pb-8">
@@ -352,82 +271,6 @@ const Parametres = () => {
             </CardContent>
           </Card>
 
-          {/* Users */}
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="flex items-center gap-2">
-                    <Users className="w-5 h-5 text-primary" />
-                    Utilisateurs
-                  </CardTitle>
-                  <CardDescription>
-                    Gérez les utilisateurs de votre agence
-                  </CardDescription>
-                </div>
-                <Button size="sm" className="gap-2">
-                  <Plus className="w-4 h-4" />
-                  Ajouter
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {users.length === 0 ? (
-                <div className="text-center py-8">
-                  <Users className="w-12 h-12 mx-auto text-muted-foreground mb-3 opacity-50" />
-                  <p className="text-sm text-muted-foreground mb-4">
-                    Aucun utilisateur configuré
-                  </p>
-                  <Button size="sm" variant="outline" className="gap-2">
-                    <Plus className="w-4 h-4" />
-                    Ajouter le premier utilisateur
-                  </Button>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {users.map((user) => (
-                    <div
-                      key={user.id}
-                      className="flex items-center justify-between p-3 rounded-lg bg-muted/50"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                          <span className="font-semibold text-primary">
-                            {user.name
-                              .split(" ")
-                              .map((n) => n[0])
-                              .join("")}
-                          </span>
-                        </div>
-                        <div>
-                          <p className="font-medium">{user.name}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {user.email}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span
-                          className={`text-xs px-2 py-1 rounded-full ${
-                            user.role === "Administrateur"
-                              ? "bg-primary/15 text-primary"
-                              : user.role === "Gestionnaire"
-                                ? "bg-info/15 text-info"
-                                : "bg-muted text-muted-foreground"
-                          }`}
-                        >
-                          {user.role}
-                        </span>
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
-                          <Trash2 className="w-4 h-4 text-muted-foreground" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
 
           {/* Reports */}
           <Card>
@@ -473,7 +316,7 @@ const Parametres = () => {
                 </div>
                 <div>
                   <label className="text-sm font-medium">Destinataires</label>
-                  <Input defaultValue="marie@livsight.ci" className="mt-1" />
+                  <Input value={email} disabled className="mt-1 bg-muted" />
                 </div>
               </div>
             </CardContent>
@@ -519,14 +362,6 @@ const Parametres = () => {
                 <Key className="w-4 h-4" />
                 Changer le mot de passe
               </Button>
-              <div className="p-3 rounded-lg bg-muted/50">
-                <p className="text-sm text-muted-foreground">
-                  Dernière connexion :<br />
-                  <span className="font-medium text-foreground">
-                    Aujourd'hui à 08:30
-                  </span>
-                </p>
-              </div>
             </CardContent>
           </Card>
 

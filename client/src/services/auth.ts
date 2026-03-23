@@ -39,29 +39,6 @@ const USER_KEY = "auth_user";
  */
 export async function login(email: string, password: string): Promise<LoginResponse> {
   try {
-    // #region agent log
-    fetch("http://127.0.0.1:7588/ingest/6825cdfb-0c66-4b26-9ab0-cf89f3b6ed2d", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Debug-Session-Id": "c77180",
-      },
-      body: JSON.stringify({
-        sessionId: "c77180",
-        runId: "pre-login-1",
-        hypothesisId: "H1",
-        location: "client/src/services/auth.ts:login:beforeRequest",
-        message: "Login inputs (masked)",
-        data: {
-          emailLen: email?.length ?? 0,
-          emailDomain: (email?.split("@")[1] ?? "").toLowerCase(),
-          passwordLen: password?.length ?? 0,
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
-
     const response = await apiPost<LoginResponse["data"]>("/api/v1/auth/login", {
       email,
       password,
@@ -74,27 +51,6 @@ export async function login(email: string, password: string): Promise<LoginRespo
 
     return response as LoginResponse;
   } catch (error) {
-    // #region agent log
-    fetch("http://127.0.0.1:7588/ingest/6825cdfb-0c66-4b26-9ab0-cf89f3b6ed2d", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Debug-Session-Id": "c77180",
-      },
-      body: JSON.stringify({
-        sessionId: "c77180",
-        runId: "pre-login-1",
-        hypothesisId: "H1_H2",
-        location: "client/src/services/auth.ts:login:catch",
-        message: "Login failed",
-        data: {
-          errorMessage: error instanceof Error ? error.message : String(error),
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
-
     // Handle API errors (401, 400, etc.)
     return {
       success: false,

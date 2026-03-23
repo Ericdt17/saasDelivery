@@ -138,13 +138,6 @@ export default function GroupDetail() {
     queryFn: () => getGroupById(groupId!),
     enabled: !!groupId,
     retry: false, // Ne pas retry sur 404/403
-    onError: (error: ApiErr) => {
-      const statusCode = error?.statusCode || error?.status;
-      console.warn(`[GroupDetail] Error loading group ${groupId}:`, {
-        statusCode,
-        message: error?.message || error?.data?.message,
-      });
-    },
   });
 
   // Check if it's a single day (for daily stats)
@@ -170,13 +163,6 @@ export default function GroupDetail() {
       return failureCount < 2;
     },
     refetchOnWindowFocus: false,
-    onError: (error: ApiErr) => {
-      // Ne pas logger les erreurs 404 comme des erreurs critiques
-      const statusCode = error?.statusCode || error?.status;
-      if (statusCode !== 404) {
-        console.error("[GroupDetail] Error loading daily stats:", error);
-      }
-    },
   });
 
   // Fetch deliveries for all periods

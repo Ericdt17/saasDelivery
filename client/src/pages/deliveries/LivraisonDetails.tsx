@@ -1,5 +1,5 @@
 import { useParams, useNavigate } from "react-router-dom";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Button } from "@/components/ui/button";
@@ -218,12 +218,15 @@ const LivraisonDetails = () => {
     enabled: !!id,
     retry: 2,
     refetchOnWindowFocus: false,
-    onError: (error) => {
+  });
+
+  useEffect(() => {
+    if (isErrorDelivery && deliveryError) {
       toast.error('Erreur lors du chargement de la livraison', {
-        description: error instanceof Error ? error.message : 'Une erreur est survenue'
+        description: deliveryError instanceof Error ? deliveryError.message : 'Une erreur est survenue',
       });
     }
-  });
+  }, [isErrorDelivery, deliveryError]);
 
   // Fetch delivery history
   const { 

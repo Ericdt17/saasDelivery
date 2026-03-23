@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -88,12 +88,15 @@ const Expeditions = () => {
     queryFn: () => getDeliveries({ page: 1, limit: 1000, sortBy: 'created_at', sortOrder: 'DESC' }),
     retry: 2,
     refetchOnWindowFocus: false,
-    onError: (error) => {
+  });
+
+  useEffect(() => {
+    if (isError && error) {
       toast.error('Erreur lors du chargement des expéditions', {
-        description: error instanceof Error ? error.message : 'Une erreur est survenue'
+        description: error instanceof Error ? error.message : 'Une erreur est survenue',
       });
     }
-  });
+  }, [isError, error]);
 
   // Filter and transform deliveries to expeditions
   const expeditions: ExpeditionData[] = useMemo(() => {
