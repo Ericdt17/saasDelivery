@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { z } = require('zod');
 const { authenticateToken } = require('../middleware/auth');
 const {
   getAllDeliveries,
@@ -11,6 +12,25 @@ const {
   saveHistory,
   deleteDelivery,
 } = require('../../db');
+
+const VALID_STATUSES = [
+  'pending', 'delivered', 'failed', 'cancelled', 'pickup',
+  'expedition', 'client_absent', 'present_ne_decroche_zone1', 'present_ne_decroche_zone2',
+];
+
+const createDeliverySchema = z.object({
+  phone: z.string().trim().min(6, 'Phone number is required'),
+  customer_name: z.string().trim().max(200).optional().nullable(),
+  items: z.string().trim().min(1, 'Items description is required'),
+  amount_due: z.coerce.number().min(0, 'Amount due must be positive'),
+  amount_paid: z.coerce.number().min(0).optional().default(0),
+  status: z.enum(VALID_STATUSES).optional().default('pending'),
+  quartier: z.string().trim().max(200).optional().nullable(),
+  notes: z.string().trim().max(1000).optional().nullable(),
+  carrier: z.string().trim().max(200).optional().nullable(),
+  delivery_fee: z.coerce.number().min(0).optional().nullable(),
+  group_id: z.coerce.number().int().positive().optional().nullable(),
+});
 
 // All routes require authentication (cookie-based or Authorization header)
 router.use(authenticateToken);
@@ -200,6 +220,16 @@ router.get('/:id', async (req, res, next) => {
 // POST /api/v1/deliveries - Create new delivery
 router.post('/', async (req, res, next) => {
   try {
+    const parsed = createDeliverySchema.safeParse(req.body);
+    if (!parsed.success) {
+      const firstIssue = parsed.error.issues[0];
+      return res.status(400).json({
+        success: false,
+        error: 'Validation error',
+        message: firstIssue?.message || 'Invalid delivery data',
+      });
+    }
+
     const {
       phone,
       customer_name,
@@ -212,15 +242,7 @@ router.post('/', async (req, res, next) => {
       carrier,
       delivery_fee,
       group_id,
-    } = req.body;
-
-    // Validation
-    if (!phone || !items || !amount_due) {
-      return res.status(400).json({
-        success: false,
-        error: 'Missing required fields: phone, items, amount_due',
-      });
-    }
+    } = parsed.data;
 
     // Get agency_id from authenticated user
     const agencyId = req.user?.agencyId !== null && req.user?.agencyId !== undefined 

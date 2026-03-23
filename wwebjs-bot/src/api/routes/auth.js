@@ -10,23 +10,7 @@ const { hashPassword } = require("../../utils/password");
 const { generateToken } = require("../../utils/jwt");
 const { authenticateToken } = require("../middleware/auth");
 const { createAgency, getAgencyByEmail, adapter } = require("../../db");
-const fs = require("fs");
-const path = require("path");
 const { z } = require("zod");
-
-const DEBUG_LOG_PATH = path.join(
-  __dirname,
-  "../../../../.cursor/debug-c77180.log"
-);
-
-function writeDebugLine(payload) {
-  try {
-    fs.mkdirSync(path.dirname(DEBUG_LOG_PATH), { recursive: true });
-    fs.appendFileSync(DEBUG_LOG_PATH, JSON.stringify(payload) + "\n");
-  } catch {
-    // ignore logging failures
-  }
-}
 
 const emailSchema = z
   .string()
@@ -93,72 +77,10 @@ function getCookieOptions(req) {
 async function handleLogin(req, res, next) {
   try {
     const { email, password } = req.body;
-    // #region agent log
-    writeDebugLine({
-      sessionId: "c77180",
-      runId: "pre-login-2",
-      hypothesisId: "H1",
-      location: "auth.js:/login:receivedBody",
-      message: "Login body received (masked)",
-      data: {
-        hasEmail: email != null,
-        hasPassword: password != null,
-        emailLen: email ? String(email).length : 0,
-        emailDomain: email ? String(email).split("@")[1]?.toLowerCase() : "",
-        passwordLen: password ? String(password).length : 0,
-      },
-      timestamp: Date.now(),
-    });
-    // #endregion
-    // #region agent log
-    try {
-      // Note: avoid logging PII; only log masked lengths + domain
-      const emailDomain = (email && String(email).split("@")[1]) ? String(email).split("@")[1].toLowerCase() : "";
-      fetch("http://127.0.0.1:7588/ingest/6825cdfb-0c66-4b26-9ab0-cf89f3b6ed2d", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Debug-Session-Id": "c77180",
-        },
-        body: JSON.stringify({
-          sessionId: "c77180",
-          runId: "pre-login-1",
-          hypothesisId: "H1",
-          location: "wwebjs-bot/src/api/routes/auth.js:login:received",
-          message: "Login request received (masked)",
-          data: {
-            emailLen: email ? String(email).length : 0,
-            emailDomain,
-            passwordLen: password ? String(password).length : 0,
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-    } catch {
-      // ignore instrumentation errors
-    }
-    // #endregion
 
     // Strict validation (zod)
     const loginParsed = loginSchema.safeParse({ email, password });
     if (!loginParsed.success) {
-      // #region agent log
-      writeDebugLine({
-        sessionId: "c77180",
-        runId: "pre-login-2",
-        hypothesisId: "H4",
-        location: "auth.js:/login:validationFailed",
-        message: "Login validation failed (masked)",
-        data: {
-          hasEmail: email != null,
-          hasPassword: password != null,
-          emailLen: email ? String(email).length : 0,
-          passwordLen: password ? String(password).length : 0,
-        },
-        timestamp: Date.now(),
-      });
-      // #endregion
-
       const firstIssue = loginParsed.error?.issues?.[0];
       return res.status(400).json({
         success: false,
@@ -186,21 +108,6 @@ async function handleLogin(req, res, next) {
     const agency = await adapter.query(findAgencyQuery, [normalizedEmail]);
 
     if (!agency) {
-      // #region agent log
-      writeDebugLine({
-        sessionId: "c77180",
-        runId: "pre-login-2",
-        hypothesisId: "H2",
-        location: "auth.js:/login:agencyNotFound",
-        message: "Agency not found",
-        data: {
-          normalizedEmail,
-          emailLen: email ? String(email).length : 0,
-          emailDomain: email ? String(email).split("@")[1]?.toLowerCase() : "",
-        },
-        timestamp: Date.now(),
-      });
-      // #endregion
       return res.status(401).json({
         success: false,
         error: "Authentication failed",
@@ -226,48 +133,7 @@ async function handleLogin(req, res, next) {
       agency.password_hash
     );
 
-    // #region agent log
-    try {
-      fetch("http://127.0.0.1:7588/ingest/6825cdfb-0c66-4b26-9ab0-cf89f3b6ed2d", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Debug-Session-Id": "c77180",
-        },
-        body: JSON.stringify({
-          sessionId: "c77180",
-          runId: "pre-login-1",
-          hypothesisId: "H2",
-          location: "wwebjs-bot/src/api/routes/auth.js:login:afterPasswordCheck",
-          message: "Login agency lookup + password validation result",
-          data: {
-            agencyFound: !!agency,
-            isPasswordValid: !!isPasswordValid,
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-    } catch {
-      // ignore instrumentation errors
-    }
-    // #endregion
-
     if (!isPasswordValid) {
-      // #region agent log
-      writeDebugLine({
-        sessionId: "c77180",
-        runId: "pre-login-2",
-        hypothesisId: "H2",
-        location: "auth.js:/login:passwordInvalid",
-        message: "Password invalid (masked)",
-        data: {
-          agencyFound: true,
-          emailLen: email ? String(email).length : 0,
-          passwordLen: password ? String(password).length : 0,
-        },
-        timestamp: Date.now(),
-      });
-      // #endregion
       return res.status(401).json({
         success: false,
         error: "Authentication failed",
@@ -287,7 +153,6 @@ async function handleLogin(req, res, next) {
     // Set HTTP-only cookie with JWT token
     const cookieOptions = getCookieOptions(req);
 
-    console.log("[Auth] Setting cookie with options:", cookieOptions);
     res.cookie("auth_token", token, cookieOptions);
 
     // Return success response (exclude password_hash)
