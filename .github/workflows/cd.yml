@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - 'wwebjs-bot/**'
+  workflow_dispatch:
 
 jobs:
   deploy:
