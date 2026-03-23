@@ -25,7 +25,8 @@ jobs:
             cd /opt/saasDelivery/wwebjs-bot
 
             echo "→ Pulling latest code..."
-            git pull origin main
+            git fetch origin main
+            git reset --hard origin/main
 
             echo "→ Installing dependencies..."
             npm install --omit=dev
