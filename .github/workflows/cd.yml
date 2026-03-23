@@ -30,6 +30,7 @@ jobs:
             git reset --hard origin/main
 
             echo "→ Installing dependencies..."
+            cd wwebjs-bot
             npm install --omit=dev
 
             echo "→ Running migrations..."
