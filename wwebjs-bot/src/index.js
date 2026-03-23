@@ -50,11 +50,11 @@ const client = new Client({
   }),
   puppeteer: {
     headless: true,
-    // In this environment, Chrome may not be available in Puppeteer's default cache.
-    // Provide a fallback executable path so whatsapp-web.js can still launch.
-    executablePath:
-      process.env.PUPPETEER_EXECUTABLE_PATH ||
-      "/var/folders/js/6nbdz49n2_v520mqslsjvtjm0000gn/T/cursor-sandbox-cache/712c13043e8678abfc4c7f2f0325b119/puppeteer/chrome/mac_arm-146.0.7680.153/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing",
+    // Use bundled Chromium from puppeteer (whatsapp-web.js dependency) unless you
+    // override with PUPPETEER_EXECUTABLE_PATH (e.g. system Chrome on a server).
+    ...(process.env.PUPPETEER_EXECUTABLE_PATH
+      ? { executablePath: process.env.PUPPETEER_EXECUTABLE_PATH }
+      : {}),
     args: [
       "--no-sandbox",
       "--disable-setuid-sandbox",
@@ -279,19 +279,6 @@ client.on("disconnected", (reason) => {
 // Listen to all incoming messages
 console.log("📋 Registering message event listener...");
 console.log("🔍 Listening for 'message' events");
-
-// In some whatsapp-web.js versions, incoming events are delivered via `message_create`
-// instead of `message`. We forward `message_create` to the existing `message` handler
-// so the rest of the bot logic stays unchanged.
-client.on("message_create", async (msg) => {
-  try {
-    console.log("🔔 MESSAGE_CREATE EVENT FIRED - Bot received a message!");
-    // Forward to the existing `message` handler.
-    client.emit("message", msg);
-  } catch (error) {
-    console.error("⚠️  Error handling message_create:", error.message);
-  }
-});
 
 client.on("message", async (msg) => {
   try {
