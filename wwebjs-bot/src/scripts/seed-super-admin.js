@@ -43,8 +43,7 @@ for (let i = 0; i < args.length; i++) {
 async function seedSuperAdmin() {
   try {
     console.log("🔍 Checking for existing super admin...");
-    console.log(`📧 Email: ${email}`);
-    console.log(`💾 Database type: ${db.adapter.type}\n`);
+    console.log(`📧 Email: ${email}\n`);
 
     // Check if super admin already exists by email
     let existingByEmail;
@@ -99,14 +98,12 @@ async function seedSuperAdmin() {
 
     // Create the super admin
     console.log("👤 Creating super admin account...");
-    // SQLite needs 1/0, PostgreSQL needs true/false
-    const isActive = db.adapter.type === "sqlite" ? 1 : true;
     const agencyId = await db.createAgency({
       name: name.trim(),
       email: email.trim().toLowerCase(),
       password_hash: passwordHash,
       role: "super_admin",
-      is_active: isActive,
+      is_active: true,
     });
 
     console.log("\n✅ Super admin created successfully!");
@@ -128,7 +125,7 @@ async function seedSuperAdmin() {
     console.error("\n❌ Error creating super admin:");
     console.error(`   ${error.message}`);
     
-    if (error.code === "SQLITE_CONSTRAINT" || error.code === "23505") {
+    if (error.code === "23505") {
       console.error("\n💡 This email is already registered. Use a different email.");
     } else if (error.message.includes("password")) {
       console.error("\n💡 Please provide a password that is at least 6 characters long.");

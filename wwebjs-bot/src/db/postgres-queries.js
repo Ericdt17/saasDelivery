@@ -562,15 +562,11 @@ function createPostgresQueries(pool) {
       params.push(is_active);
     }
     if (agency_code !== undefined) {
-      // Normalize agency_code: trim and uppercase if provided, null if empty
-      const normalizedCode = agency_code && typeof agency_code === 'string' && agency_code.trim() 
-        ? agency_code.trim().toUpperCase() 
+      const normalizedCode = agency_code && typeof agency_code === 'string' && agency_code.trim()
+        ? agency_code.trim().toUpperCase()
         : null;
-      console.log(`[Postgres UpdateAgency] agency_code received:`, agency_code, "normalized to:", normalizedCode);
       updates.push(`agency_code = $${paramIndex++}`);
       params.push(normalizedCode);
-    } else {
-      console.log(`[Postgres UpdateAgency] agency_code is undefined, not updating`);
     }
 
     if (updates.length === 0) {
@@ -581,19 +577,8 @@ function createPostgresQueries(pool) {
     params.push(id);
 
     const sql = `UPDATE agencies SET ${updates.join(", ")} WHERE id = $${paramIndex}`;
-    console.log(`[Postgres UpdateAgency] Executing SQL:`, sql);
-    console.log(`[Postgres UpdateAgency] Params:`, params);
-    
-    try {
-      const result = await query(sql, params);
-      console.log(`[Postgres UpdateAgency] Update result:`, result);
-      return { changes: result.changes || 0 };
-    } catch (error) {
-      console.error(`[Postgres UpdateAgency] Error executing update:`, error.message);
-      console.error(`[Postgres UpdateAgency] SQL was:`, sql);
-      console.error(`[Postgres UpdateAgency] Params were:`, params);
-      throw error;
-    }
+    const result = await query(sql, params);
+    return { changes: result.changes || 0 };
   }
 
   async function deleteAgency(id) {

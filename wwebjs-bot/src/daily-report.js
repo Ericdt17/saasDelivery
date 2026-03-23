@@ -5,7 +5,6 @@
 
 const { getTodayDeliveries, getDeliveryStats } = require("./db");
 const { adapter } = require("./db");
-const config = require("./config");
 const fs = require("fs");
 const path = require("path");
 
@@ -91,24 +90,12 @@ async function generateDailyReport(date = null) {
 
 // Helper to get deliveries by date (for historical reports)
 async function getDeliveriesByDate(date) {
-  const { adapter } = require("./db");
-  const config = require("./config");
-
-  if (config.DB_TYPE === "postgres") {
-    return await adapter.query(
-      `SELECT * FROM deliveries 
-      WHERE created_at::date = $1
-      ORDER BY created_at DESC`,
-      [date]
-    );
-  } else {
-    return await adapter.query(
-      `SELECT * FROM deliveries 
-      WHERE DATE(created_at) = DATE(?)
-      ORDER BY created_at DESC`,
-      [date]
-    );
-  }
+  return await adapter.query(
+    `SELECT * FROM deliveries
+     WHERE created_at::date = $1::date
+     ORDER BY created_at DESC`,
+    [date]
+  );
 }
 
 // If called directly from command line

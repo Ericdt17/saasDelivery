@@ -41,7 +41,6 @@ if (process.env.DATABASE_URL) {
 // Force production mode
 process.env.NODE_ENV = "production";
 
-const config = require("./config");
 const { adapter, close } = require("./db");
 
 async function testPostgresConnection() {
@@ -49,15 +48,12 @@ async function testPostgresConnection() {
   console.log("🧪 TESTING POSTGRESQL CONNECTION (PRODUCTION)");
   console.log("=".repeat(70) + "\n");
 
-  console.log(`📊 Database Type: ${config.DB_TYPE.toUpperCase()}`);
-  console.log(`🔗 Connection: ${config.DATABASE_URL ? "Using DATABASE_URL" : "Not configured"}`);
-  
-  if (config.DB_TYPE !== "postgres") {
-    console.error("\n❌ ERROR: Database type is not PostgreSQL!");
-    console.error(`   Detected: ${config.DB_TYPE}`);
-    console.error("   Expected: postgres\n");
-    process.exit(1);
-  }
+  console.log(`📊 Database Type: ${adapter.type?.toUpperCase?.() || "postgres"}`);
+  console.log(
+    `🔗 Connection: ${
+      process.env.DATABASE_URL ? "Using DATABASE_URL" : "Not configured"
+    }`
+  );
 
   console.log("\n" + "-".repeat(70));
 

@@ -144,23 +144,13 @@ app.get("/api/v1/schema/status", async (req, res) => {
     // Get applied migrations from database
     let appliedMigrations = [];
     try {
-      if (dbType === "postgres") {
-        const result = await adapter.query(
-          "SELECT version, applied_at FROM schema_migrations ORDER BY version"
-        );
-        appliedMigrations = result.map((row) => ({
-          version: row.version,
-          applied_at: row.applied_at,
-        }));
-      } else if (dbType === "sqlite") {
-        const result = await adapter.query(
-          "SELECT version, applied_at FROM schema_migrations ORDER BY version"
-        );
-        appliedMigrations = result.map((row) => ({
-          version: row.version,
-          applied_at: row.applied_at,
-        }));
-      }
+      const result = await adapter.query(
+        "SELECT version, applied_at FROM schema_migrations ORDER BY version"
+      );
+      appliedMigrations = result.map((row) => ({
+        version: row.version,
+        applied_at: row.applied_at,
+      }));
     } catch (error) {
       // schema_migrations table might not exist
       if (

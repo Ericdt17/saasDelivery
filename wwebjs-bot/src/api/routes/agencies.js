@@ -14,7 +14,6 @@ const {
   deleteAgency,
   findAgencyByCode,
   getAgencyByEmail,
-  adapter,
 } = require("../../db");
 const { hashPassword } = require("../../utils/password");
 
@@ -77,9 +76,8 @@ router.get("/me", async (req, res, next) => {
         if (agencyByEmail) {
           agencyId = agencyByEmail.id;
         }
-      } catch (error) {
+      } catch {
         // If getAgencyByEmail fails, continue with the error below
-        console.error("[Agencies API] Error finding agency by email:", error);
       }
     }
     
@@ -121,15 +119,6 @@ router.put("/:id", async (req, res, next) => {
     const { id } = req.params;
     const { name, email, password, role, is_active, agency_code, address, phone, logo_base64 } = req.body;
     
-    // Log user info for debugging
-    console.log("[Agencies API PUT /:id] User info from token:", {
-      userId: req.user?.userId,
-      agencyId: req.user?.agencyId,
-      role: req.user?.role,
-      email: req.user?.email,
-      targetId: id,
-    });
-    
     // Determine if user can update this agency
     const isSuperAdmin = req.user.role === "super_admin";
     const targetAgencyId = parseInt(id);
@@ -140,11 +129,7 @@ router.put("/:id", async (req, res, next) => {
       ? req.user.agencyId 
       : req.user.userId;
     
-    console.log("[Agencies API PUT /:id] Resolved userAgencyId:", userAgencyId, "targetAgencyId:", targetAgencyId);
-    
-    // Agency admins can only update their own agency
     if (!isSuperAdmin && targetAgencyId !== userAgencyId) {
-      console.error("[Agencies API PUT /:id] Access denied - userAgencyId doesn't match targetAgencyId");
       return res.status(403).json({
         success: false,
         error: "Forbidden",
@@ -198,11 +183,7 @@ router.put("/:id", async (req, res, next) => {
       if (email !== undefined) updateData.email = email;
       if (role !== undefined) updateData.role = role;
       if (is_active !== undefined) {
-        // Convert boolean to 1/0 for SQLite, keep boolean for PostgreSQL
-        const dbType = adapter?.type || "sqlite"; // Default to sqlite if adapter not available
-        updateData.is_active = dbType === "sqlite"
-          ? (is_active === true || is_active === 1 ? 1 : 0)
-          : (is_active === true || is_active === 1);
+        updateData.is_active = is_active === true || is_active === 1;
       }
       if (password !== undefined) {
         updateData.password_hash = await hashPassword(password);
@@ -348,19 +329,12 @@ router.post("/", async (req, res, next) => {
     // Hash password
     const password_hash = await hashPassword(password);
 
-    // Convert boolean to 1/0 for SQLite, keep boolean for PostgreSQL
-    const dbType = adapter?.type || "sqlite"; // Default to sqlite if adapter not available
-    const isActiveValue = dbType === "sqlite" 
-      ? (is_active === true || is_active === 1 ? 1 : 0)
-      : (is_active === true || is_active === 1);
-
-    // Create agency
     const agencyId = await createAgency({
       name,
       email,
       password_hash,
       role,
-      is_active: isActiveValue,
+      is_active: is_active === true || is_active === 1,
       agency_code: agency_code || null,
     });
 
@@ -373,22 +347,11 @@ router.post("/", async (req, res, next) => {
       message: "Agency created successfully",
     });
   } catch (error) {
-    console.error("Error creating agency:", error);
-    // Handle unique constraint violation (duplicate email)
     if (error.message && (error.message.includes("UNIQUE constraint") || error.message.includes("already exists"))) {
       return res.status(409).json({
         success: false,
         error: "Conflict",
         message: "An agency with this email already exists",
-      });
-    }
-    // Handle SQLite binding errors
-    if (error.message && error.message.includes("SQLite3 can only bind")) {
-      console.error("SQLite binding error - is_active value:", is_active, "converted to:", isActiveValue, "dbType:", dbType);
-      return res.status(500).json({
-        success: false,
-        error: "Database error",
-        message: "Invalid data type. Please contact support.",
       });
     }
     next(error);

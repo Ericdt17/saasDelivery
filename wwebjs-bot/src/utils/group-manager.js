@@ -15,26 +15,11 @@ const { isPendingVerification } = require("./group-verification");
  */
 async function getGroup(whatsappGroupId) {
   try {
-    console.log(`   🔍 Searching for group in database...`);
-    console.log(`   📋 Looking for WhatsApp ID: ${whatsappGroupId}`);
-    console.log(`   🗄️  Database type: ${adapter.type}`);
-    
     // First, check if group exists (even if inactive) for debugging
-    // Note: PostgreSQL adapter returns single object (or null) for LIMIT 1 queries, not array
-    const checkAllQuery =
-      adapter.type === "postgres"
-        ? `SELECT g.id, g.agency_id, g.whatsapp_group_id, g.name, g.is_active 
-         FROM groups g 
-         WHERE g.whatsapp_group_id = $1 LIMIT 1`
-        : `SELECT g.id, g.agency_id, g.whatsapp_group_id, g.name, g.is_active 
-         FROM groups g 
-         WHERE g.whatsapp_group_id = ? LIMIT 1`;
-    
-    const allGroupResult = await adapter.query(checkAllQuery, [whatsappGroupId]);
-    // PostgreSQL returns single object (or null) for LIMIT 1, SQLite also returns single object (or undefined) for LIMIT 1
-    const allGroup = adapter.type === "postgres"
-      ? (allGroupResult || null)  // Already a single object or null
-      : (allGroupResult || null);  // SQLite returns object or undefined, not array
+    const allGroup = await adapter.query(
+      `SELECT g.id, g.agency_id, g.whatsapp_group_id, g.name, g.is_active FROM groups g WHERE g.whatsapp_group_id = $1 LIMIT 1`,
+      [whatsappGroupId]
+    );
     
     if (allGroup) {
       console.log(`   📊 Group found in database (checking active status):`);
@@ -53,22 +38,10 @@ async function getGroup(whatsappGroupId) {
     }
     
     // Find existing group by WhatsApp ID (only active groups)
-    const findGroupQuery =
-      adapter.type === "postgres"
-        ? `SELECT g.id, g.agency_id, g.whatsapp_group_id, g.name, g.is_active 
-         FROM groups g 
-         WHERE g.whatsapp_group_id = $1 AND g.is_active = true LIMIT 1`
-        : `SELECT g.id, g.agency_id, g.whatsapp_group_id, g.name, g.is_active 
-         FROM groups g 
-         WHERE g.whatsapp_group_id = ? AND g.is_active = 1 LIMIT 1`;
-
-    const existingGroupsResult = await adapter.query(findGroupQuery, [
-      whatsappGroupId,
-    ]);
-    // PostgreSQL returns single object (or null) for LIMIT 1, SQLite also returns single object (or undefined) for LIMIT 1
-    const existingGroup = adapter.type === "postgres"
-      ? (existingGroupsResult || null)  // Already a single object or null
-      : (existingGroupsResult || null);  // SQLite returns object or undefined, not array
+    const existingGroup = await adapter.query(
+      `SELECT g.id, g.agency_id, g.whatsapp_group_id, g.name, g.is_active FROM groups g WHERE g.whatsapp_group_id = $1 AND g.is_active = true LIMIT 1`,
+      [whatsappGroupId]
+    );
 
     if (existingGroup) {
       console.log(
@@ -117,19 +90,9 @@ async function getDefaultAgencyId() {
       return parseInt(config.DEFAULT_AGENCY_ID);
     }
 
-    // Get all active agencies (excluding super_admin)
-    const getAgenciesQuery =
-      adapter.type === "postgres"
-        ? `SELECT id, name, role FROM agencies WHERE is_active = true AND role != 'super_admin' ORDER BY id ASC`
-        : `SELECT id, name, role FROM agencies WHERE is_active = 1 AND role != 'super_admin' ORDER BY id ASC`;
-
-    const agencies = await adapter.query(getAgenciesQuery);
-    const activeAgencies =
-      adapter.type === "postgres"
-        ? Array.isArray(agencies)
-          ? agencies
-          : []
-        : (Array.isArray(agencies) ? agencies : [agencies]).filter(Boolean);
+    const activeAgencies = await adapter.query(
+      `SELECT id, name, role FROM agencies WHERE is_active = true AND role != 'super_admin' ORDER BY id ASC`
+    ) || [];
 
     // If only one active agency (non-super-admin) exists, use it automatically
     if (activeAgencies.length === 1) {
@@ -151,15 +114,9 @@ async function getDefaultAgencyId() {
     }
 
     // Fallback: Get first active agency (including super_admin)
-    const getAgencyQuery =
-      adapter.type === "postgres"
-        ? `SELECT id FROM agencies WHERE is_active = true ORDER BY id ASC LIMIT 1`
-        : `SELECT id FROM agencies WHERE is_active = 1 ORDER BY id ASC LIMIT 1`;
-
-    const fallbackAgencies = await adapter.query(getAgencyQuery);
-    // Both PostgreSQL and SQLite return single object (or null/undefined) for LIMIT 1
-    const fallbackAgency = fallbackAgencies || null;
-
+    const fallbackAgency = await adapter.query(
+      `SELECT id FROM agencies WHERE is_active = true ORDER BY id ASC LIMIT 1`
+    );
     return fallbackAgency ? fallbackAgency.id : null;
   } catch (error) {
     console.error(`   ⚠️  Error getting default agency: ${error.message}`);
@@ -174,15 +131,10 @@ async function getDefaultAgencyId() {
  */
 async function getAgencyIdForGroup(groupId) {
   try {
-    const getGroupQuery =
-      adapter.type === "postgres"
-        ? `SELECT agency_id FROM groups WHERE id = $1 LIMIT 1`
-        : `SELECT agency_id FROM groups WHERE id = ? LIMIT 1`;
-
-    const groups = await adapter.query(getGroupQuery, [groupId]);
-    // Both PostgreSQL and SQLite return single object (or null/undefined) for LIMIT 1
-    const group = groups || null;
-
+    const group = await adapter.query(
+      `SELECT agency_id FROM groups WHERE id = $1 LIMIT 1`,
+      [groupId]
+    );
     return group ? group.agency_id : null;
   } catch (error) {
     console.error(`   ⚠️  Error getting agency for group: ${error.message}`);
@@ -227,22 +179,10 @@ async function verifyAgencyCodeAndLinkGroup(whatsappGroupId, code, groupName) {
     });
 
     // Get the created group
-    const getGroupQuery =
-      adapter.type === "postgres"
-        ? `SELECT g.id, g.agency_id, g.whatsapp_group_id, g.name, g.is_active 
-           FROM groups g 
-           WHERE g.id = $1 LIMIT 1`
-        : `SELECT g.id, g.agency_id, g.whatsapp_group_id, g.name, g.is_active 
-           FROM groups g 
-           WHERE g.id = ? LIMIT 1`;
-
-    const newGroups = await adapter.query(getGroupQuery, [groupId]);
-    const newGroup =
-      adapter.type === "postgres"
-        ? Array.isArray(newGroups) && newGroups.length > 0
-          ? newGroups[0]
-          : null
-        : newGroups;
+    const newGroup = await adapter.query(
+      `SELECT g.id, g.agency_id, g.whatsapp_group_id, g.name, g.is_active FROM groups g WHERE g.id = $1 LIMIT 1`,
+      [groupId]
+    );
 
     if (!newGroup) {
       throw new Error(`Failed to retrieve created group with ID: ${groupId}`);

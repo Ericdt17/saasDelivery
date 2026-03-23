@@ -38,7 +38,7 @@ if (process.env.DATABASE_URL) {
     console.log(`   DATABASE_URL: *** (present but invalid format)`);
   }
 } else {
-  console.log(`   DATABASE_URL: NOT SET (will use SQLite)`);
+  console.log(`   DATABASE_URL: NOT SET (required — set DATABASE_URL)`);
 }
 console.log("=".repeat(60) + "\n");
 

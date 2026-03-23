@@ -94,18 +94,10 @@ async function handleLogin(req, res, next) {
     const validatedPassword = loginParsed.data.password;
     const normalizedEmail = validatedEmail;
 
-    // Find agency by email (emails are stored as lowercase in seed script)
-    // Note: adapter.query() with LIMIT 1 returns the object directly (or null), not an array
-    const findAgencyQuery =
-      adapter.type === "postgres"
-        ? `SELECT id, name, email, password_hash, role, is_active 
-         FROM agencies 
-         WHERE email = $1 LIMIT 1`
-        : `SELECT id, name, email, password_hash, role, is_active 
-         FROM agencies 
-         WHERE email = ? LIMIT 1`;
-
-    const agency = await adapter.query(findAgencyQuery, [normalizedEmail]);
+    const agency = await adapter.query(
+      `SELECT id, name, email, password_hash, role, is_active FROM agencies WHERE email = $1 LIMIT 1`,
+      [normalizedEmail]
+    );
 
     if (!agency) {
       return res.status(401).json({
@@ -115,11 +107,7 @@ async function handleLogin(req, res, next) {
       });
     }
 
-    // Check if agency is active
-    const isActive =
-      adapter.type === "postgres" ? agency.is_active : agency.is_active === 1;
-
-    if (!isActive) {
+    if (!agency.is_active) {
       return res.status(403).json({
         success: false,
         error: "Account disabled",
@@ -284,33 +272,12 @@ router.post("/signout", authenticateToken, handleLogout);
  */
 router.get("/me", authenticateToken, async (req, res, next) => {
   try {
-    // Get agency details from database
-    const getAgencyQuery =
-      adapter.type === "postgres"
-        ? `SELECT id, name, email, role, is_active 
-         FROM agencies 
-         WHERE id = $1 LIMIT 1`
-        : `SELECT id, name, email, role, is_active 
-         FROM agencies 
-         WHERE id = ? LIMIT 1`;
-
-    const result = await adapter.query(getAgencyQuery, [req.user.userId]);
-    
-    // PostgreSQL adapter returns single object (or null) for LIMIT 1
-    // SQLite adapter returns single object (or undefined) for LIMIT 1
-    const agency = adapter.type === "postgres" 
-      ? (result || null)  // PostgreSQL already returns object or null
-      : (result || null);  // SQLite returns object or undefined
+    const agency = await adapter.query(
+      `SELECT id, name, email, role, is_active FROM agencies WHERE id = $1 LIMIT 1`,
+      [req.user.userId]
+    );
 
     if (!agency) {
-      console.error("[Auth /me] User not found in database:", {
-        userId: req.user.userId,
-        email: req.user.email,
-        role: req.user.role,
-        dbType: adapter.type,
-        queryResult: result,
-      });
-      
       return res.status(401).json({
         success: false,
         error: "Authentication failed",
@@ -318,11 +285,7 @@ router.get("/me", authenticateToken, async (req, res, next) => {
       });
     }
 
-    // Check if agency is active
-    const isActive =
-      adapter.type === "postgres" ? agency.is_active : agency.is_active === 1;
-
-    if (!isActive) {
+    if (!agency.is_active) {
       return res.status(403).json({
         success: false,
         error: "Account disabled",

@@ -1,5 +1,4 @@
 const { adapter, close } = require("./db");
-const config = require("./config");
 
 async function main() {
   console.log("\n" + "=".repeat(70));
@@ -33,18 +32,9 @@ async function main() {
 
   query += " ORDER BY created_at DESC";
 
-  // Execute query based on database type
-  let deliveries;
-  if (config.DB_TYPE === "postgres") {
-    // Convert placeholders for PostgreSQL
-    const pgQuery = query.replace(/\?/g, (match, offset) => {
-      const index = query.substring(0, offset).split("?").length;
-      return `$${index}`;
-    });
-    deliveries = await adapter.query(pgQuery, params);
-  } else {
-    deliveries = await adapter.query(query, params);
-  }
+  // Postgres-only: adapter.query will normalize date functions
+  // and convert `?` placeholders to `$1`, `$2`, ...
+  const deliveries = await adapter.query(query, params);
 
   // Get overall statistics
   const statsQuery = `

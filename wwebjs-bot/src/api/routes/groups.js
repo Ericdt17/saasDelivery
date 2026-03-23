@@ -29,27 +29,12 @@ router.get("/", async (req, res, next) => {
   try {
     let groups;
 
-    // Debug: Log user info
-    console.log("[Groups API] User info:", {
-      userId: req.user?.userId,
-      agencyId: req.user?.agencyId,
-      role: req.user?.role,
-      email: req.user?.email,
-    });
-
-    // Super admin sees all groups, agency admin sees only their groups
-    // true = include inactive groups (so users can see all groups and their status)
     if (req.user.role === "super_admin") {
-      groups = await getAllGroups(true); // true = include inactive groups
-      console.log(`[Groups API] Super admin - Found ${groups?.length || 0} groups (active and inactive)`);
+      groups = await getAllGroups(true);
     } else {
-      // Agency admin - only their groups
-      // Use agencyId from token, or fallback to userId if agencyId is not set
-      const agencyId = req.user.agencyId !== null && req.user.agencyId !== undefined 
-        ? req.user.agencyId 
+      const agencyId = req.user.agencyId !== null && req.user.agencyId !== undefined
+        ? req.user.agencyId
         : req.user.userId;
-      
-      console.log("[Groups API] Using agencyId:", agencyId);
       
       if (!agencyId) {
         return res.status(403).json({
@@ -59,8 +44,7 @@ router.get("/", async (req, res, next) => {
         });
       }
       
-      groups = await getGroupsByAgency(agencyId, true); // true = include inactive groups
-      console.log(`[Groups API] Agency admin - Found ${groups?.length || 0} groups (active and inactive)`);
+      groups = await getGroupsByAgency(agencyId, true);
     }
 
     res.json({
@@ -68,7 +52,6 @@ router.get("/", async (req, res, next) => {
       data: groups,
     });
   } catch (error) {
-    console.error("[Groups API] Error:", error);
     next(error);
   }
 });
@@ -82,14 +65,6 @@ router.get("/:id", async (req, res, next) => {
     const { id } = req.params;
     const group = await getGroupById(parseInt(id));
 
-    console.log("[Groups API GET /:id] Group found:", {
-      groupId: id,
-      groupAgencyId: group?.agency_id,
-      userAgencyId: req.user.agencyId,
-      userId: req.user.userId,
-      userRole: req.user.role,
-    });
-
     if (!group) {
       return res.status(404).json({
         success: false,
@@ -98,18 +73,11 @@ router.get("/:id", async (req, res, next) => {
       });
     }
 
-    // Agency admin can only access their own groups
     if (req.user.role !== "super_admin") {
-      const agencyId = req.user.agencyId !== null && req.user.agencyId !== undefined 
-        ? req.user.agencyId 
+      const agencyId = req.user.agencyId !== null && req.user.agencyId !== undefined
+        ? req.user.agencyId
         : req.user.userId;
-      
-      console.log("[Groups API GET /:id] Checking access:", {
-        groupAgencyId: group.agency_id,
-        userAgencyId: agencyId,
-        hasAccess: group.agency_id === agencyId,
-      });
-      
+
       if (group.agency_id !== agencyId) {
         return res.status(403).json({
           success: false,
@@ -195,17 +163,12 @@ router.post("/", async (req, res, next) => {
       });
     }
 
-    // Check if WhatsApp Group ID already exists (must be unique)
-    const checkGroupQuery = adapter.type === "postgres"
-      ? `SELECT id FROM groups WHERE whatsapp_group_id = $1 LIMIT 1`
-      : `SELECT id FROM groups WHERE whatsapp_group_id = ? LIMIT 1`;
-    
-    const existingGroup = await adapter.query(checkGroupQuery, [whatsapp_group_id.trim()]);
-    const groupExists = adapter.type === "postgres"
-      ? Array.isArray(existingGroup) && existingGroup.length > 0
-      : existingGroup;
+    const existingGroup = await adapter.query(
+      `SELECT id FROM groups WHERE whatsapp_group_id = $1 LIMIT 1`,
+      [whatsapp_group_id.trim()]
+    );
 
-    if (groupExists) {
+    if (existingGroup) {
       return res.status(409).json({
         success: false,
         error: "Conflict",
@@ -213,18 +176,11 @@ router.post("/", async (req, res, next) => {
       });
     }
 
-    // Convert boolean to 1/0 for SQLite, keep boolean for PostgreSQL
-    const dbType = adapter?.type || "sqlite";
-    const isActiveValue = dbType === "sqlite"
-      ? (is_active === true || is_active === 1 ? 1 : 0)
-      : (is_active === true || is_active === 1);
-
-    // Create group
     const groupId = await createGroup({
       agency_id: targetAgencyId,
       whatsapp_group_id: whatsapp_group_id.trim(),
       name: name.trim(),
-      is_active: isActiveValue,
+      is_active: is_active === true || is_active === 1,
     });
 
     // Get created group
@@ -259,10 +215,6 @@ router.put("/:id", async (req, res, next) => {
     const { id } = req.params;
     const { name, is_active } = req.body;
 
-    console.log(`[Update Group] ID: ${id}, Body:`, { name, is_active });
-    console.log(`[Update Group] Method: PUT (toggle/update), is_active: ${is_active}`);
-    console.log(`[Update Group] This is an UPDATE operation (sets is_active), NOT a delete`);
-
     // Check if group exists
     const existingGroup = await getGroupById(parseInt(id));
     if (!existingGroup) {
@@ -288,26 +240,14 @@ router.put("/:id", async (req, res, next) => {
       }
     }
 
-    // Prepare update data
     const updateData = {};
     if (name !== undefined) updateData.name = name;
     if (is_active !== undefined) {
-      // Convert boolean to 1/0 for SQLite, keep boolean for PostgreSQL
-      const dbType = adapter?.type || "sqlite"; // Default to sqlite if adapter not available
-      updateData.is_active = dbType === "sqlite"
-        ? (is_active === true || is_active === 1 ? 1 : 0)
-        : (is_active === true || is_active === 1);
+      updateData.is_active = is_active === true || is_active === 1;
     }
 
-    // Update group
-    console.log(`[Update Group] Calling updateGroup with:`, { id: parseInt(id), updateData });
-    const updateResult = await updateGroup(parseInt(id), updateData);
-    console.log(`[Update Group] Update result:`, updateResult);
-
-    // Get updated group
-    console.log(`[Update Group] Fetching updated group with ID: ${id}`);
+    await updateGroup(parseInt(id), updateData);
     const updatedGroup = await getGroupById(parseInt(id));
-    console.log(`[Update Group] Updated group from DB:`, updatedGroup);
 
     res.json({
       success: true,
@@ -329,10 +269,6 @@ router.delete("/:id", async (req, res, next) => {
   try {
     const { id } = req.params;
     const { permanent } = req.query; // Check if permanent=true in query string
-
-    console.log(`[Delete Group] Method: DELETE, ID: ${id}, Permanent param:`, permanent);
-    console.log(`[Delete Group] Full query object:`, JSON.stringify(req.query));
-    console.log(`[Delete Group] URL:`, req.url);
 
     // Check if group exists
     const existingGroup = await getGroupById(parseInt(id));
@@ -359,25 +295,16 @@ router.delete("/:id", async (req, res, next) => {
       }
     }
 
-    // Check if permanent delete - explicitly check for true values, default to soft delete
-    // Express parses query params as strings, so check for string "true" or boolean true
     const permanentStr = String(permanent || "").trim().toLowerCase();
     const isPermanent = permanentStr === "true" || permanent === true || permanentStr === "1";
-    console.log(`[Delete Group] Is permanent: ${isPermanent}, Permanent param: ${permanent}, Trimmed: "${permanentStr}"`);
 
     if (isPermanent) {
-      // Hard delete - permanently remove from database
-      console.log(`[Delete Group] Performing hard delete for group ID: ${id}`);
-      const result = await hardDeleteGroup(parseInt(id));
-      console.log(`[Delete Group] Hard delete result:`, result);
-      
+      await hardDeleteGroup(parseInt(id));
       res.json({
         success: true,
         message: "Group permanently deleted from database",
       });
     } else {
-      // Soft delete (sets is_active to false)
-      console.log(`[Delete Group] Performing soft delete for group ID: ${id}`);
       await deleteGroup(parseInt(id));
 
       res.json({
@@ -386,7 +313,6 @@ router.delete("/:id", async (req, res, next) => {
       });
     }
   } catch (error) {
-    console.error("[Delete Group] Error:", error);
     next(error);
   }
 });
