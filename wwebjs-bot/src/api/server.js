@@ -1,6 +1,8 @@
 const express = require("express");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
+const pinoHttp = require("pino-http");
+const logger = require("../logger");
 const deliveriesRouter = require("./routes/deliveries");
 const statsRouter = require("./routes/stats");
 const searchRouter = require("./routes/search");
@@ -51,14 +53,12 @@ const corsOptions = {
         if (isAllowed) {
           callback(null, true);
         } else {
-          console.warn(
-            `[CORS] Blocked origin: ${origin}. Allowed: ${allowedOrigins.join(", ")}`
-          );
+          logger.warn({ origin, allowedOrigins }, "CORS blocked origin");
           callback(new Error("Not allowed by CORS"));
         }
       } else {
         // If ALLOWED_ORIGINS not set, allow all (less secure but works)
-        console.warn("[CORS] ALLOWED_ORIGINS not set, allowing all origins");
+        logger.warn("CORS: ALLOWED_ORIGINS not set, allowing all origins");
         callback(null, true);
       }
     } else {
@@ -109,10 +109,7 @@ app.use(
 app.use(express.urlencoded({ extended: true })); // Parse URL-encoded bodies
 
 // Request logging middleware
-app.use((req, res, next) => {
-  console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
-  next();
-});
+app.use(pinoHttp({ logger }));
 
 // Routes
 app.use("/api/v1/auth", authRouter);
@@ -231,7 +228,7 @@ app.get("/api/v1/schema/status", async (req, res) => {
           : "Schema is up to date",
     });
   } catch (error) {
-    console.error("Schema status check error:", error);
+    logger.error({ err: error }, "Schema status check error");
     res.status(500).json({
       success: false,
       error: "Schema status check failed",
@@ -260,27 +257,7 @@ app.use(errorHandler);
 // Start server
 if (require.main === module) {
   app.listen(PORT, () => {
-    console.log(`\n🚀 API Server running on http://localhost:${PORT}`);
-    console.log(`📋 Available endpoints:`);
-    console.log(`   POST   /api/v1/auth/login`);
-    console.log(`   POST   /api/v1/auth/logout`);
-    console.log(`   GET    /api/v1/auth/me`);
-    console.log(`   GET    /api/v1/agencies (super admin)`);
-    console.log(`   POST   /api/v1/agencies (super admin)`);
-    console.log(`   GET    /api/v1/groups`);
-    console.log(`   GET    /api/v1/tariffs`);
-    console.log(`   POST   /api/v1/tariffs`);
-    console.log(`   PUT    /api/v1/tariffs/:id`);
-    console.log(`   DELETE /api/v1/tariffs/:id`);
-    console.log(`   GET    /api/v1/deliveries`);
-    console.log(`   GET    /api/v1/deliveries/:id`);
-    console.log(`   POST   /api/v1/deliveries`);
-    console.log(`   POST   /api/v1/deliveries/bulk`);
-    console.log(`   PUT    /api/v1/deliveries/:id`);
-    console.log(`   GET    /api/v1/deliveries/:id/history`);
-    console.log(`   GET    /api/v1/stats/daily`);
-    console.log(`   GET    /api/v1/search?q=...`);
-    console.log(`   GET    /api/v1/health\n`);
+    logger.info({ port: PORT }, `API server started`);
   });
 }
 

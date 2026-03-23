@@ -1,12 +1,7 @@
+const logger = require("../../logger");
+
 function errorHandler(err, req, res, next) {
-  // Log error with context
-  console.error('API Error:', {
-    method: req.method,
-    path: req.path,
-    error: err.message,
-    status: err.status || 500,
-    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
-  });
+  logger.error({ err, method: req.method, path: req.path }, "API error");
 
   // Prevent "Cannot set headers after they are sent" error
   // If headers were already sent (e.g., by JSON parser), don't try to send another response

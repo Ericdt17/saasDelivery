@@ -1,5 +1,6 @@
 const path = require("path");
 const config = require("../config");
+const logger = require("../logger");
 const { createSqliteClient } = require("./sqlite");
 const { createPostgresPool } = require("./postgres");
 const createSqliteQueries = require("./sqlite-queries");
@@ -14,9 +15,6 @@ let queries;
 let client;
 let dbType;
 
-console.log("\n" + "=".repeat(60));
-console.log("📊 DATABASE CONNECTION INITIALIZATION");
-console.log("=".repeat(60));
 const dbStartTime = Date.now();
 
 // Helper function to run migrations after database connection
@@ -26,23 +24,11 @@ function runDatabaseMigrations() {
   // This ensures migrations run on startup without blocking the module export
   setImmediate(async () => {
     try {
-      console.log("\n🔄 Running database migrations...");
       const migrationStartTime = Date.now();
-
-      // Run migrations (will create schema_migrations table if needed)
       await runMigrations();
-
-      const migrationDuration = (
-        (Date.now() - migrationStartTime) /
-        1000
-      ).toFixed(2);
-      console.log(`   ✅ Migrations completed (${migrationDuration}s)\n`);
+      logger.info({ durationMs: Date.now() - migrationStartTime }, "Migrations completed");
     } catch (error) {
-      // Log error but don't crash - allow app to start even if migrations fail
-      // This is important for production where migrations might need manual intervention
-      console.error("\n⚠️  Migration warning:", error.message);
-      console.error("   App will continue, but schema may be out of date.");
-      console.error("   Run 'npm run migrate' manually to fix.\n");
+      logger.error({ err: error }, "Migration failed — run 'npm run migrate' manually");
     }
   });
 }
@@ -62,16 +48,10 @@ if (preferPostgres && hasDatabaseUrl) {
     // If parsing fails, just show it's PostgreSQL
   }
 
-  console.log(`\n🗄️  DATABASE TYPE: ${dbInfo}`);
-  console.log(`   Host: ${host}`);
-  console.log(`   Database: ${dbName}`);
-  console.log(`   DATABASE_URL present: ${hasDatabaseUrl ? "YES" : "NO"}`);
-  console.log("   Status: Connecting...");
   client = createPostgresPool();
   queries = createPostgresQueries(client);
   dbType = "postgres";
-  const dbDuration = ((Date.now() - dbStartTime) / 1000).toFixed(2);
-  console.log(`   ✅ Connection established (${dbDuration}s)`);
+  logger.info({ host, db: dbName, durationMs: Date.now() - dbStartTime }, "PostgreSQL connected");
 
   // Test database connection and show groups count
   setImmediate(async () => {
@@ -86,9 +66,6 @@ if (preferPostgres && hasDatabaseUrl) {
           : result
             ? parseInt(result.total)
             : 0;
-      console.log(`   📊 Database test: Found ${count} groups in database`);
-
-      // Also show active groups
       const activeQuery =
         dbType === "postgres"
           ? "SELECT COUNT(*) as total FROM groups WHERE is_active = true"
@@ -102,73 +79,32 @@ if (preferPostgres && hasDatabaseUrl) {
           : activeResult
             ? parseInt(activeResult.total)
             : 0;
-      console.log(`   ✅ Active groups: ${activeCount}`);
-
-      // Show sample group IDs for debugging (only if groups exist)
-      if (count > 0) {
-        const sampleQuery =
-          "SELECT whatsapp_group_id, name, is_active FROM groups LIMIT 5";
-        const sampleResult = await queries.query(sampleQuery, []);
-        const samples =
-          dbType === "postgres"
-            ? Array.isArray(sampleResult)
-              ? sampleResult
-              : []
-            : Array.isArray(sampleResult)
-              ? sampleResult
-              : [sampleResult].filter(Boolean);
-
-        if (samples.length > 0) {
-          console.log(`   📋 Sample groups in database:`);
-          samples.forEach((g, i) => {
-            console.log(
-              `      ${i + 1}. ${g.name || "Unnamed"} - ${g.whatsapp_group_id} (active: ${g.is_active})`
-            );
-          });
-        }
-      }
+      logger.info({ totalGroups: count, activeGroups: activeCount }, "Database ready");
     } catch (error) {
-      console.error(`   ⚠️  Database test query failed: ${error.message}`);
+      logger.error({ err: error }, "Database test query failed");
     }
   });
 
   // Run migrations for PostgreSQL (async, non-blocking)
   runDatabaseMigrations();
 } else if (preferPostgres && !hasDatabaseUrl) {
-  console.warn(
-    "\n⚠️  DATABASE_URL not set; falling back to SQLite for safety."
-  );
-  console.warn("   Set DATABASE_URL for PostgreSQL.");
+  logger.warn("DATABASE_URL not set, falling back to SQLite");
   const dbPath = config.DB_PATH || path.join(__dirname, "..", "data", "bot.db");
-  console.log(`\n🗄️  DATABASE TYPE: SQLite (Local)`);
-  console.log(`   Path: ${dbPath}`);
-  console.log("   Status: Initializing...");
   client = createSqliteClient();
   queries = createSqliteQueries(client);
   if (queries.initSchema) queries.initSchema();
   dbType = "sqlite";
-  const dbDuration = ((Date.now() - dbStartTime) / 1000).toFixed(2);
-  console.log(`   ✅ Initialized (${dbDuration}s)`);
-
-  // Run migrations for SQLite (async, non-blocking)
+  logger.info({ path: dbPath, durationMs: Date.now() - dbStartTime }, "SQLite initialized");
   runDatabaseMigrations();
 } else {
   const dbPath = config.DB_PATH || path.join(__dirname, "..", "data", "bot.db");
-  console.log(`\n🗄️  DATABASE TYPE: SQLite (Local)`);
-  console.log(`   Path: ${dbPath}`);
-  console.log("   Status: Initializing...");
   client = createSqliteClient();
   queries = createSqliteQueries(client);
   if (queries.initSchema) queries.initSchema();
   dbType = "sqlite";
-  const dbDuration = ((Date.now() - dbStartTime) / 1000).toFixed(2);
-  console.log(`   ✅ Initialized (${dbDuration}s)`);
-
-  // Run migrations for SQLite (async, non-blocking)
+  logger.info({ path: dbPath, durationMs: Date.now() - dbStartTime }, "SQLite initialized");
   runDatabaseMigrations();
 }
-
-console.log("=".repeat(60) + "\n");
 
 const adapter = {
   type: dbType,
