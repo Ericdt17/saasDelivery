@@ -121,12 +121,66 @@ pm2 logs
 
 ---
 
+## 🤖 CI/CD Pipeline
+
+Deployments are fully automated via GitHub Actions.
+
+### Triggers
+| Workflow | Trigger | What it does |
+|----------|---------|--------------|
+| **CI** | Push to any branch touching `client/**` | Lint + build check |
+| **CD** | Push to `main` touching `wwebjs-bot/**` | SSH deploy to VPS |
+| **CD** | Manual (`workflow_dispatch`) | Deploy on demand |
+
+### CD Deploy Steps (automatic on VPS)
+```
+git fetch + reset --hard → npm install → migrate → pm2 restart → pm2 save
+```
+
+### Manual Deploy Trigger
+Go to **GitHub → Actions → CD → Run workflow → Run workflow**
+
+### GitHub Secrets Required
+| Secret | Value |
+|--------|-------|
+| `VPS_HOST` | `157.173.118.238` |
+| `VPS_USER` | `root` |
+| `VPS_SSH_KEY` | Private key (Ed25519) from `/root/.ssh/github_actions` on VPS |
+
+### SSH Key Setup (if key is lost/rotated)
+```bash
+# On VPS: generate new key
+ssh-keygen -t ed25519 -f ~/.ssh/github_actions -N "" -C "github-actions-cd"
+
+# Add public key to authorized_keys
+cat ~/.ssh/github_actions.pub >> ~/.ssh/authorized_keys
+
+# Copy private key content → update VPS_SSH_KEY secret in GitHub
+cat ~/.ssh/github_actions
+```
+
+### If CD Breaks
+```bash
+# Manual deploy fallback (run on VPS)
+cd /opt/saasDelivery/wwebjs-bot
+git fetch origin main && git reset --hard origin/main
+cd wwebjs-bot
+npm install --omit=dev
+npm run migrate
+pm2 restart api-server || pm2 start src/api/server.js --name api-server
+pm2 restart whatsapp-bot || pm2 start src/index.js --name whatsapp-bot
+pm2 save
+```
+
+---
+
 ## 🔄 Update Commands
 
-### Update Bot & API
+### Update Bot & API (manual)
 ```bash
 cd /opt/saasDelivery/wwebjs-bot
-git pull && npm install && pm2 restart all
+git fetch origin main && git reset --hard origin/main
+cd wwebjs-bot && npm install --omit=dev && pm2 restart all
 ```
 
 ### Update Frontend
@@ -155,7 +209,10 @@ sudo systemctl reload nginx
 - [ ] Nginx config created (proxy to localhost:3001)
 - [ ] Nginx enabled and reloaded
 - [ ] All services tested and working
-- [ ] PM2 startup configured
+- [ ] PM2 startup configured (`pm2 startup` + `pm2 save`)
+- [ ] GitHub secrets set: `VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY`
+- [ ] SSH key public added to `/root/.ssh/authorized_keys` on VPS
+- [ ] CD pipeline tested (push to `wwebjs-bot/**` or manual trigger)
 
 ---
 
@@ -179,14 +236,3 @@ VPS:
 **Total Time**: ~20 minutes
 
 **See PRODUCTION_DEPLOYMENT_GUIDE.md for detailed instructions**
-To check your bot’s logs, follow the Verification → Check logs section in PRODUCTION_DEPLOYMENT_CHECKLIST.md.
-
-First confirm the bot process name is up:
-
-pm2 list
-(You should see whatsapp-bot listed as online.)
-View logs:
-
-For both processes: pm2 logs
-For the bot only: pm2 logs whatsapp-bot
-If you tell me what pm2 list shows for your bot (the exact process name), I can give the precise pm2 logs <name> command to use.

@@ -1,190 +1,150 @@
-# 📱 WhatsApp Delivery Bot - Système de Gestion de Livraisons
+# LivSight — Bot & API
 
-Système complet de gestion de livraisons avec support multi-agences, authentification JWT, API REST, et intégration WhatsApp.
+Node.js backend for the LivSight delivery management platform. Includes a WhatsApp bot (whatsapp-web.js) and a REST API (Express 5).
 
-## 🚀 Démarrage Rapide
+---
 
-### Prérequis
+## Architecture
 
+```
+src/
+├── index.js          # Bot entry point (WhatsApp client)
+├── parser.js         # Parses WhatsApp messages → delivery objects
+├── statusParser.js   # Detects status keywords (livré, échec, absent…)
+├── daily-report.js   # Daily report generation
+├── config.js         # Centralized config
+├── db/               # Database abstraction (auto-selects SQLite or PostgreSQL)
+├── api/              # REST API (server.js + routes/ + middleware/)
+├── utils/            # JWT, password, group helpers
+└── scripts/          # Admin one-off scripts (seed, reset password, etc.)
+db/
+├── migrate.js        # Migration runner
+└── migrations/       # SQL files, executed alphabetically
+```
+
+Two PM2 processes in production:
+- `whatsapp-bot` → `src/index.js`
+- `api-server` → `src/api/server.js`
+
+---
+
+## Local Development
+
+### Prerequisites
 - Node.js 18+
-- PostgreSQL (production) ou SQLite (développement)
-- Compte WhatsApp
+- A WhatsApp account (for bot)
 
-### Installation
+### Setup
 
 ```bash
-# Installer les dépendances
+# SQLite (simplest, no DB setup needed)
+cp env.local.sqlite.example .env
+
+# Or PostgreSQL
+cp env.local.postgres.example .env
+# Edit .env with your DATABASE_URL
+```
+
+```bash
 npm install
-
-# Créer le fichier .env
-cp .env.example .env
+npm run migrate    # Create tables
+npm run dev        # Bot + API with auto-reload
+npm run api:dev    # API only (no WhatsApp)
 ```
 
-### Configuration
+### Key env vars
 
-Éditez le fichier `.env` :
+| Variable | Purpose |
+|----------|---------|
+| `DATABASE_URL` | PostgreSQL connection string (omit for SQLite) |
+| `JWT_SECRET` | Token signing secret |
+| `API_PORT` | Server port (default: 3000) |
+| `ALLOWED_ORIGINS` | Comma-separated CORS origins |
+| `CLIENT_ID` | WhatsApp LocalAuth session ID |
+| `REPORT_ENABLED` / `REPORT_TIME` | Daily report config |
 
-```env
-# Base de données
-DATABASE_URL=postgresql://user:password@host:port/database  # Pour PostgreSQL
-# ou laissez vide pour SQLite (développement)
+---
 
-# JWT
-JWT_SECRET=your-secret-key-here
-
-# WhatsApp
-GROUP_ID=your-whatsapp-group-id  # Optionnel
-
-# Timezone
-TZ=Africa/Douala
-```
-
-### Lancer l'application
-
-```bash
-# Développement
-npm run dev
-
-# Production
-npm start
-
-# API uniquement
-npm run api
-```
-
-## 📋 Fonctionnalités
-
-### ✅ Authentification
-- Système JWT avec rôles (super_admin, agency)
-- Hashing sécurisé des mots de passe (bcrypt)
-- Middleware d'authentification pour routes protégées
-
-### ✅ Multi-Agences
-- Gestion de plusieurs agences
-- Isolation des données par agence
-- Filtrage automatique selon le rôle
-
-### ✅ API REST
-- Endpoints pour livraisons, statistiques, agences, groupes
-- Pagination et filtres
-- Recherche en temps réel
-
-### ✅ Intégration WhatsApp
-- Réception automatique des messages
-- Parsing des livraisons depuis WhatsApp
-- Support multi-groupes
-
-### ✅ Base de Données
-- Support PostgreSQL (production) et SQLite (développement)
-- Migration automatique des schémas
-- Compatibilité entre les deux systèmes
-
-## 📖 Documentation
-
-- **[Group Management - Toggle and Delete](GROUP_MANAGEMENT.md)** - Complete guide to group activation/deactivation and deletion features
-
-## 📚 API Endpoints
-
-### Authentification
-- `POST /api/v1/auth/login` - Connexion
-- `POST /api/v1/auth/logout` - Déconnexion
-- `GET /api/v1/auth/me` - Informations utilisateur
-
-### Livraisons
-- `GET /api/v1/deliveries` - Liste des livraisons
-- `GET /api/v1/deliveries/:id` - Détails d'une livraison
-- `POST /api/v1/deliveries` - Créer une livraison
-- `PUT /api/v1/deliveries/:id` - Mettre à jour une livraison
-
-### Statistiques
-- `GET /api/v1/stats/daily` - Statistiques quotidiennes
-
-### Agences (Super Admin)
-- `GET /api/v1/agencies` - Liste des agences
-- `POST /api/v1/agencies` - Créer une agence
-
-### Groupes
-- `GET /api/v1/groups` - Liste des groupes
-
-## 🔧 Scripts Disponibles
-
-```bash
-npm start          # Démarrer le bot
-npm run dev        # Mode développement avec nodemon
-npm run api        # Démarrer uniquement l'API
-npm run api:dev    # API en mode développement
-npm test           # Lancer les tests
-npm run test:db    # Tester la connexion DB
-```
-
-## 🗄️ Base de Données
-
-### Tables Principales
-
-- **agencies** - Agences et utilisateurs
-- **groups** - Groupes WhatsApp
-- **deliveries** - Livraisons
-- **delivery_history** - Historique des actions
-
-### Migration
-
-Les tables sont créées automatiquement au démarrage. Pour PostgreSQL, utilisez :
-
-```bash
-node src/scripts/create-postgres-tables.js
-```
-
-## 🚀 Déploiement sur Render
-
-### Variables d'Environnement Requises
-
-- `DATABASE_URL` - URL de connexion PostgreSQL
-- `JWT_SECRET` - Secret pour signer les tokens JWT
-- `NODE_ENV=production`
-
-### Étapes
-
-1. Créer une base PostgreSQL sur Render
-2. Ajouter `DATABASE_URL` dans les variables d'environnement
-3. Ajouter `JWT_SECRET` dans les variables d'environnement
-4. Déployer le service
-
-## 📖 Documentation
-
-La documentation détaillée est disponible dans les fichiers `.md` du projet (non versionnés pour garder le repo propre).
-
-## 🔒 Sécurité
-
-- Mots de passe hashés avec bcrypt
-- Tokens JWT avec expiration
-- Validation des entrées
-- Filtrage des données par rôle
-
-## 📝 Format des Livraisons WhatsApp
-
-Envoyez un message dans le format suivant :
+## WhatsApp Message Format
 
 ```
 612345678
-Jean Dupont
-2x Pizza, 1x Cola
-5000
+2 robes + 1 sac
+15k
+Bonapriso
 ```
 
-Le bot parse automatiquement et crée la livraison.
+- **Line 1**: Phone number (must start with 6, 9 digits)
+- **Line 2**: Items description
+- **Line 3**: Amount (`15k` = 15 000 FCFA, or `15000`)
+- **Line 4**: Quartier (neighbourhood)
 
-## 🤝 Contribution
+Optionally add a carrier on line 5: `Men Travel`, `General Voyage`, etc.
 
-1. Fork le projet
-2. Créez une branche (`git checkout -b feature/AmazingFeature`)
-3. Committez vos changements (`git commit -m 'Add some AmazingFeature'`)
-4. Push vers la branche (`git push origin feature/AmazingFeature`)
-5. Ouvrez une Pull Request
+**Status updates** — reply to a bot message with a keyword:
+- `livré` → delivered
+- `échec` / `annulé` → failed
+- `absent` → client absent
+- `pickup` → pickup
+- `expédition` → expedition
 
-## 📄 Licence
+---
 
-ISC
+## API Endpoints
 
-## 🆘 Support
+Base path: `/api/v1/`
 
-Pour toute question ou problème, consultez la documentation dans les fichiers `.md` du projet.
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/auth/login` | Login |
+| POST | `/auth/logout` | Logout |
+| GET | `/auth/me` | Current user |
+| GET | `/deliveries` | List deliveries (paginated, filtered) |
+| POST | `/deliveries` | Create delivery |
+| PUT | `/deliveries/:id` | Update delivery |
+| GET | `/groups` | List WhatsApp groups |
+| GET | `/tariffs` | List tariffs |
+| GET | `/stats/daily` | Daily stats |
+| GET | `/search` | Search deliveries |
+| GET | `/agencies` | List agencies (super admin) |
+| POST | `/agencies` | Create agency (super admin) |
+
+---
+
+## Database
+
+Auto-selected based on environment:
+- `DATABASE_URL` set → PostgreSQL
+- Otherwise → SQLite (`data/bot.db`)
+
+```bash
+npm run migrate    # Run pending migrations
+npm run test:db    # Test DB connection
+```
+
+Migrations live in `db/migrations/`, named `YYYYMMDDHHMMSS_description.sql`, executed alphabetically.
+
+---
+
+## Scripts
+
+```bash
+# Create super admin account
+node src/scripts/seed-super-admin.js
+
+# Reset a password
+node src/scripts/reset-password.js
+
+# Test DB connection
+node src/scripts/test-db-connection.js
+```
+
+---
+
+## Production
+
+Deployed on VPS via GitHub Actions CD pipeline. See `PRODUCTION_DEPLOYMENT_CHECKLIST.md` in the repo root.
+
+```bash
+npm start    # node src/index.js
+```

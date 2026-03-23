@@ -313,7 +313,15 @@ async function runMigrations() {
       connection.close();
     }
   } catch (error) {
-    log(`\n❌ Migration failed: ${error.message}`, "red");
+    const detail =
+      error?.message ||
+      (error && typeof error === "object" && "code" in error
+        ? `code=${error.code}`
+        : String(error));
+    log(`\n❌ Migration failed: ${detail}`, "red");
+    if (error && typeof error === "object" && error.stack) {
+      console.error(error.stack);
+    }
     process.exit(1);
   }
 }
