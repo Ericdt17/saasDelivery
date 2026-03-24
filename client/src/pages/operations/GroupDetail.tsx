@@ -1041,7 +1041,7 @@ export default function GroupDetail() {
       {/* Edit Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
+          <DialogHeader className="text-center sm:text-center">
             <DialogTitle>Modifier la livraison</DialogTitle>
             <DialogDescription>
               Modifiez les informations de la livraison

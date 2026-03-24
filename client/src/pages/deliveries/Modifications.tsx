@@ -590,7 +590,7 @@ const Modifications = () => {
         }}
       >
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
+          <DialogHeader className="text-center sm:text-center">
             <DialogTitle>Modifier la livraison</DialogTitle>
             <DialogDescription>
               Modifiez les informations de la livraison
