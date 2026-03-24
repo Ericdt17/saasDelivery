@@ -36,7 +36,7 @@ export function LoadingOverlay({
       )}
       {showOverlay ? (
         <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/80 backdrop-blur-sm">
-          <LoadingSpinner size="lg" text={text} />
+          <LoadingSpinner size="lg" variant="gif" text={text} />
         </div>
       ) : null}
     </div>

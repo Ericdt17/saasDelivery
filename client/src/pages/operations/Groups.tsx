@@ -351,7 +351,7 @@ export default function Groups() {
                   Annuler
                 </Button>
                 <Button type="submit" className="gap-2" disabled={createMutation.isPending}>
-                  {createMutation.isPending ? <LoadingSpinner size="sm" className="gap-0" /> : null}
+                  {createMutation.isPending ? <LoadingSpinner size="sm" variant="icon" className="gap-0" /> : null}
                   Créer
                 </Button>
               </DialogFooter>
@@ -511,7 +511,7 @@ export default function Groups() {
               onClick={handleEdit}
               disabled={updateMutation.isPending || !editFormData.name.trim()}
             >
-              {updateMutation.isPending ? <LoadingSpinner size="sm" className="gap-0" /> : null}
+              {updateMutation.isPending ? <LoadingSpinner size="sm" variant="icon" className="gap-0" /> : null}
               Enregistrer
             </Button>
           </DialogFooter>
@@ -540,7 +540,7 @@ export default function Groups() {
               className="gap-2 bg-destructive text-destructive-foreground hover:bg-destructive/90"
               disabled={hardDeleteMutation.isPending}
             >
-              {hardDeleteMutation.isPending ? <LoadingSpinner size="sm" className="gap-0" /> : null}
+              {hardDeleteMutation.isPending ? <LoadingSpinner size="sm" variant="icon" className="gap-0" /> : null}
               Supprimer définitivement
             </AlertDialogAction>
           </AlertDialogFooter>

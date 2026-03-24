@@ -1193,7 +1193,7 @@ const Livraisons = () => {
               className="gap-2 bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {deleteMutation.isPending ? (
-                <LoadingSpinner size="sm" className="gap-0" />
+                <LoadingSpinner size="sm" variant="icon" className="gap-0" />
               ) : null}
               Supprimer
             </AlertDialogAction>

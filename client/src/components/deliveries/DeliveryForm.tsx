@@ -584,7 +584,7 @@ export function DeliveryForm({ delivery, groupId, onSuccess, onCancel }: Deliver
             </Button>
           )}
           <Button type="submit" className="gap-2" disabled={isLoading || (isEditMode && !isDirty)}>
-            {isLoading ? <LoadingSpinner size="sm" className="gap-0" /> : null}
+            {isLoading ? <LoadingSpinner size="sm" variant="icon" className="gap-0" /> : null}
             {isEditMode ? "Mettre a jour la livraison" : "Creer la livraison"}
           </Button>
           </div>

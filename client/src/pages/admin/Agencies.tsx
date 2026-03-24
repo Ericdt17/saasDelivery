@@ -302,7 +302,7 @@ function AgenciesPage() {
                   Annuler
                 </Button>
                 <Button type="submit" className="gap-2" disabled={createMutation.isPending}>
-                  {createMutation.isPending ? <LoadingSpinner size="sm" className="gap-0" /> : null}
+                  {createMutation.isPending ? <LoadingSpinner size="sm" variant="icon" className="gap-0" /> : null}
                   Créer
                 </Button>
               </DialogFooter>
@@ -500,7 +500,7 @@ function AgenciesPage() {
               Annuler
             </Button>
             <Button className="gap-2" onClick={handleUpdate} disabled={updateMutation.isPending}>
-              {updateMutation.isPending ? <LoadingSpinner size="sm" className="gap-0" /> : null}
+              {updateMutation.isPending ? <LoadingSpinner size="sm" variant="icon" className="gap-0" /> : null}
               Enregistrer
             </Button>
           </DialogFooter>
@@ -523,7 +523,7 @@ function AgenciesPage() {
               onClick={confirmDelete}
               className="gap-2 bg-destructive text-destructive-foreground"
             >
-              {deleteMutation.isPending ? <LoadingSpinner size="sm" className="gap-0" /> : null}
+              {deleteMutation.isPending ? <LoadingSpinner size="sm" variant="icon" className="gap-0" /> : null}
               Supprimer
             </AlertDialogAction>
           </AlertDialogFooter>

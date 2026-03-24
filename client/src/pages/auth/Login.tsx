@@ -101,7 +101,7 @@ const Login = () => {
                 <Button type="submit" className="h-11 w-full gap-2" disabled={isLoading}>
                   {isLoading ? (
                     <>
-                      <LoadingSpinner size="sm" className="gap-0" />
+                      <LoadingSpinner size="sm" variant="icon" className="gap-0" />
                       Signing in...
                     </>
                   ) : (
