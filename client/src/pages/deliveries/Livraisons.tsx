@@ -379,10 +379,10 @@ const Livraisons = () => {
               }}
             >
               <SelectTrigger className="w-[160px]">
-                <SelectValue placeholder="Groupe" />
+                <SelectValue placeholder="Prestataire" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Tous les groupes</SelectItem>
+                <SelectItem value="all">Tous les prestataires</SelectItem>
                 {groups.map((group) => (
                   <SelectItem key={group.id} value={group.id.toString()}>
                     {group.name}
@@ -425,7 +425,7 @@ const Livraisons = () => {
                 <TableHead className="font-semibold w-[130px]">Téléphone</TableHead>
                 <TableHead className="font-semibold w-[200px]">Produits</TableHead>
                 <TableHead className="font-semibold w-[130px]">Quartier</TableHead>
-                <TableHead className="font-semibold w-[140px]">Groupe</TableHead>
+                <TableHead className="font-semibold w-[140px]">Prestataire</TableHead>
                 <TableHead className="font-semibold text-right w-[110px]">Montant</TableHead>
                 <TableHead className="font-semibold text-right w-[110px]">Encaissé</TableHead>
                 <TableHead className="font-semibold text-right w-[110px]">Reste</TableHead>
@@ -461,7 +461,7 @@ const Livraisons = () => {
                   <TableRow 
                     key={livraison.id}
                     className="cursor-pointer hover:bg-muted/50 transition-colors"
-                    onClick={() => navigate(`/livraisons/${livraison.id}`)}
+                    onClick={() => handleEdit(livraison)}
                   >
                     <TableCell className="font-medium">{livraison.telephone}</TableCell>
                     <TableCell className="max-w-[200px] truncate">

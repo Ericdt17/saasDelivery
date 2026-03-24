@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,6 +32,8 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Search, Truck, Plus, Upload, Eye, MapPin, Phone, FileImage, AlertCircle, RefreshCw } from "lucide-react";
 import { getDeliveries } from "@/services/deliveries";
+import { DeliveryForm } from "@/components/deliveries/DeliveryForm";
+import type { FrontendDelivery } from "@/types/delivery";
 import { toast } from "sonner";
 
 const formatDate = (dateString: string) => {
@@ -71,10 +73,13 @@ interface ExpeditionData {
 
 const Expeditions = () => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [transporteurFilter, setTransporteurFilter] = useState<string>("all");
   const [statutFilter, setStatutFilter] = useState<string>("all");
   const [showNewModal, setShowNewModal] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [selectedDelivery, setSelectedDelivery] = useState<FrontendDelivery | null>(null);
 
   // Fetch deliveries with carrier (expeditions)
   const { 
@@ -151,6 +156,26 @@ const Expeditions = () => {
       return matchSearch && matchTransporteur && matchStatut;
     });
   }, [expeditions, search, transporteurFilter, statutFilter]);
+
+  const handleExpeditionRowClick = (deliveryId: number) => {
+    const delivery = deliveriesData?.deliveries?.find((d) => d.id === deliveryId);
+    if (!delivery) {
+      navigate(`/livraisons/${deliveryId}`);
+      return;
+    }
+    setSelectedDelivery(delivery);
+    setIsEditDialogOpen(true);
+  };
+
+  const closeEditDialog = () => {
+    setIsEditDialogOpen(false);
+    setSelectedDelivery(null);
+  };
+
+  const refreshData = () => {
+    queryClient.invalidateQueries({ queryKey: ["deliveries"] });
+    queryClient.invalidateQueries({ queryKey: ["dailyStats"] });
+  };
 
   return (
     <div className="space-y-6 pb-8">
@@ -388,7 +413,7 @@ const Expeditions = () => {
                   <TableRow 
                     key={expedition.id} 
                     className="hover:bg-muted/50 cursor-pointer"
-                    onClick={() => navigate(`/livraisons/${expedition.livraison_id}`)}
+                    onClick={() => handleExpeditionRowClick(expedition.livraison_id)}
                   >
                     <TableCell>
                       <div className="flex items-center gap-2">
@@ -425,7 +450,7 @@ const Expeditions = () => {
                         className="gap-2"
                         onClick={(e) => {
                           e.stopPropagation();
-                          navigate(`/livraisons/${expedition.livraison_id}`);
+                          handleExpeditionRowClick(expedition.livraison_id);
                         }}
                       >
                         <Eye className="w-4 h-4" />
@@ -439,6 +464,35 @@ const Expeditions = () => {
           </Table>
         </div>
       </div>
+
+      <Dialog
+        open={isEditDialogOpen}
+        onOpenChange={(open) => {
+          setIsEditDialogOpen(open);
+          if (!open) {
+            setSelectedDelivery(null);
+          }
+        }}
+      >
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Modifier la livraison</DialogTitle>
+            <DialogDescription>
+              Modifiez les informations de la livraison
+            </DialogDescription>
+          </DialogHeader>
+          {selectedDelivery && (
+            <DeliveryForm
+              delivery={selectedDelivery}
+              onSuccess={() => {
+                closeEditDialog();
+                refreshData();
+              }}
+              onCancel={closeEditDialog}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

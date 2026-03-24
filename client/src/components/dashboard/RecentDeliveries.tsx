@@ -1,11 +1,21 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAgency } from "@/contexts/AgencyContext";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { ArrowRight, Phone, MapPin } from "lucide-react";
 import { getDeliveries } from "@/services/deliveries";
+import { DeliveryForm } from "@/components/deliveries/DeliveryForm";
+import type { FrontendDelivery } from "@/types/delivery";
 
 const formatCurrency = (value: number | undefined | null) => {
   // Handle NaN, undefined, null, or invalid numbers
@@ -15,7 +25,10 @@ const formatCurrency = (value: number | undefined | null) => {
 
 export function RecentDeliveries() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { selectedAgencyId } = useAgency();
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [selectedDelivery, setSelectedDelivery] = useState<FrontendDelivery | null>(null);
   
   const { data, isLoading } = useQuery({
     queryKey: ['recentDeliveries', selectedAgencyId],
@@ -30,6 +43,22 @@ export function RecentDeliveries() {
   });
 
   const recentLivraisons = data?.deliveries || [];
+  
+  const handleEdit = (delivery: FrontendDelivery) => {
+    setSelectedDelivery(delivery);
+    setIsEditDialogOpen(true);
+  };
+
+  const handleCloseDialog = () => {
+    setIsEditDialogOpen(false);
+    setSelectedDelivery(null);
+  };
+
+  const refetchDashboardData = () => {
+    queryClient.invalidateQueries({ queryKey: ["recentDeliveries"] });
+    queryClient.invalidateQueries({ queryKey: ["deliveries"] });
+    queryClient.invalidateQueries({ queryKey: ["dailyStats"] });
+  };
 
   return (
     <div className="stat-card">
@@ -63,7 +92,7 @@ export function RecentDeliveries() {
           recentLivraisons.map((livraison) => (
             <div 
               key={livraison.id}
-              onClick={() => navigate(`/livraisons/${livraison.id}`)}
+              onClick={() => handleEdit(livraison)}
               className="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted cursor-pointer transition-colors"
             >
               <div className="flex-1 min-w-0 space-y-1">
@@ -89,6 +118,35 @@ export function RecentDeliveries() {
           ))
         )}
       </div>
+
+      <Dialog
+        open={isEditDialogOpen}
+        onOpenChange={(open) => {
+          setIsEditDialogOpen(open);
+          if (!open) {
+            setSelectedDelivery(null);
+          }
+        }}
+      >
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Modifier la livraison</DialogTitle>
+            <DialogDescription>
+              Modifiez les informations de la livraison
+            </DialogDescription>
+          </DialogHeader>
+          {selectedDelivery && (
+            <DeliveryForm
+              delivery={selectedDelivery}
+              onSuccess={() => {
+                handleCloseDialog();
+                refetchDashboardData();
+              }}
+              onCancel={handleCloseDialog}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

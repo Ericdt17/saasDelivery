@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -20,9 +20,18 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Search, History, ArrowRight, Phone, DollarSign, Package, MapPin, Plus, Minus, AlertCircle, RefreshCw } from "lucide-react";
 import { getDeliveries } from "@/services/deliveries";
 import { getDeliveryHistory } from "@/services/deliveries";
+import { DeliveryForm } from "@/components/deliveries/DeliveryForm";
+import type { FrontendDelivery } from "@/types/delivery";
 import { toast } from "sonner";
 import { getDateRangeForPreset, type DateRange } from "@/lib/date-utils";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
@@ -208,9 +217,12 @@ const extractModificationValues = (action: string, details: string | null, deliv
 
 const Modifications = () => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [dateRange, setDateRange] = useState<DateRange>(() => getDateRangeForPreset("today"));
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [selectedDelivery, setSelectedDelivery] = useState<FrontendDelivery | null>(null);
 
   // Fetch recent deliveries (last 200 to get modifications)
   const { 
@@ -329,6 +341,27 @@ const Modifications = () => {
   const isLoading = isLoadingDeliveries || historyQueries.isLoading;
   const isError = isErrorDeliveries || historyQueries.isError;
   const error = deliveriesError || historyQueries.error;
+
+  const handleModificationRowClick = (deliveryId: number) => {
+    const delivery = deliveriesData?.deliveries?.find((d) => d.id === deliveryId);
+    if (!delivery) {
+      navigate(`/livraisons/${deliveryId}`);
+      return;
+    }
+    setSelectedDelivery(delivery);
+    setIsEditDialogOpen(true);
+  };
+
+  const closeEditDialog = () => {
+    setIsEditDialogOpen(false);
+    setSelectedDelivery(null);
+  };
+
+  const refreshData = () => {
+    queryClient.invalidateQueries({ queryKey: ["deliveries"] });
+    queryClient.invalidateQueries({ queryKey: ["deliveryHistories"] });
+    queryClient.invalidateQueries({ queryKey: ["dailyStats"] });
+  };
 
   return (
     <div className="space-y-6 pb-8">
@@ -474,7 +507,7 @@ const Modifications = () => {
                     <TableRow 
                       key={modification.id} 
                       className="hover:bg-muted/50 cursor-pointer"
-                      onClick={() => navigate(`/livraisons/${modification.livraison_id}`)}
+                      onClick={() => handleModificationRowClick(modification.livraison_id)}
                     >
                       <TableCell>
                         <div className="flex items-center gap-2">
@@ -518,7 +551,7 @@ const Modifications = () => {
                           size="sm"
                           onClick={(e) => {
                             e.stopPropagation();
-                            navigate(`/livraisons/${modification.livraison_id}`);
+                            handleModificationRowClick(modification.livraison_id);
                           }}
                         >
                           Voir
@@ -546,6 +579,35 @@ const Modifications = () => {
           </div>
         </div>
       </div>
+
+      <Dialog
+        open={isEditDialogOpen}
+        onOpenChange={(open) => {
+          setIsEditDialogOpen(open);
+          if (!open) {
+            setSelectedDelivery(null);
+          }
+        }}
+      >
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Modifier la livraison</DialogTitle>
+            <DialogDescription>
+              Modifiez les informations de la livraison
+            </DialogDescription>
+          </DialogHeader>
+          {selectedDelivery && (
+            <DeliveryForm
+              delivery={selectedDelivery}
+              onSuccess={() => {
+                closeEditDialog();
+                refreshData();
+              }}
+              onCancel={closeEditDialog}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

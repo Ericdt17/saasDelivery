@@ -501,10 +501,10 @@ export default function GroupDetail() {
   if (isErrorGroup && groupId) {
     const statusCode = (groupError as ApiErr)?.statusCode || (groupError as ApiErr)?.status;
     const errorMessage = statusCode === 403 
-      ? "Vous n'avez pas accès à ce groupe. Ce groupe appartient peut-être à une autre agence."
+      ? "Vous n'avez pas accès à ce prestataire. Ce prestataire appartient peut-être à une autre agence."
       : statusCode === 404
-      ? "Le groupe demandé n'existe pas ou a été supprimé."
-      : "Une erreur est survenue lors du chargement du groupe.";
+      ? "Le prestataire demandé n'existe pas ou a été supprimé."
+      : "Une erreur est survenue lors du chargement du prestataire.";
     
     return (
       <Alert variant="destructive">
@@ -513,10 +513,10 @@ export default function GroupDetail() {
         <AlertDescription>
           <p className="mb-3">{errorMessage}</p>
           <p className="mb-3 text-sm text-muted-foreground">
-            ID du groupe : {groupId}
+            ID du prestataire : {groupId}
           </p>
           <Button variant="outline" onClick={() => navigate("/groupes")}>
-            Retour aux groupes
+            Retour aux prestataires
           </Button>
         </AlertDescription>
       </Alert>
@@ -528,16 +528,16 @@ export default function GroupDetail() {
     return (
       <Alert variant="destructive">
         <AlertCircle className="h-4 w-4" />
-        <AlertTitle>Groupe non trouvé</AlertTitle>
+        <AlertTitle>Prestataire non trouvé</AlertTitle>
         <AlertDescription>
           <p className="mb-3">
-            Le groupe demandé n'existe pas ou vous n'avez pas accès.
+            Le prestataire demandé n'existe pas ou vous n'avez pas accès.
           </p>
           <p className="mb-3 text-sm text-muted-foreground">
-            ID du groupe : {groupId}
+            ID du prestataire : {groupId}
           </p>
           <Button variant="outline" onClick={() => navigate("/groupes")}>
-            Retour aux groupes
+            Retour aux prestataires
           </Button>
         </AlertDescription>
       </Alert>
@@ -552,7 +552,7 @@ export default function GroupDetail() {
           <div>
             <h1 className="text-2xl md:text-3xl font-bold">{group.name}</h1>
             <p className="text-muted-foreground">
-              Vue d'ensemble des livraisons du groupe
+              Vue d'ensemble des livraisons du prestataire
               {dateRange.startDate === dateRange.endDate ? (
                 <span className="ml-2">— {dateRange.startDate}</span>
               ) : (
@@ -563,7 +563,7 @@ export default function GroupDetail() {
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => navigate("/groupes")}>
               <ArrowLeft className="w-4 h-4 mr-2" />
-              Retour aux groupes
+              Retour aux prestataires
             </Button>
             <Button
               variant="default"
@@ -852,7 +852,11 @@ export default function GroupDetail() {
                         </TableRow>
                       ) : (
                         filteredLivraisons.map((livraison) => (
-                          <TableRow key={livraison.id}>
+                          <TableRow
+                            key={livraison.id}
+                            className="cursor-pointer hover:bg-muted/50 transition-colors"
+                            onClick={() => handleEdit(livraison)}
+                          >
                             <TableCell className="font-medium">{livraison.telephone}</TableCell>
                             <TableCell className="hidden lg:table-cell">{livraison.quartier}</TableCell>
                             <TableCell className="text-right font-medium">
@@ -916,7 +920,7 @@ export default function GroupDetail() {
                               </span>
                             </TableCell>
                             <TableCell>
-                              <div className="flex items-center justify-end gap-1">
+                              <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
                                 <Button
                                   variant="ghost"
                                   size="icon"
@@ -996,7 +1000,7 @@ export default function GroupDetail() {
           <DialogHeader>
             <DialogTitle>Nouvelle livraison</DialogTitle>
             <DialogDescription>
-              Créez une nouvelle livraison pour le groupe "{group.name}"
+              Créez une nouvelle livraison pour le prestataire "{group.name}"
             </DialogDescription>
           </DialogHeader>
           <DeliveryForm

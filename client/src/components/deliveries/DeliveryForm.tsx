@@ -26,6 +26,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 import { type FrontendDelivery } from "@/lib/data-transform";
 import { mapStatusToBackend, mapStatusToFrontend } from "@/lib/data-transform";
 import { useCreateDelivery, useUpdateDelivery } from "@/hooks/useDeliveries";
@@ -254,8 +255,8 @@ export function DeliveryForm({ delivery, groupId, onSuccess, onCancel }: Deliver
             render={({ field }) => {
               // Déterminer le groupId à utiliser
               const currentGroupId = groupId || delivery?.group_id;
-              // Récupérer le nom du groupe
-              let groupName = "Aucun groupe";
+              // Récupérer le nom du prestataire
+              let groupName = "Aucun prestataire";
               
               if (currentGroupId) {
                 if (group?.name) {
@@ -263,13 +264,13 @@ export function DeliveryForm({ delivery, groupId, onSuccess, onCancel }: Deliver
                 } else if (delivery?.group_name) {
                   groupName = delivery.group_name;
                 } else {
-                  groupName = `Groupe #${currentGroupId}`;
+                  groupName = `Prestataire #${currentGroupId}`;
                 }
               }
               
               return (
                 <FormItem>
-                  <FormLabel>Groupe</FormLabel>
+                  <FormLabel>Prestataire</FormLabel>
                   <FormControl>
                     <Input 
                       value={groupName}
@@ -279,8 +280,8 @@ export function DeliveryForm({ delivery, groupId, onSuccess, onCancel }: Deliver
                   </FormControl>
                   <FormDescription>
                     {isEditMode 
-                      ? "Le groupe ne peut pas être modifié lors de l'édition"
-                      : "Ce groupe est fixe pour cette page"
+                      ? "Le prestataire ne peut pas être modifié lors de l'édition"
+                      : "Ce prestataire est fixe pour cette page"
                     }
                   </FormDescription>
                 </FormItem>
@@ -294,7 +295,7 @@ export function DeliveryForm({ delivery, groupId, onSuccess, onCancel }: Deliver
             name="groupe"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Groupe</FormLabel>
+                <FormLabel>Prestataire</FormLabel>
                 <Select 
                   onValueChange={(value) => field.onChange(value === "none" ? undefined : parseInt(value))} 
                   value={field.value?.toString() || "none"}
@@ -302,11 +303,11 @@ export function DeliveryForm({ delivery, groupId, onSuccess, onCancel }: Deliver
                 >
                   <FormControl>
                     <SelectTrigger>
-                      <SelectValue placeholder="Sélectionner un groupe" />
+                      <SelectValue placeholder="Sélectionner un prestataire" />
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    <SelectItem value="none">Aucun groupe</SelectItem>
+                    <SelectItem value="none">Aucun prestataire</SelectItem>
                     {groups.map((group) => (
                       <SelectItem key={group.id} value={group.id.toString()}>
                         {group.name}
@@ -315,7 +316,7 @@ export function DeliveryForm({ delivery, groupId, onSuccess, onCancel }: Deliver
                   </SelectContent>
                 </Select>
                 <FormDescription>
-                  Groupe WhatsApp associé à cette livraison
+                  Prestataire WhatsApp associé à cette livraison
                 </FormDescription>
                 <FormMessage />
               </FormItem>
@@ -412,7 +413,14 @@ export function DeliveryForm({ delivery, groupId, onSuccess, onCancel }: Deliver
           name="frais_livraison"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Frais de livraison (FCFA) - Optionnel</FormLabel>
+              <div className="flex items-center gap-2">
+                <FormLabel>Frais de livraison (FCFA) - Optionnel</FormLabel>
+                {isEditMode && delivery?.tarif_non_applique && (
+                  <Badge variant="outline" className="text-warning border-warning/40">
+                    Tarif non applique - veuillez renseigner un frais
+                  </Badge>
+                )}
+              </div>
               <FormControl>
                 <Input 
                   type="text"

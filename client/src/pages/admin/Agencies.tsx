@@ -271,7 +271,7 @@ function AgenciesPage() {
                     </Button>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Code utilisé pour lier les groupes WhatsApp à cette agence. Minimum 4 caractères alphanumériques.
+                    Code utilisé pour lier les prestataires WhatsApp à cette agence. Minimum 4 caractères alphanumériques.
                   </p>
                 </div>
                 <div className="space-y-2">
@@ -469,7 +469,7 @@ function AgenciesPage() {
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">
-                Code utilisé pour lier les groupes WhatsApp. Laissez vide pour supprimer le code.
+                Code utilisé pour lier les prestataires WhatsApp. Laissez vide pour supprimer le code.
               </p>
             </div>
             <div className="space-y-2">
