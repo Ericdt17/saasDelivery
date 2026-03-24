@@ -1,19 +1,11 @@
-import { useState, useMemo, useEffect } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { StatCard } from "@/components/ui/stat-card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -23,212 +15,208 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  PieChart,
-  Pie,
-  Cell,
-  ResponsiveContainer,
-  Legend,
   Tooltip,
-} from "recharts";
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 import {
-  Search,
-  Wallet,
-  CheckCircle,
-  Clock,
-  TrendingUp,
+  HandCoins,
   AlertCircle,
   RefreshCw,
   Calendar,
+  Users,
+  ArrowRight,
+  CircleAlert,
 } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import { useAgency } from "@/contexts/AgencyContext";
 import { getDeliveries } from "@/services/deliveries";
-import { getDailyStats } from "@/services/stats";
-import { DeliveryForm } from "@/components/deliveries/DeliveryForm";
+import { getGroups } from "@/services/groups";
 import type { FrontendDelivery } from "@/types/delivery";
-import { toast } from "sonner";
-import { getDateRangeLocal, formatDateLocal } from "@/lib/date-utils";
 import { calculateStatsFromDeliveries } from "@/lib/stats-utils";
+import { getDateRangeLocal, formatDateLocal } from "@/lib/date-utils";
 
 const formatCurrency = (value: number | undefined | null) => {
-  // Handle NaN, undefined, null, or invalid numbers
-  const numValue = typeof value === 'number' && !isNaN(value) && isFinite(value) ? value : 0;
+  const numValue =
+    typeof value === "number" && !isNaN(value) && isFinite(value) ? value : 0;
   return new Intl.NumberFormat("fr-FR").format(numValue) + " FCFA";
 };
 
-const formatDate = (dateString: string) => {
-  return new Date(dateString).toLocaleDateString("fr-FR", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-};
+function formatPercentShare(part: number, total: number): string {
+  if (total <= 0 || part <= 0) return "—";
+  const pct = (part / total) * 100;
+  if (pct >= 10) return `${Math.round(pct)} %`;
+  return `${Math.round(pct * 10) / 10} %`;
+}
 
-const typeLabels = {
-  partiel: "Partiel",
-  complet: "Complet",
-  en_attente: "En attente",
-};
+/**
+ * Même règle que le tableau de bord (carte « Partenaire ») et stats-utils.montantNetEncaisse :
+ * livraisons « livré » ou « pickup » uniquement ; montant = somme des montant_encaisse (montant net à reverser).
+ */
+function countsTowardPartenaireNet(d: FrontendDelivery): boolean {
+  return d.statut === "livré" || d.statut === "pickup";
+}
 
-const typeBadgeStyles = {
-  partiel: "bg-warning/15 text-warning",
-  complet: "bg-success/15 text-success",
-  en_attente: "bg-muted text-muted-foreground",
-};
-
-// Payment type derived from delivery payment status
-type PaymentType = "partiel" | "complet" | "en_attente";
-
-interface PaymentData {
-  id: number;
-  livraison_id: number;
-  telephone: string;
-  montant: number;
-  type: PaymentType;
-  date: string;
-  mode_paiement: string;
-  montant_total: number;
-  montant_encaisse: number;
-  restant: number;
+interface PrestataireSettlementRow {
+  groupId: number | null;
+  label: string;
+  countLivre: number;
+  countPickup: number;
+  /** Somme des frais_livraison sur les mêmes livraisons (livré + pickup) */
+  totalTarifs: number;
+  /** Somme des montant_encaisse (équivalent montantNetEncaisse par prestataire) */
+  netPartenaire: number;
+  /** Livraisons sur la période (tous statuts) avec tarif non appliqué pour ce prestataire */
+  tarifNonAppliqueCount: number;
 }
 
 const Paiements = () => {
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [search, setSearch] = useState("");
-  const [typeFilter, setTypeFilter] = useState<string>("all");
+  const { isSuperAdmin } = useAuth();
+  const { selectedAgencyId } = useAgency();
   const [period, setPeriod] = useState<"jour" | "semaine" | "mois">("jour");
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-  const [selectedDelivery, setSelectedDelivery] = useState<FrontendDelivery | null>(null);
 
   const dateRange = useMemo(() => getDateRangeLocal(period), [period]);
 
-  // Fetch stats for today (for day view)
-  const {
-    data: dailyStats,
-    isLoading: isLoadingDailyStats,
-    isError: isErrorDailyStats,
-    error: dailyStatsError,
-    refetch: refetchDailyStats,
-  } = useQuery({
-    queryKey: ["dailyStats", dateRange.startDate],
-    queryFn: () => getDailyStats(dateRange.startDate),
-    enabled: period === "jour",
-    retry: 2,
-    refetchOnWindowFocus: false,
+  const { data: groups = [] } = useQuery({
+    queryKey: ["groups"],
+    queryFn: getGroups,
   });
 
-  // Handle errors with useEffect
-  useEffect(() => {
-    if (isErrorDailyStats && dailyStatsError) {
-      toast.error("Erreur lors du chargement des statistiques", {
-        description:
-          dailyStatsError instanceof Error
-            ? dailyStatsError.message
-            : "Une erreur est survenue",
-      });
-    }
-  }, [isErrorDailyStats, dailyStatsError]);
+  const groupMap = useMemo(() => {
+    const m = new Map<number, string>();
+    groups.forEach((g) => {
+      if (g.id) m.set(g.id, g.name);
+    });
+    return m;
+  }, [groups]);
 
-  // Fetch deliveries for all periods (needed for payments list)
   const {
     data: deliveriesData,
-    isLoading: isLoadingDeliveries,
-    isError: isErrorDeliveries,
-    error: deliveriesError,
-    refetch: refetchDeliveries,
+    isLoading,
+    isError,
+    error,
+    refetch,
   } = useQuery({
     queryKey: [
       "deliveries",
-      "payments",
+      "prestataire-settlements",
       dateRange.startDate,
       dateRange.endDate,
+      isSuperAdmin ? selectedAgencyId : "agency",
     ],
     queryFn: () =>
       getDeliveries({
         page: 1,
-        limit: 1000,
+        limit: 5000,
         startDate: dateRange.startDate,
         endDate: dateRange.endDate,
         sortBy: "created_at",
         sortOrder: "DESC",
+        agency_id: isSuperAdmin ? selectedAgencyId || undefined : undefined,
       }),
     retry: 2,
     refetchOnWindowFocus: false,
   });
 
-  // Handle errors with useEffect
-  useEffect(() => {
-    if (isErrorDeliveries && deliveriesError) {
-      toast.error("Erreur lors du chargement des livraisons", {
-        description:
-          deliveriesError instanceof Error
-            ? deliveriesError.message
-            : "Une erreur est survenue",
-      });
-    }
-  }, [isErrorDeliveries, deliveriesError]);
+  const deliveriesInPeriod = useMemo(() => {
+    if (!deliveriesData?.deliveries) return [];
 
-  // Calculate current stats based on period
-  const stats = useMemo(() => {
-    if (period === "jour") {
-      // For day view, always use dailyStats (even if it's zero/null)
-      if (dailyStats) {
-        return {
-          totalLivraisons: dailyStats.totalLivraisons || 0,
-          livreesReussies: dailyStats.livreesReussies || 0,
-          echecs: dailyStats.echecs || 0,
-          enCours: dailyStats.enCours || 0,
-          pickups: dailyStats.pickups || 0,
-          expeditions: dailyStats.expeditions || 0,
-          montantEncaisse: dailyStats.montantEncaisse || 0,
-          montantRestant: dailyStats.montantRestant || 0,
-          chiffreAffaires: dailyStats.chiffreAffaires || 0,
+    return deliveriesData.deliveries.filter((d) => {
+      if (!d.date_creation) return false;
+      const deliveryDate = new Date(
+        typeof d.date_creation === "string" ? d.date_creation : d.date_creation
+      );
+      if (isNaN(deliveryDate.getTime())) return false;
+      deliveryDate.setHours(0, 0, 0, 0);
+      const deliveryDateStr = formatDateLocal(deliveryDate);
+
+      if (period === "jour") {
+        return deliveryDateStr === dateRange.startDate;
+      }
+      return (
+        deliveryDateStr >= dateRange.startDate &&
+        deliveryDateStr <= dateRange.endDate
+      );
+    });
+  }, [deliveriesData, period, dateRange.startDate, dateRange.endDate]);
+
+  /** Identique à la carte « Partenaire » du tableau de bord (calculateStatsFromDeliveries) */
+  const periodStats = useMemo(
+    () => calculateStatsFromDeliveries(deliveriesInPeriod),
+    [deliveriesInPeriod]
+  );
+
+  const settlementRows: PrestataireSettlementRow[] = useMemo(() => {
+    const tarifNonAppliqueByKey = new Map<string, number>();
+    for (const d of deliveriesInPeriod) {
+      if (!d.tarif_non_applique) continue;
+      const gid = d.group_id ?? null;
+      const flagKey = gid !== null ? `g:${gid}` : "none";
+      tarifNonAppliqueByKey.set(
+        flagKey,
+        (tarifNonAppliqueByKey.get(flagKey) ?? 0) + 1
+      );
+    }
+
+    const relevant = deliveriesInPeriod.filter(countsTowardPartenaireNet);
+    const byKey = new Map<string, PrestataireSettlementRow>();
+
+    for (const d of relevant) {
+      const gid = d.group_id ?? null;
+      const key = gid !== null ? `g:${gid}` : "none";
+      let row = byKey.get(key);
+      if (!row) {
+        row = {
+          groupId: gid,
+          label:
+            gid !== null && groupMap.has(gid)
+              ? groupMap.get(gid)!
+              : "Sans prestataire",
+          countLivre: 0,
+          countPickup: 0,
+          totalTarifs: 0,
+          netPartenaire: 0,
+          tarifNonAppliqueCount: 0,
         };
+        byKey.set(key, row);
       }
-      // If dailyStats is null/undefined, return zeros
-      return {
-        totalLivraisons: 0,
-        livreesReussies: 0,
-        echecs: 0,
-        enCours: 0,
-        pickups: 0,
-        expeditions: 0,
-        montantEncaisse: 0,
-        montantRestant: 0,
-        chiffreAffaires: 0,
-      };
-    } else {
-      // For semaine/mois, use deliveries data
-      if (deliveriesData?.deliveries) {
-        return calculateStatsFromDeliveries(deliveriesData.deliveries);
-      }
-      return {
-        totalLivraisons: 0,
-        livreesReussies: 0,
-        echecs: 0,
-        enCours: 0,
-        pickups: 0,
-        expeditions: 0,
-        montantEncaisse: 0,
-        montantRestant: 0,
-        chiffreAffaires: 0,
-      };
+      if (d.statut === "livré") row.countLivre += 1;
+      if (d.statut === "pickup") row.countPickup += 1;
+      row.totalTarifs += Number(d.frais_livraison) || 0;
+      row.netPartenaire += Number(d.montant_encaisse) || 0;
     }
-  }, [period, dailyStats, deliveriesData]);
 
-  const isLoading =
-    period === "jour" ? isLoadingDailyStats : isLoadingDeliveries;
-  const isError = period === "jour" ? isErrorDailyStats : isErrorDeliveries;
-  const error = period === "jour" ? dailyStatsError : deliveriesError;
-  const refetch = period === "jour" ? refetchDailyStats : refetchDeliveries;
+    return Array.from(byKey.values())
+      .map((row) => {
+        const k = row.groupId !== null ? `g:${row.groupId}` : "none";
+        return {
+          ...row,
+          tarifNonAppliqueCount: tarifNonAppliqueByKey.get(k) ?? 0,
+        };
+      })
+      .sort((a, b) => b.netPartenaire - a.netPartenaire);
+  }, [deliveriesInPeriod, groupMap]);
+
+  const totalPartenaire = periodStats.montantNetEncaisse ?? 0;
+
+  const prestatairesWithAmount = useMemo(
+    () => settlementRows.filter((r) => r.netPartenaire > 0).length,
+    [settlementRows]
+  );
+
+  const livraisonsComptees = useMemo(
+    () =>
+      deliveriesInPeriod.filter(countsTowardPartenaireNet).length,
+    [deliveriesInPeriod]
+  );
+
+  const refreshData = () => {
+    queryClient.invalidateQueries({ queryKey: ["deliveries"] });
+    queryClient.invalidateQueries({ queryKey: ["dailyStats"] });
+    refetch();
+  };
 
   const periodLabels = {
     jour: "Aujourd'hui",
@@ -236,164 +224,33 @@ const Paiements = () => {
     mois: "Ce mois",
   };
 
-  // Derive payment data from deliveries for current period
-  const payments: PaymentData[] = useMemo(() => {
-    // For day view, if dailyStats shows zero, return empty array immediately
-    if (period === "jour") {
-      if (!dailyStats || dailyStats.totalLivraisons === 0) {
-        return [];
-      }
-    }
-
-    if (!deliveriesData?.deliveries) return [];
-
-    // Filter deliveries by the selected period date range (strictly)
-    const deliveriesToUse = deliveriesData.deliveries.filter((d) => {
-      if (!d.date_creation) return false;
-
-      // Parse date and normalize to YYYY-MM-DD
-      let deliveryDate: Date;
-      if (typeof d.date_creation === "string") {
-        deliveryDate = new Date(d.date_creation);
-      } else {
-        deliveryDate = d.date_creation;
-      }
-
-      if (isNaN(deliveryDate.getTime())) return false;
-
-      deliveryDate.setHours(0, 0, 0, 0);
-      const deliveryDateStr = formatDateLocal(deliveryDate);
-
-      // For day view, must match exactly
-      if (period === "jour") {
-        return deliveryDateStr === dateRange.startDate;
-      }
-
-      // For week/month, use range
-      return (
-        deliveryDateStr >= dateRange.startDate &&
-        deliveryDateStr <= dateRange.endDate
-      );
-    });
-
-    if (!deliveriesToUse || deliveriesToUse.length === 0) return [];
-
-    return deliveriesToUse
-      .filter((d) => (d.montant_encaisse || 0) > 0) // Only deliveries with payments
-      .map((d) => {
-        const type: PaymentType =
-          (d.restant || 0) === 0
-            ? "complet"
-            : (d.montant_encaisse || 0) > 0
-              ? "partiel"
-              : "en_attente";
-
-        return {
-          id: d.id,
-          livraison_id: d.id,
-          telephone: d.telephone,
-          montant: d.montant_encaisse || 0,
-          type,
-          date: d.date_mise_a_jour || d.date_creation,
-          mode_paiement: "Non spécifié", // Backend doesn't store payment method separately
-          montant_total: d.montant_total || 0,
-          montant_encaisse: d.montant_encaisse || 0,
-          restant: d.restant || 0,
-        };
-      })
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [period, deliveriesData, dateRange, dailyStats]);
-
-  // Filter payments
-  const filteredPaiements = useMemo(() => {
-    return payments.filter((p) => {
-      const matchSearch =
-        p.telephone.toLowerCase().includes(search.toLowerCase()) ||
-        p.mode_paiement.toLowerCase().includes(search.toLowerCase());
-      const matchType = typeFilter === "all" || p.type === typeFilter;
-      return matchSearch && matchType;
-    });
-  }, [payments, search, typeFilter]);
-
-  const handlePaymentRowClick = (deliveryId: number) => {
-    const delivery = deliveriesData?.deliveries?.find((d) => d.id === deliveryId);
-    if (!delivery) {
-      navigate(`/livraisons/${deliveryId}`);
-      return;
-    }
-    setSelectedDelivery(delivery);
-    setIsEditDialogOpen(true);
-  };
-
-  const closeEditDialog = () => {
-    setIsEditDialogOpen(false);
-    setSelectedDelivery(null);
-  };
-
-  const refreshData = () => {
-    queryClient.invalidateQueries({ queryKey: ["deliveries"] });
-    queryClient.invalidateQueries({ queryKey: ["dailyStats"] });
-  };
-
-  // Calculate totals - only from payments in the current period
-  const totalPartiels = useMemo(() => {
-    if (!payments || payments.length === 0) return 0;
-    return payments
-      .filter((p) => p.type === "partiel")
-      .reduce((acc, p) => acc + (p.montant || 0), 0);
-  }, [payments]);
-
-  const totalComplets = useMemo(() => {
-    if (!payments || payments.length === 0) return 0;
-    return payments
-      .filter((p) => p.type === "complet")
-      .reduce((acc, p) => acc + (p.montant || 0), 0);
-  }, [payments]);
-
-  const pieData = useMemo(() => {
-    if (!stats) return [];
-
-    const encaisse = stats.montantEncaisse || 0;
-    const restant = stats.montantRestant || 0;
-
-    // Only show pie chart if there's data
-    if (encaisse === 0 && restant === 0) return [];
-
-    return [
-      { name: "Montant Total", value: encaisse, color: "hsl(var(--success))" },
-      { name: "À encaisser", value: restant, color: "hsl(var(--warning))" },
-    ];
-  }, [stats]);
-
-  // Loading state
   if (isLoading) {
     return (
       <div className="space-y-6 pb-8">
         <div>
-          <Skeleton className="h-8 w-48 mb-2" />
-          <Skeleton className="h-4 w-64" />
+          <Skeleton className="h-8 w-64 mb-2" />
+          <Skeleton className="h-4 w-96" />
         </div>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {Array.from({ length: 4 }).map((_, i) => (
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+          {Array.from({ length: 3 }).map((_, i) => (
             <div key={i} className="stat-card">
-              <Skeleton className="h-4 w-24 mb-2" />
-              <Skeleton className="h-8 w-32" />
+              <Skeleton className="h-4 w-28 mb-2" />
+              <Skeleton className="h-8 w-36" />
             </div>
           ))}
         </div>
-        <Skeleton className="h-96 w-full" />
+        <Skeleton className="h-80 w-full" />
       </div>
     );
   }
 
-  // Error state
   if (isError) {
     return (
       <div className="space-y-6 pb-8">
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold">Paiements</h1>
+          <h1 className="text-2xl md:text-3xl font-bold">Paiements prestataires</h1>
           <p className="text-muted-foreground">
-            Suivi des encaissements et paiements
+            Montants partenaire (net à reverser), comme sur le tableau de bord
           </p>
         </div>
         <Alert variant="destructive">
@@ -401,21 +258,9 @@ const Paiements = () => {
           <AlertTitle>Erreur de chargement</AlertTitle>
           <AlertDescription className="mt-2">
             <p className="mb-3">
-              {dailyStatsError instanceof Error
-                ? dailyStatsError.message
-                : deliveriesError instanceof Error
-                  ? deliveriesError.message
-                  : "Impossible de charger les données"}
+              {error instanceof Error ? error.message : "Impossible de charger les données"}
             </p>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                refetchDailyStats();
-                refetchDeliveries();
-              }}
-              className="gap-2"
-            >
+            <Button variant="outline" size="sm" onClick={() => refetch()} className="gap-2">
               <RefreshCw className="w-4 h-4" />
               Réessayer
             </Button>
@@ -427,15 +272,20 @@ const Paiements = () => {
 
   return (
     <div className="space-y-6 pb-8">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl md:text-3xl font-bold">Paiements</h1>
-        <p className="text-muted-foreground">
-          Suivi des encaissements et paiements — {periodLabels[period]}
-        </p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-bold">Paiements prestataires</h1>
+          <p className="text-muted-foreground">
+            Même calcul que la carte <strong>Partenaire</strong> du tableau de bord —{" "}
+            {periodLabels[period].toLowerCase()}
+          </p>
+        </div>
+        <Button variant="outline" size="sm" onClick={refreshData} className="gap-2 shrink-0">
+          <RefreshCw className="w-4 h-4" />
+          Actualiser
+        </Button>
       </div>
 
-      {/* Period Tabs */}
       <Tabs
         value={period}
         onValueChange={(v) => setPeriod(v as typeof period)}
@@ -457,266 +307,139 @@ const Paiements = () => {
         </TabsList>
 
         <TabsContent value={period} className="mt-6 space-y-6">
-          {/* Loading State */}
-          {isLoading && (
-            <div className="space-y-6">
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                {Array.from({ length: 4 }).map((_, i) => (
-                  <div key={i} className="stat-card">
-                    <Skeleton className="h-4 w-24 mb-2" />
-                    <Skeleton className="h-8 w-32" />
-                  </div>
-                ))}
-              </div>
-              <Skeleton className="h-96 w-full" />
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+            <StatCard
+              title="Partenaire (total)"
+              value={formatCurrency(totalPartenaire)}
+              icon={HandCoins}
+              variant="success"
+            />
+            <StatCard
+              title="Prestataires concernés"
+              value={String(prestatairesWithAmount)}
+              icon={Users}
+              variant="info"
+            />
+            <StatCard
+              title="Livrées + au bureau"
+              value={String(livraisonsComptees)}
+              icon={Calendar}
+              variant="success"
+            />
+          </div>
+
+          <p className="text-sm text-muted-foreground">
+            Les montants sont les mêmes que sur la carte <strong>Partenaire</strong> du tableau de bord : uniquement les livraisons{" "}
+            <strong>livrées</strong> et <strong>retirées au bureau</strong>. La colonne <strong>Livrées / Bureau</strong> indique
+            d&apos;abord combien de livraisons ont été livrées, puis combien au bureau. Le <strong>% total</strong> montre la part
+            de chaque prestataire dans le total de la période. Une <strong>icône rouge</strong> signale qu&apos;au moins une
+            livraison n&apos;a pas reçu de tarif automatique — passez la souris dessus pour plus d&apos;infos.
+          </p>
+
+          <div className="stat-card overflow-hidden p-0">
+            <div className="border-b border-border p-4">
+              <h2 className="text-lg font-semibold">Répartition par prestataire</h2>
+              <p className="text-sm text-muted-foreground mt-1">
+                Période du {dateRange.startDate} au {dateRange.endDate}
+              </p>
             </div>
-          )}
-
-          {/* Error State */}
-          {isError && !isLoading && (
-            <Alert variant="destructive">
-              <AlertCircle className="h-4 w-4" />
-              <AlertTitle>Erreur de chargement</AlertTitle>
-              <AlertDescription className="mt-2">
-                <p className="mb-3">
-                  {error instanceof Error
-                    ? error.message
-                    : "Impossible de charger les données"}
-                </p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => refetch()}
-                  className="gap-2"
-                >
-                  <RefreshCw className="w-4 h-4" />
-                  Réessayer
-                </Button>
-              </AlertDescription>
-            </Alert>
-          )}
-
-          {/* Content */}
-          {!isLoading && !isError && stats && (
-            <>
-              {/* Stats */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                <StatCard
-                  title="Montant Total"
-                  value={formatCurrency(stats.montantEncaisse || 0)}
-                  icon={Wallet}
-                  variant="success"
-                />
-                <StatCard
-                  title="Paiements partiels"
-                  value={formatCurrency(totalPartiels)}
-                  icon={Clock}
-                  variant="info"
-                />
-                <StatCard
-                  title="Paiements complets"
-                  value={formatCurrency(totalComplets)}
-                  icon={CheckCircle}
-                  variant="success"
-                />
-              </div>
-
-              {/* Chart and Table Grid */}
-              <div className="grid lg:grid-cols-3 gap-6">
-                {/* Pie Chart */}
-                <div className="stat-card">
-                  <h3 className="text-lg font-semibold mb-4">
-                    Répartition — {periodLabels[period]}
-                  </h3>
-                  {pieData.length > 0 && pieData.some((d) => d.value > 0) ? (
-                    <>
-                      <div className="h-[250px]">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <PieChart>
-                            <Pie
-                              data={pieData}
-                              cx="50%"
-                              cy="50%"
-                              innerRadius={60}
-                              outerRadius={90}
-                              paddingAngle={4}
-                              dataKey="value"
-                            >
-                              {pieData.map((entry, index) => (
-                                <Cell
-                                  key={`cell-${index}`}
-                                  fill={entry.color}
-                                />
-                              ))}
-                            </Pie>
-                            <Tooltip
-                              formatter={(value: number) =>
-                                formatCurrency(value)
-                              }
-                              contentStyle={{
-                                backgroundColor: "hsl(var(--card))",
-                                border: "1px solid hsl(var(--border))",
-                                borderRadius: "8px",
-                              }}
-                            />
-                            <Legend
-                              verticalAlign="bottom"
-                              formatter={(value) => (
-                                <span className="text-sm">{value}</span>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/50">
+                    <TableHead className="font-semibold min-w-[140px]">Prestataire</TableHead>
+                    <TableHead className="font-semibold text-right w-[110px] whitespace-nowrap">
+                      Livrées / Bureau
+                    </TableHead>
+                    <TableHead className="font-semibold text-right w-[140px] whitespace-nowrap">
+                      Frais (tarifs)
+                    </TableHead>
+                    <TableHead className="font-semibold text-right w-[160px] whitespace-nowrap">
+                      Net partenaire
+                    </TableHead>
+                    <TableHead className="font-semibold text-right w-[72px]">
+                      % total
+                    </TableHead>
+                    <TableHead className="w-[100px]" />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {settlementRows.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="p-8 text-center text-muted-foreground">
+                        Aucune livraison éligible sur cette période.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    settlementRows.map((row) => (
+                      <TableRow key={row.groupId ?? "none"}>
+                        <TableCell className="overflow-visible align-middle pt-1">
+                          <div className="relative inline-block max-w-[min(100%,280px)]">
+                            {row.tarifNonAppliqueCount > 0 ? (
+                              <Tooltip delayDuration={200}>
+                                <TooltipTrigger asChild>
+                                  <button
+                                    type="button"
+                                    className="absolute -left-2 -top-2 z-10 flex size-6 items-center justify-center rounded-full border border-border bg-card text-red-600 shadow-sm outline-none hover:bg-muted/90 focus-visible:ring-2 focus-visible:ring-ring dark:text-red-400"
+                                    aria-label="Frais de livraison non appliqués — voir l'info-bulle"
+                                  >
+                                    <CircleAlert className="size-3.5" strokeWidth={2.25} />
+                                  </button>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" align="start" className="max-w-xs text-left">
+                                  <p className="font-medium text-foreground">Frais non appliqués</p>
+                                  <p className="mt-1 text-muted-foreground">
+                                    {row.tarifNonAppliqueCount} livraison
+                                    {row.tarifNonAppliqueCount > 1 ? "s" : ""} sur cette période (tous statuts) sans tarif automatique pour ce prestataire.
+                                  </p>
+                                </TooltipContent>
+                              </Tooltip>
+                            ) : null}
+                            <span
+                              className={cn(
+                                "font-medium",
+                                row.tarifNonAppliqueCount > 0 && "pl-5"
                               )}
-                            />
-                          </PieChart>
-                        </ResponsiveContainer>
-                      </div>
-                      {stats && (
-                        <div className="mt-4 p-3 rounded-lg bg-muted/50">
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm text-muted-foreground">
-                              Taux d'encaissement
-                            </span>
-                            <span className="font-bold text-primary">
-                              {(stats.montantEncaisse || 0) +
-                                (stats.montantRestant || 0) >
-                              0
-                                ? Math.round(
-                                    ((stats.montantEncaisse || 0) /
-                                      ((stats.montantEncaisse || 0) +
-                                        (stats.montantRestant || 0))) *
-                                      100
-                                  )
-                                : 0}
-                              %
+                            >
+                              {row.label}
                             </span>
                           </div>
-                        </div>
-                      )}
-                    </>
-                  ) : (
-                    <div className="h-[250px] flex items-center justify-center text-muted-foreground">
-                      <p>Aucune donnée disponible</p>
-                    </div>
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums text-sm">
+                          <span className="text-foreground">{row.countLivre}</span>
+                          <span className="text-muted-foreground"> / </span>
+                          <span className="text-foreground">{row.countPickup}</span>
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums text-muted-foreground">
+                          {formatCurrency(row.totalTarifs)}
+                        </TableCell>
+                        <TableCell className="text-right font-semibold tabular-nums">
+                          {formatCurrency(row.netPartenaire)}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums text-sm text-muted-foreground">
+                          {formatPercentShare(row.netPartenaire, totalPartenaire)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {row.groupId != null ? (
+                            <Button variant="ghost" size="sm" className="gap-1" asChild>
+                              <Link to={`/groupes/${row.groupId}`}>
+                                Fiche
+                                <ArrowRight className="h-3.5 w-3.5" />
+                              </Link>
+                            </Button>
+                          ) : (
+                            <span className="text-muted-foreground text-sm">—</span>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))
                   )}
-                </div>
-
-                {/* Payments Table */}
-                <div className="lg:col-span-2 stat-card overflow-hidden p-0">
-                  <div className="p-4 border-b border-border">
-                    <h3 className="text-lg font-semibold mb-4">
-                      Liste des paiements
-                    </h3>
-                    <div className="flex flex-col sm:flex-row gap-3">
-                      <div className="relative flex-1">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                        <Input
-                          placeholder="Rechercher..."
-                          value={search}
-                          onChange={(e) => setSearch(e.target.value)}
-                          className="pl-9"
-                        />
-                      </div>
-                      <Select value={typeFilter} onValueChange={setTypeFilter}>
-                        <SelectTrigger className="w-[150px]">
-                          <SelectValue placeholder="Type" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">Tous types</SelectItem>
-                          <SelectItem value="partiel">Partiels</SelectItem>
-                          <SelectItem value="complet">Complets</SelectItem>
-                          <SelectItem value="en_attente">En attente</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow className="bg-muted/50">
-                          <TableHead className="font-semibold">
-                            Client
-                          </TableHead>
-                          <TableHead className="font-semibold text-right">
-                            Montant
-                          </TableHead>
-                          <TableHead className="font-semibold">Mode</TableHead>
-                          <TableHead className="font-semibold">Type</TableHead>
-                          <TableHead className="font-semibold">Date</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {filteredPaiements.length === 0 ? (
-                          <TableRow>
-                            <TableCell
-                              colSpan={5}
-                              className="p-8 text-center text-muted-foreground"
-                            >
-                              Aucun paiement trouvé
-                            </TableCell>
-                          </TableRow>
-                        ) : (
-                          filteredPaiements.map((paiement) => (
-                            <TableRow
-                              key={paiement.id}
-                              className="hover:bg-muted/50 cursor-pointer"
-                              onClick={() => handlePaymentRowClick(paiement.livraison_id)}
-                            >
-                              <TableCell className="font-medium">
-                                {paiement.telephone}
-                              </TableCell>
-                              <TableCell className="text-right font-semibold">
-                                {formatCurrency(paiement.montant)}
-                              </TableCell>
-                              <TableCell>{paiement.mode_paiement}</TableCell>
-                              <TableCell>
-                                <span
-                                  className={`status-badge ${typeBadgeStyles[paiement.type]}`}
-                                >
-                                  {typeLabels[paiement.type]}
-                                </span>
-                              </TableCell>
-                              <TableCell className="text-sm text-muted-foreground">
-                                {formatDate(paiement.date)}
-                              </TableCell>
-                            </TableRow>
-                          ))
-                        )}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </div>
-              </div>
-            </>
-          )}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
         </TabsContent>
       </Tabs>
-
-      <Dialog
-        open={isEditDialogOpen}
-        onOpenChange={(open) => {
-          setIsEditDialogOpen(open);
-          if (!open) {
-            setSelectedDelivery(null);
-          }
-        }}
-      >
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader className="text-center sm:text-center">
-            <DialogTitle>Modifier la livraison</DialogTitle>
-            <DialogDescription>
-              Modifiez les informations de la livraison
-            </DialogDescription>
-          </DialogHeader>
-          {selectedDelivery && (
-            <DeliveryForm
-              delivery={selectedDelivery}
-              onSuccess={() => {
-                closeEditDialog();
-                refreshData();
-              }}
-              onCancel={closeEditDialog}
-            />
-          )}
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };
