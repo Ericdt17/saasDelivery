@@ -156,6 +156,7 @@ export function transformDeliveryToFrontend(
     group_id: backend.group_id || null,
     agency_id: backend.agency_id || null,
     frais_livraison: deliveryFee,
+    tarif_non_applique: Boolean(backend.tariff_pending),
   };
 }
 

@@ -32,6 +32,20 @@ const createDeliverySchema = z.object({
   group_id: z.coerce.number().int().positive().optional().nullable(),
 });
 
+function computeTariffPending(status, quartier, deliveryFee) {
+  const normalizedStatus = (status || "").toString().toLowerCase();
+  const hasQuartier =
+    quartier !== null &&
+    quartier !== undefined &&
+    String(quartier).trim() !== "";
+  const fee =
+    deliveryFee !== null && deliveryFee !== undefined
+      ? parseFloat(deliveryFee)
+      : NaN;
+
+  return normalizedStatus === "pending" && hasQuartier && (!Number.isFinite(fee) || fee <= 0);
+}
+
 // All routes require authentication (cookie-based or Authorization header)
 router.use(authenticateToken);
 
@@ -338,6 +352,7 @@ router.post('/', async (req, res, next) => {
       notes,
       carrier,
       delivery_fee: finalDeliveryFee,
+      tariff_pending: computeTariffPending(parsedStatus, quartier, finalDeliveryFee),
       group_id: group_id !== undefined && group_id !== null ? parseInt(group_id) : undefined,
       agency_id: agencyId,
     });
@@ -839,6 +854,18 @@ router.put('/:id', async (req, res, next) => {
       carrier: delivery.carrier,
       delivery_fee: delivery.delivery_fee,
     };
+
+    // Keep tariff_pending lifecycle automatic:
+    // pending + quartier present + missing/zero delivery_fee => true
+    // otherwise false
+    const effectiveStatus = updates.status !== undefined ? updates.status : delivery.status;
+    const effectiveQuartier = updates.quartier !== undefined ? updates.quartier : delivery.quartier;
+    const effectiveFee = updates.delivery_fee !== undefined ? updates.delivery_fee : delivery.delivery_fee;
+    updates.tariff_pending = computeTariffPending(
+      effectiveStatus,
+      effectiveQuartier,
+      effectiveFee
+    );
 
     // Get user info for history actor
     const actor = req.user?.email || req.user?.userId?.toString() || 'unknown';

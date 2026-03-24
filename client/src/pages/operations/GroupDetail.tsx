@@ -871,37 +871,44 @@ export default function GroupDetail() {
                               )}
                             </TableCell>
                             <TableCell>
-                              <Select
-                                value={livraison.statut}
-                                onValueChange={(value) => {
-                                  if (value !== livraison.statut) {
-                                    statusUpdateMutation.mutate({
-                                      id: livraison.id,
-                                      status: value as StatutLivraison,
-                                    });
-                                  }
-                                }}
-                                disabled={statusUpdateMutation.isPending}
-                              >
-                                <SelectTrigger className="w-[140px] h-8 border-none shadow-none hover:bg-muted/50 p-1">
-                                  <SelectValue>
-                                    <StatusBadge statut={livraison.statut} />
-                                  </SelectValue>
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="en_cours">En cours</SelectItem>
-                                  <SelectItem value="livré">Livré</SelectItem>
-                                  <SelectItem value="client_absent">Client absent</SelectItem>
-                                  <SelectItem value="annulé">Annulé</SelectItem>
-                                  <SelectItem value="renvoyé">Renvoyé</SelectItem>
-                                  <SelectItem value="pickup">Au bureau</SelectItem>
-                                  <SelectItem value="expedition">Expédition</SelectItem>
-                                  <SelectItem value="injoignable">Injoignable</SelectItem>
-                                  <SelectItem value="ne_decroche_pas">Ne décroche pas</SelectItem>
-                                  <SelectItem value="present_ne_decroche_zone1">Chauffeur présent - Client ne décroche pas Zone 1</SelectItem>
-                                  <SelectItem value="present_ne_decroche_zone2">Chauffeur présent - Client ne décroche pas Zone 2</SelectItem>
-                                </SelectContent>
-                              </Select>
+                              <div className="flex flex-col gap-1">
+                                <Select
+                                  value={livraison.statut}
+                                  onValueChange={(value) => {
+                                    if (value !== livraison.statut) {
+                                      statusUpdateMutation.mutate({
+                                        id: livraison.id,
+                                        status: value as StatutLivraison,
+                                      });
+                                    }
+                                  }}
+                                  disabled={statusUpdateMutation.isPending}
+                                >
+                                  <SelectTrigger className="w-[140px] h-8 border-none shadow-none hover:bg-muted/50 p-1">
+                                    <SelectValue>
+                                      <StatusBadge statut={livraison.statut} />
+                                    </SelectValue>
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="en_cours">En cours</SelectItem>
+                                    <SelectItem value="livré">Livré</SelectItem>
+                                    <SelectItem value="client_absent">Client absent</SelectItem>
+                                    <SelectItem value="annulé">Annulé</SelectItem>
+                                    <SelectItem value="renvoyé">Renvoyé</SelectItem>
+                                    <SelectItem value="pickup">Au bureau</SelectItem>
+                                    <SelectItem value="expedition">Expédition</SelectItem>
+                                    <SelectItem value="injoignable">Injoignable</SelectItem>
+                                    <SelectItem value="ne_decroche_pas">Ne décroche pas</SelectItem>
+                                    <SelectItem value="present_ne_decroche_zone1">Chauffeur présent - Client ne décroche pas Zone 1</SelectItem>
+                                    <SelectItem value="present_ne_decroche_zone2">Chauffeur présent - Client ne décroche pas Zone 2</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                                {livraison.tarif_non_applique && (
+                                  <Badge variant="outline" className="w-fit text-warning border-warning/40">
+                                    Frais de livraisons non appliquer
+                                  </Badge>
+                                )}
+                              </div>
                             </TableCell>
                             <TableCell className="hidden lg:table-cell">
                               <span className="text-sm text-muted-foreground">

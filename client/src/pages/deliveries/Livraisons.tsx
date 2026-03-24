@@ -492,7 +492,14 @@ const Livraisons = () => {
                       )}
                     </TableCell>
                     <TableCell>
-                      <StatusBadge statut={livraison.statut} />
+                      <div className="flex flex-col gap-1">
+                        <StatusBadge statut={livraison.statut} />
+                        {livraison.tarif_non_applique && (
+                          <Badge variant="outline" className="w-fit text-warning border-warning/40">
+                            Frais de livraisons non appliquer
+                          </Badge>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell>
                       <span className="text-sm text-muted-foreground">

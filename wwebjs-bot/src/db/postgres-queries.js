@@ -74,19 +74,30 @@ function createPostgresQueries(pool) {
       quartier,
       notes,
       carrier,
+      delivery_fee,
       agency_id,
       group_id,
       whatsapp_message_id,
+      tariff_pending,
     } = data;
 
     // Round amount fields to 2 decimal places to ensure exact values
     const roundedAmountDue = amount_due != null ? Math.round(parseFloat(amount_due) * 100) / 100 : 0;
     const roundedAmountPaid = amount_paid != null ? Math.round(parseFloat(amount_paid) * 100) / 100 : 0;
 
+    const hasQuartier = quartier != null && String(quartier).trim() !== "";
+    const fee = delivery_fee != null ? parseFloat(delivery_fee) : NaN;
+    const computedTariffPending =
+      status === "pending" && hasQuartier && (!Number.isFinite(fee) || fee <= 0);
+    const finalTariffPending =
+      tariff_pending === undefined || tariff_pending === null
+        ? computedTariffPending
+        : Boolean(tariff_pending);
+
     const res = await query(
       `INSERT INTO deliveries 
-        (phone, customer_name, items, amount_due, amount_paid, status, quartier, notes, carrier, agency_id, group_id, whatsapp_message_id)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        (phone, customer_name, items, amount_due, amount_paid, status, quartier, notes, carrier, delivery_fee, agency_id, group_id, whatsapp_message_id, tariff_pending)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
         RETURNING id`,
       [
         phone,
@@ -98,9 +109,11 @@ function createPostgresQueries(pool) {
         quartier,
         notes,
         carrier,
+        Number.isFinite(fee) ? fee : null,
         agency_id || null,
         group_id || null,
         whatsapp_message_id || null,
+        finalTariffPending,
       ]
     );
 
@@ -126,11 +139,16 @@ function createPostgresQueries(pool) {
           // Round amount fields to 2 decimal places to ensure exact values
           const roundedAmountDue = row.amount_due != null ? Math.round(parseFloat(row.amount_due) * 100) / 100 : 0;
           const roundedAmountPaid = row.amount_paid != null ? Math.round(parseFloat(row.amount_paid) * 100) / 100 : 0;
+          const status = row.status || "pending";
+          const hasQuartier = row.quartier != null && String(row.quartier).trim() !== "";
+          const fee = row.delivery_fee != null ? parseFloat(row.delivery_fee) : NaN;
+          const tariffPending =
+            status === "pending" && hasQuartier && (!Number.isFinite(fee) || fee <= 0);
           
           const res = await client.query(
             `INSERT INTO deliveries 
-              (phone, customer_name, items, amount_due, amount_paid, status, quartier, notes, carrier)
-              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+              (phone, customer_name, items, amount_due, amount_paid, status, quartier, notes, carrier, delivery_fee, tariff_pending)
+              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
               RETURNING id`,
             [
               row.phone,
@@ -138,10 +156,12 @@ function createPostgresQueries(pool) {
               row.items,
               roundedAmountDue,
               roundedAmountPaid,
-              row.status || "pending",
+              status,
               row.quartier,
               row.notes,
               row.carrier,
+              Number.isFinite(fee) ? fee : null,
+              tariffPending,
             ]
           );
           const deliveryId = res.rows[0].id;
@@ -180,6 +200,7 @@ function createPostgresQueries(pool) {
       "group_id",
       "whatsapp_message_id",
       "delivery_fee",
+      "tariff_pending",
     ];
 
     const fields = [];
@@ -196,6 +217,9 @@ function createPostgresQueries(pool) {
       let processedValue = value;
       if ((key === "amount_due" || key === "amount_paid" || key === "delivery_fee") && value != null) {
         processedValue = Math.round(parseFloat(value) * 100) / 100;
+      }
+      if (key === "tariff_pending") {
+        processedValue = Boolean(value);
       }
       
       fields.push(`${key} = $${values.length + 1}`);

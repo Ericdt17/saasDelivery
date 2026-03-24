@@ -30,7 +30,7 @@ interface NavItem {
 const allNavItems: NavItem[] = [
   { title: "Tableau de bord", href: "/", icon: LayoutDashboard },
   { title: "Livraisons", href: "/livraisons", icon: Package },
-  { title: "Groupes", href: "/groupes", icon: Users },
+  { title: "Prestataire", href: "/groupes", icon: Users },
   { title: "Agences", href: "/agences", icon: Building2, requireSuperAdmin: true },
   { title: "Paiements", href: "/paiements", icon: CreditCard },
   { title: "Tarifs", href: "/tarifs", icon: Receipt },
