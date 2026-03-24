@@ -24,6 +24,7 @@ import Agencies from "./pages/admin/Agencies";
 import NotFound from "./pages/NotFound";
 import ServerError from "./pages/ServerError";
 import ErrorNetworkPreview from "./pages/dev/ErrorNetworkPreview";
+import LoadingDemo from "./pages/dev/LoadingDemo";
 
 // Configure QueryClient with better error handling
 const queryClient = new QueryClient({
@@ -70,7 +71,10 @@ const App = () => (
           <Route path="/login" element={<Login />} />
           <Route path="/erreur" element={<ServerError />} />
           {import.meta.env.DEV ? (
-            <Route path="/dev/error-network" element={<ErrorNetworkPreview />} />
+            <>
+              <Route path="/dev/error-network" element={<ErrorNetworkPreview />} />
+              <Route path="/dev/loading" element={<LoadingDemo />} />
+            </>
           ) : null}
 
           {/* Protected routes */}

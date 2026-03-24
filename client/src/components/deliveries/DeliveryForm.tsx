@@ -30,7 +30,7 @@ import { Badge } from "@/components/ui/badge";
 import { type FrontendDelivery } from "@/lib/data-transform";
 import { mapStatusToBackend, mapStatusToFrontend } from "@/lib/data-transform";
 import { useCreateDelivery, useUpdateDelivery } from "@/hooks/useDeliveries";
-import { Loader2 } from "lucide-react";
+import { LoadingSpinner } from "@/components/loading/LoadingSpinner";
 import { useQuery } from "@tanstack/react-query";
 import { getGroups, getGroupById } from "@/services/groups";
 
@@ -583,8 +583,8 @@ export function DeliveryForm({ delivery, groupId, onSuccess, onCancel }: Deliver
               Annuler
             </Button>
           )}
-          <Button type="submit" disabled={isLoading || (isEditMode && !isDirty)}>
-            {isLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+          <Button type="submit" className="gap-2" disabled={isLoading || (isEditMode && !isDirty)}>
+            {isLoading ? <LoadingSpinner size="sm" className="gap-0" /> : null}
             {isEditMode ? "Mettre a jour la livraison" : "Creer la livraison"}
           </Button>
           </div>

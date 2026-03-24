@@ -29,8 +29,8 @@ import {
   Shield,
   Save,
   Truck,
-  Loader2,
 } from "lucide-react";
+import { LoadingSpinner } from "@/components/loading/LoadingSpinner";
 import { toast } from "sonner";
 import { AppErrorExperience } from "@/components/errors/AppErrorExperience";
 import { getAgencyMe, updateAgency } from "@/services/agencies";
@@ -178,7 +178,7 @@ const Parametres = () => {
                 </div>
               ) : isLoadingAgency ? (
                 <div className="flex items-center justify-center py-8">
-                  <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                  <LoadingSpinner size="md" />
                 </div>
               ) : (
                 <>
@@ -403,7 +403,7 @@ const Parametres = () => {
                    disabled={saveMutation.isPending || (isLoadingAgency && !agencyId)}
                  >
                    {saveMutation.isPending ? (
-                     <Loader2 className="w-4 h-4 animate-spin" />
+                     <LoadingSpinner size="sm" className="gap-0" />
                    ) : (
                      <Save className="w-4 h-4" />
                    )}

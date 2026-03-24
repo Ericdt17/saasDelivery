@@ -47,7 +47,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Receipt, Plus, Loader2, Trash2, Edit, Upload, FileSpreadsheet, FileText, Search, Building2, X } from "lucide-react";
+import { Receipt, Plus, Trash2, Edit, Upload, FileSpreadsheet, FileText, Search, Building2, X } from "lucide-react";
+import { LoadingSpinner } from "@/components/loading/LoadingSpinner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { importTariffs, type ImportResult } from "@/services/tariffs";
@@ -486,8 +487,12 @@ export default function Tarifs() {
                   {importResult ? "Fermer" : "Annuler"}
                 </Button>
                 {!importResult && (
-                  <Button onClick={handleImport} disabled={isImporting || !selectedFile || previewData.length === 0}>
-                    {isImporting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                  <Button
+                    className="gap-2"
+                    onClick={handleImport}
+                    disabled={isImporting || !selectedFile || previewData.length === 0}
+                  >
+                    {isImporting ? <LoadingSpinner size="sm" className="gap-0" /> : null}
                     Importer
                   </Button>
                 )}
@@ -570,10 +575,8 @@ export default function Tarifs() {
               >
                 Annuler
               </Button>
-              <Button onClick={handleCreate} disabled={createMutation.isPending}>
-                {createMutation.isPending && (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                )}
+              <Button className="gap-2" onClick={handleCreate} disabled={createMutation.isPending}>
+                {createMutation.isPending ? <LoadingSpinner size="sm" className="gap-0" /> : null}
                 Créer
               </Button>
             </DialogFooter>
@@ -768,10 +771,8 @@ export default function Tarifs() {
             >
               Annuler
             </Button>
-            <Button onClick={handleUpdate} disabled={updateMutation.isPending}>
-              {updateMutation.isPending && (
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              )}
+            <Button className="gap-2" onClick={handleUpdate} disabled={updateMutation.isPending}>
+              {updateMutation.isPending ? <LoadingSpinner size="sm" className="gap-0" /> : null}
               Enregistrer
             </Button>
           </DialogFooter>
@@ -795,11 +796,9 @@ export default function Tarifs() {
             <AlertDialogAction
               onClick={confirmDelete}
               disabled={deleteMutation.isPending}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              className="gap-2 bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              {deleteMutation.isPending && (
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              )}
+              {deleteMutation.isPending ? <LoadingSpinner size="sm" className="gap-0" /> : null}
               Supprimer
             </AlertDialogAction>
           </AlertDialogFooter>

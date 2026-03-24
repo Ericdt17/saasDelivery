@@ -67,7 +67,6 @@ import {
   ChevronRight,
   User,
   Trash2,
-  Loader2,
   ArrowDown,
   ArrowUp,
   ArrowUpDown,
@@ -83,6 +82,7 @@ import { toast } from "sonner";
 import { getDateRangeForPreset, type DateRange } from "@/lib/date-utils";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { DeliveryForm } from "@/components/deliveries/DeliveryForm";
+import { LoadingSpinner } from "@/components/loading/LoadingSpinner";
 import { apiDelete } from "@/services/api";
 import { API_ENDPOINTS } from "@/lib/api-config";
 import type { FrontendDelivery } from "@/types/delivery";
@@ -1190,11 +1190,11 @@ const Livraisons = () => {
             <AlertDialogAction
               onClick={confirmDelete}
               disabled={deleteMutation.isPending}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              className="gap-2 bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              {deleteMutation.isPending && (
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              )}
+              {deleteMutation.isPending ? (
+                <LoadingSpinner size="sm" className="gap-0" />
+              ) : null}
               Supprimer
             </AlertDialogAction>
           </AlertDialogFooter>

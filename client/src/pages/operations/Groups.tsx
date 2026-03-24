@@ -49,7 +49,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Users, Building2, Plus, Loader2, Copy, Check, Trash2, Edit } from "lucide-react";
+import { Users, Building2, Plus, Copy, Check, Trash2, Edit } from "lucide-react";
+import { LoadingSpinner } from "@/components/loading/LoadingSpinner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
@@ -349,10 +350,8 @@ export default function Groups() {
                 >
                   Annuler
                 </Button>
-                <Button type="submit" disabled={createMutation.isPending}>
-                  {createMutation.isPending && (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  )}
+                <Button type="submit" className="gap-2" disabled={createMutation.isPending}>
+                  {createMutation.isPending ? <LoadingSpinner size="sm" className="gap-0" /> : null}
                   Créer
                 </Button>
               </DialogFooter>
@@ -508,12 +507,11 @@ export default function Groups() {
               Annuler
             </Button>
             <Button
+              className="gap-2"
               onClick={handleEdit}
               disabled={updateMutation.isPending || !editFormData.name.trim()}
             >
-              {updateMutation.isPending && (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              )}
+              {updateMutation.isPending ? <LoadingSpinner size="sm" className="gap-0" /> : null}
               Enregistrer
             </Button>
           </DialogFooter>
@@ -539,12 +537,10 @@ export default function Groups() {
             <AlertDialogCancel>Annuler</AlertDialogCancel>
             <AlertDialogAction
               onClick={confirmHardDelete}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              className="gap-2 bg-destructive text-destructive-foreground hover:bg-destructive/90"
               disabled={hardDeleteMutation.isPending}
             >
-              {hardDeleteMutation.isPending && (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              )}
+              {hardDeleteMutation.isPending ? <LoadingSpinner size="sm" className="gap-0" /> : null}
               Supprimer définitivement
             </AlertDialogAction>
           </AlertDialogFooter>

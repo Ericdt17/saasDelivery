@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { AlertCircle, Eye, EyeOff, Loader2 } from "lucide-react";
+import { AlertCircle, Eye, EyeOff } from "lucide-react";
+import { LoadingSpinner } from "@/components/loading/LoadingSpinner";
 
 const Login = () => {
   const { login } = useAuth();
@@ -97,10 +98,10 @@ const Login = () => {
                   </button>
                 </div>
 
-                <Button type="submit" className="h-11 w-full" disabled={isLoading}>
+                <Button type="submit" className="h-11 w-full gap-2" disabled={isLoading}>
                   {isLoading ? (
                     <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      <LoadingSpinner size="sm" className="gap-0" />
                       Signing in...
                     </>
                   ) : (
