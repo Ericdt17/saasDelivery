@@ -273,7 +273,7 @@ export function EncaissementsChart() {
               <Tooltip
                 formatter={(value: number, name: string) => [
                   formatCurrency(value),
-                  name === "encaisse" ? "Encaissé" : "Restant",
+                  name === "encaisse" ? "Montant Total" : "À encaisser",
                 ]}
                 contentStyle={{
                   backgroundColor: "hsl(var(--card))",

@@ -33,7 +33,6 @@ import {
 import {
   Search,
   Wallet,
-  ArrowDownRight,
   CheckCircle,
   Clock,
   TrendingUp,
@@ -329,8 +328,8 @@ const Paiements = () => {
     if (encaisse === 0 && restant === 0) return [];
 
     return [
-      { name: "Encaissé", value: encaisse, color: "hsl(var(--success))" },
-      { name: "Reste", value: restant, color: "hsl(var(--warning))" },
+      { name: "Montant Total", value: encaisse, color: "hsl(var(--success))" },
+      { name: "À encaisser", value: restant, color: "hsl(var(--warning))" },
     ];
   }, [stats]);
 
@@ -471,16 +470,10 @@ const Paiements = () => {
               {/* Stats */}
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 <StatCard
-                  title="Total encaissé"
+                  title="Montant Total"
                   value={formatCurrency(stats.montantEncaisse || 0)}
                   icon={Wallet}
                   variant="success"
-                />
-                <StatCard
-                  title="Reste à encaisser"
-                  value={formatCurrency(stats.montantRestant || 0)}
-                  icon={ArrowDownRight}
-                  variant="warning"
                 />
                 <StatCard
                   title="Paiements partiels"
