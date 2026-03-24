@@ -12,9 +12,12 @@ export function StatCardSkeleton({ count = 1, className }: StatCardSkeletonProps
   return (
     <>
       {Array.from({ length: count }).map((_, i) => (
-        <div key={i} className={`stat-card ${className || ''}`}>
-          <Skeleton className="h-4 w-24 mb-2" />
-          <Skeleton className="h-8 w-32" />
+        <div key={i} className={`stat-card flex h-full min-h-0 flex-col gap-4 ${className || ''}`}>
+          <div className="flex justify-between gap-3">
+            <Skeleton className="h-4 w-28" />
+            <Skeleton className="size-9 shrink-0 rounded-full" />
+          </div>
+          <Skeleton className="h-9 w-36" />
         </div>
       ))}
     </>
