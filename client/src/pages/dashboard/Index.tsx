@@ -9,7 +9,6 @@ import {
   Truck,
   Wallet,
   TrendingUp,
-  ArrowDownRight,
   ArrowUpRight,
   AlertCircle,
   RefreshCw,
@@ -461,25 +460,19 @@ const Index = () => {
                   variant="expedition"
                 />
                 <StatCard
-                  title="Encaissé"
+                  title="Montant Total"
                   value={formatCurrency(stats.montantEncaisse)}
                   icon={Wallet}
                   variant="success"
                 />
                 <StatCard
-                  title="Reste à encaisser"
-                  value={formatCurrency(stats.montantRestant)}
-                  icon={ArrowDownRight}
-                  variant="warning"
-                />
-                <StatCard
-                  title="Tarifs appliqués"
+                  title="Frais de livraison"
                   value={formatCurrency(stats.totalTarifs || 0)}
                   icon={Receipt}
                   variant="info"
                 />
                 <StatCard
-                  title="À reverser aux groupes"
+                  title="Partenaire"
                   value={formatCurrency(stats.montantNetEncaisse || 0)}
                   icon={HandCoins}
                   variant="success"

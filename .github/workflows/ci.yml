@@ -2,17 +2,21 @@ name: CI
 
 on:
   push:
-    paths:
-      - 'client/**'
-  pull_request:
     branches:
-      - main
+      - '**'
     paths:
       - 'client/**'
+      - 'wwebjs-bot/**'
+      - '.github/workflows/**'
+  pull_request:
+    paths:
+      - 'client/**'
+      - 'wwebjs-bot/**'
+      - '.github/workflows/**'
 
 jobs:
-  lint-and-build:
-    name: Lint & Build
+  client-ci:
+    name: Client - Lint & Build
     runs-on: ubuntu-latest
 
     steps:
@@ -37,3 +41,66 @@ jobs:
       - name: Build
         working-directory: client
         run: npm run build
+
+  backend-ci:
+    name: Backend - Postgres Integration Smoke
+    runs-on: ubuntu-latest
+    env:
+      NODE_ENV: test
+      API_PORT: 3001
+      JWT_SECRET: ci-test-jwt-secret
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/saasdelivery_ci
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: saasdelivery_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d saasdelivery_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: 'npm'
+          cache-dependency-path: wwebjs-bot/package-lock.json
+
+      - name: Install dependencies
+        working-directory: wwebjs-bot
+        run: npm ci
+
+      - name: Run migrations
+        working-directory: wwebjs-bot
+        run: npm run migrate
+
+      - name: Verify core tables exist
+        working-directory: wwebjs-bot
+        run: |
+          node -e "const { Client } = require('pg'); (async () => { const client = new Client({ connectionString: process.env.DATABASE_URL }); await client.connect(); const { rows } = await client.query(\"SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('schema_migrations','agencies','groups','deliveries')\"); const found = rows.map(r => r.table_name); const required = ['schema_migrations','agencies','groups','deliveries']; const missing = required.filter(t => !found.includes(t)); if (missing.length) { throw new Error('Missing tables: ' + missing.join(', ')); } console.log('Core tables present:', found.sort().join(', ')); await client.end(); })().catch((err) => { console.error(err); process.exit(1); });"
+
+      - name: Start API server
+        working-directory: wwebjs-bot
+        run: node src/api/server.js &
+
+      - name: API health smoke test
+        run: |
+          for i in {1..20}; do
+            if curl -fsS "http://127.0.0.1:3001/api/v1/health" > /tmp/health.json; then
+              cat /tmp/health.json
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "API health endpoint did not become ready in time"
+          exit 1
