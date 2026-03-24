@@ -23,7 +23,6 @@ import {
   ShoppingBag,
   Truck,
   Wallet,
-  ArrowDownRight,
   AlertCircle,
   RefreshCw,
   Receipt,
@@ -256,25 +255,19 @@ const Rapports = () => {
                   variant="success"
                 />
                 <StatCard
-                  title="Total encaissé"
+                  title="Montant Total"
                   value={formatCurrency(currentData.encaisse)}
                   icon={Wallet}
                   variant="success"
                 />
                 <StatCard
-                  title="Reste à encaisser"
-                  value={formatCurrency(currentData.restant)}
-                  icon={ArrowDownRight}
-                  variant="warning"
-                />
-                <StatCard
-                  title="Tarifs appliqués"
+                  title="Frais de livraison"
                   value={formatCurrency(currentData.totalTarifs)}
                   icon={Receipt}
                   variant="info"
                 />
                 <StatCard
-                  title="À reverser aux groupes"
+                  title="Partenaire"
                   value={formatCurrency(currentData.montantNetEncaisse || 0)}
                   icon={HandCoins}
                   variant="success"
@@ -365,7 +358,7 @@ const Rapports = () => {
                   </div>
                   <div className="p-4 rounded-xl bg-primary/10 border border-primary/20">
                     <p className="text-sm text-muted-foreground mb-1">
-                      Encaissé
+                      Montant Total
                     </p>
                     <p className="text-2xl font-bold text-primary">
                       {formatCurrency(currentData.encaisse)}
