@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { AppErrorExperience } from "@/components/errors/AppErrorExperience";
 import {
   Select,
   SelectContent,
@@ -27,7 +27,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Search, History, ArrowRight, Phone, DollarSign, Package, MapPin, Plus, Minus, AlertCircle, RefreshCw } from "lucide-react";
+import { Search, History, ArrowRight, Phone, DollarSign, Package, MapPin, Plus, Minus, RefreshCw } from "lucide-react";
 import { getDeliveries } from "@/services/deliveries";
 import { getDeliveryHistory } from "@/services/deliveries";
 import { DeliveryForm } from "@/components/deliveries/DeliveryForm";
@@ -376,30 +376,15 @@ const Modifications = () => {
         <DateRangePicker value={dateRange} onChange={setDateRange} />
       </div>
 
-      {/* Error State */}
-      {isError && (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Erreur de chargement</AlertTitle>
-          <AlertDescription className="mt-2">
-            <p className="mb-3">
-              {error instanceof Error ? error.message : 'Impossible de charger les modifications'}
-            </p>
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={() => {
-                refetchDeliveries();
-                historyQueries.refetch();
-              }}
-              className="gap-2"
-            >
-              <RefreshCw className="w-4 h-4" />
-              Réessayer
-            </Button>
-          </AlertDescription>
-        </Alert>
-      )}
+      {isError ? (
+        <AppErrorExperience
+          error={error}
+          onRetry={() => {
+            void refetchDeliveries();
+            void historyQueries.refetch();
+          }}
+        />
+      ) : null}
 
       {/* Stats */}
       {!isLoading && (

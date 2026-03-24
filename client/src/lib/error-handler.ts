@@ -97,7 +97,12 @@ export function isNetworkError(error: unknown): boolean {
     return error.statusCode === 0 || error.message.includes('Network') || error.message.includes('fetch');
   }
   if (error instanceof Error) {
-    return error.message.includes('Network') || error.message.includes('fetch') || error.message.includes('Failed to fetch');
+    return (
+      error.message.includes('Network') ||
+      error.message.includes('fetch') ||
+      error.message.includes('Failed to fetch') ||
+      error.message.includes('Load failed')
+    );
   }
   return false;
 }

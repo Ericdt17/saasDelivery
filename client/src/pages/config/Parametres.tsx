@@ -29,9 +29,10 @@ import {
   Shield,
   Save,
   Truck,
-  Loader2,
 } from "lucide-react";
+import { LoadingSpinner } from "@/components/loading/LoadingSpinner";
 import { toast } from "sonner";
+import { AppErrorExperience } from "@/components/errors/AppErrorExperience";
 import { getAgencyMe, updateAgency } from "@/services/agencies";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -49,7 +50,13 @@ const Parametres = () => {
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
 
   // Load agency data - only for agency admins (super admins don't have an agency)
-  const { data: agency, isLoading: isLoadingAgency, isError: isErrorAgency, error: agencyError } = useQuery({
+  const {
+    data: agency,
+    isLoading: isLoadingAgency,
+    isError: isErrorAgency,
+    error: agencyError,
+    refetch: refetchAgency,
+  } = useQuery({
     queryKey: ["agency", "me"],
     queryFn: getAgencyMe,
     retry: 1,
@@ -115,6 +122,10 @@ const Parametres = () => {
     },
   });
 
+  if (!isSuperAdmin && user?.role === "agency" && !isLoadingAgency && isErrorAgency) {
+    return <AppErrorExperience error={agencyError} onRetry={() => void refetchAgency()} />;
+  }
+
   const handleSave = () => {
     if (!agencyId) {
       toast.error("Impossible de déterminer l'ID de l'agence. Veuillez vous reconnecter.");
@@ -167,23 +178,10 @@ const Parametres = () => {
                 </div>
               ) : isLoadingAgency ? (
                 <div className="flex items-center justify-center py-8">
-                  <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                  <LoadingSpinner size="md" />
                 </div>
               ) : (
                 <>
-                  {isErrorAgency && (
-                    <div className="mb-4 p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
-                      <p className="font-medium">Erreur lors du chargement des données de l'agence</p>
-                      <p className="mt-1">
-                        {agencyError?.message || "Impossible de charger les informations. Veuillez vérifier vos permissions ou vous reconnecter."}
-                      </p>
-                      {user && (
-                        <p className="mt-1 text-xs opacity-75">
-                          Rôle: {user.role}, AgencyId: {user.agencyId || "non défini"}, UserId: {user.id}
-                        </p>
-                      )}
-                    </div>
-                  )}
                   <div>
                     <label className="text-sm font-medium">Nom de l'agence</label>
                     <Input
@@ -405,7 +403,7 @@ const Parametres = () => {
                    disabled={saveMutation.isPending || (isLoadingAgency && !agencyId)}
                  >
                    {saveMutation.isPending ? (
-                     <Loader2 className="w-4 h-4 animate-spin" />
+                     <LoadingSpinner size="sm" className="gap-0" />
                    ) : (
                      <Save className="w-4 h-4" />
                    )}

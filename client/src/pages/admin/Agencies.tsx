@@ -41,7 +41,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
-import { Building2, Plus, Edit, Trash2, Loader2, RefreshCw, Eye } from "lucide-react";
+import { Building2, Plus, Edit, Trash2, RefreshCw, Eye } from "lucide-react";
+import { LoadingSpinner } from "@/components/loading/LoadingSpinner";
 import { toast } from "sonner";
 import { Switch } from "@/components/ui/switch";
 
@@ -300,10 +301,8 @@ function AgenciesPage() {
                 >
                   Annuler
                 </Button>
-                <Button type="submit" disabled={createMutation.isPending}>
-                  {createMutation.isPending && (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  )}
+                <Button type="submit" className="gap-2" disabled={createMutation.isPending}>
+                  {createMutation.isPending ? <LoadingSpinner size="sm" className="gap-0" /> : null}
                   Créer
                 </Button>
               </DialogFooter>
@@ -500,10 +499,8 @@ function AgenciesPage() {
             >
               Annuler
             </Button>
-            <Button onClick={handleUpdate} disabled={updateMutation.isPending}>
-              {updateMutation.isPending && (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              )}
+            <Button className="gap-2" onClick={handleUpdate} disabled={updateMutation.isPending}>
+              {updateMutation.isPending ? <LoadingSpinner size="sm" className="gap-0" /> : null}
               Enregistrer
             </Button>
           </DialogFooter>
@@ -524,11 +521,9 @@ function AgenciesPage() {
             <AlertDialogCancel>Annuler</AlertDialogCancel>
             <AlertDialogAction
               onClick={confirmDelete}
-              className="bg-destructive text-destructive-foreground"
+              className="gap-2 bg-destructive text-destructive-foreground"
             >
-              {deleteMutation.isPending ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : null}
+              {deleteMutation.isPending ? <LoadingSpinner size="sm" className="gap-0" /> : null}
               Supprimer
             </AlertDialogAction>
           </AlertDialogFooter>

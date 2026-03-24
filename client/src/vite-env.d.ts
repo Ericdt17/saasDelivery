@@ -14,6 +14,12 @@ interface ImportMetaEnv {
    */
   readonly VITE_API_BASE_URL?: string;
 
+  /** Email support (autres usages) */
+  readonly VITE_SUPPORT_EMAIL?: string;
+
+  /** URL WhatsApp pour « Nous contacter » sur les pages d’erreur (défaut : wa.link du projet) */
+  readonly VITE_WHATSAPP_CONTACT_URL?: string;
+
   /**
    * Application mode
    * Automatically set by Vite based on the mode flag

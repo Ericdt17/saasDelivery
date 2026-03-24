@@ -4,7 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { StatCard } from "@/components/ui/stat-card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { AppErrorExperience } from "@/components/errors/AppErrorExperience";
 import {
   BarChart,
   Bar,
@@ -23,7 +23,6 @@ import {
   ShoppingBag,
   Truck,
   Wallet,
-  AlertCircle,
   RefreshCw,
   Receipt,
   HandCoins,
@@ -163,29 +162,9 @@ const Rapports = () => {
             </div>
           )}
 
-        {/* Error State */}
-        {isError && !isLoading && (
-            <Alert variant="destructive">
-              <AlertCircle className="h-4 w-4" />
-              <AlertTitle>Erreur de chargement</AlertTitle>
-              <AlertDescription className="mt-2">
-                <p className="mb-3">
-                  {error instanceof Error
-                    ? error.message
-                    : "Impossible de charger les données"}
-                </p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => refetch()}
-                  className="gap-2"
-                >
-                  <RefreshCw className="w-4 h-4" />
-                  Réessayer
-                </Button>
-              </AlertDescription>
-            </Alert>
-          )}
+        {isError && !isLoading ? (
+          <AppErrorExperience error={error} onRetry={() => void refetch()} />
+        ) : null}
 
           {/* Content */}
           {!isLoading && !isError && (
