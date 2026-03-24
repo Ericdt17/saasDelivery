@@ -17,7 +17,6 @@ import {
   Receipt,
   HandCoins,
   Calendar,
-  AlertCircle,
   RefreshCw,
   Search,
   Plus,
@@ -33,7 +32,6 @@ import { StatCard } from "@/components/ui/stat-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
@@ -73,6 +71,8 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { ApiError } from "@/types/api";
+import { AppErrorExperience } from "@/components/errors/AppErrorExperience";
 import { getGroupById } from "@/services/groups";
 import { getDailyStats } from "@/services/stats";
 import { buildApiUrl, API_ENDPOINTS } from "@/lib/api-config";
@@ -132,11 +132,12 @@ export default function GroupDetail() {
   const limit = 20;
 
   // Fetch group info avec meilleure gestion d'erreur
-  const { 
-    data: group, 
+  const {
+    data: group,
     isLoading: isLoadingGroup,
     isError: isErrorGroup,
-    error: groupError 
+    error: groupError,
+    refetch: refetchGroup,
   } = useQuery({
     queryKey: ["group", groupId],
     queryFn: () => getGroupById(groupId!),
@@ -502,50 +503,25 @@ export default function GroupDetail() {
     );
   }
 
-  // Afficher l'erreur si la requête a échoué
   if (isErrorGroup && groupId) {
-    const statusCode = (groupError as ApiErr)?.statusCode || (groupError as ApiErr)?.status;
-    const errorMessage = statusCode === 403 
-      ? "Vous n'avez pas accès à ce prestataire. Ce prestataire appartient peut-être à une autre agence."
-      : statusCode === 404
-      ? "Le prestataire demandé n'existe pas ou a été supprimé."
-      : "Une erreur est survenue lors du chargement du prestataire.";
-    
     return (
-      <Alert variant="destructive">
-        <AlertCircle className="h-4 w-4" />
-        <AlertTitle>Erreur de chargement</AlertTitle>
-        <AlertDescription>
-          <p className="mb-3">{errorMessage}</p>
-          <p className="mb-3 text-sm text-muted-foreground">
-            ID du prestataire : {groupId}
-          </p>
-          <Button variant="outline" onClick={() => navigate("/groupes")}>
-            Retour aux prestataires
-          </Button>
-        </AlertDescription>
-      </Alert>
+      <AppErrorExperience
+        error={groupError}
+        onRetry={() => void refetchGroup()}
+        onBack={() => navigate("/groupes")}
+      />
     );
   }
 
-  // Vérifier si group est null (après le chargement)
   if (!isLoadingGroup && !group && groupId) {
     return (
-      <Alert variant="destructive">
-        <AlertCircle className="h-4 w-4" />
-        <AlertTitle>Prestataire non trouvé</AlertTitle>
-        <AlertDescription>
-          <p className="mb-3">
-            Le prestataire demandé n'existe pas ou vous n'avez pas accès.
-          </p>
-          <p className="mb-3 text-sm text-muted-foreground">
-            ID du prestataire : {groupId}
-          </p>
-          <Button variant="outline" onClick={() => navigate("/groupes")}>
-            Retour aux prestataires
-          </Button>
-        </AlertDescription>
-      </Alert>
+      <AppErrorExperience
+        error={new ApiError(
+          "Le prestataire demandé n'existe pas ou vous n'avez pas accès.",
+          404
+        )}
+        onBack={() => navigate("/groupes")}
+      />
     );
   }
 
@@ -633,29 +609,7 @@ export default function GroupDetail() {
 
           {/* Error State */}
           {isError && !isLoading && (
-            <Alert variant="destructive">
-              <AlertCircle className="h-4 w-4" />
-              <AlertTitle>Erreur de chargement</AlertTitle>
-              <AlertDescription className="mt-2">
-                <p className="mb-3">
-                  {(() => {
-                    const statusCode = (error as ApiErr)?.statusCode || (error as ApiErr)?.status;
-                    if (statusCode === 404) {
-                      return "Aucune donnée trouvée pour cette période.";
-                    } else if (statusCode === 403) {
-                      return "Vous n'avez pas accès à ces données.";
-                    } else if (statusCode >= 500) {
-                      return "Erreur serveur. Veuillez réessayer plus tard.";
-                    }
-                    return error instanceof Error ? error.message : "Impossible de charger les données";
-                  })()}
-                </p>
-                <Button variant="outline" size="sm" onClick={() => refetch()} className="gap-2">
-                  <RefreshCw className="w-4 h-4" />
-                  Réessayer
-                </Button>
-              </AlertDescription>
-            </Alert>
+            <AppErrorExperience error={error} onRetry={() => void refetch()} />
           )}
 
           {/* Content */}

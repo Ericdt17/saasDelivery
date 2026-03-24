@@ -117,6 +117,19 @@ export default {
           "0%, 100%": { opacity: "1" },
           "50%": { opacity: "0.7" },
         },
+        /** Page d’erreur unifiée */
+        "error-backdrop": {
+          from: { opacity: "0" },
+          to: { opacity: "1" },
+        },
+        "error-card-enter": {
+          from: { opacity: "0", transform: "translateY(18px) scale(0.985)" },
+          to: { opacity: "1", transform: "translateY(0) scale(1)" },
+        },
+        "error-illustration-float": {
+          "0%, 100%": { transform: "translateY(0)" },
+          "50%": { transform: "translateY(-7px)" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
@@ -125,6 +138,9 @@ export default {
         "slide-in-left": "slide-in-left 0.3s ease-out",
         "scale-in": "scale-in 0.2s ease-out",
         "pulse-soft": "pulse-soft 2s ease-in-out infinite",
+        "error-backdrop": "error-backdrop 0.4s ease-out forwards",
+        "error-card-enter": "error-card-enter 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards",
+        "error-illustration-float": "error-illustration-float 5s ease-in-out infinite",
       },
       boxShadow: {
         "soft": "0 2px 15px -3px rgba(0, 0, 0, 0.07), 0 10px 20px -2px rgba(0, 0, 0, 0.04)",

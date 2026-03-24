@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { AppErrorExperience } from "@/components/errors/AppErrorExperience";
 import {
   Dialog,
   DialogContent,
@@ -34,7 +34,6 @@ import {
   CreditCard,
   RefreshCw,
   FileText,
-  AlertCircle
 } from "lucide-react";
 import { getDeliveryById, getDeliveryHistory, updateDelivery } from "@/services/deliveries";
 import { mapStatusToBackend, type StatutLivraison } from "@/lib/data-transform";
@@ -229,11 +228,12 @@ const LivraisonDetails = () => {
   }, [isErrorDelivery, deliveryError]);
 
   // Fetch delivery history
-  const { 
-    data: livraisonHistorique = [], 
+  const {
+    data: livraisonHistorique = [],
     isLoading: isLoadingHistory,
     isError: isErrorHistory,
-    error: historyError
+    error: historyError,
+    refetch: refetchHistory,
   } = useQuery({
     queryKey: ['deliveryHistory', id],
     queryFn: () => getDeliveryHistory(id!),
@@ -289,49 +289,17 @@ const LivraisonDetails = () => {
     );
   }
 
-  // Error state
   if (isErrorDelivery || !livraison) {
+    const err =
+      isErrorDelivery && deliveryError instanceof Error
+        ? deliveryError
+        : new Error("Livraison introuvable ou erreur lors du chargement");
     return (
-      <div className="space-y-6 pb-8">
-        <Button 
-          variant="ghost" 
-          size="icon"
-          onClick={() => navigate("/livraisons")}
-          className="self-start"
-        >
-          <ArrowLeft className="w-5 h-5" />
-        </Button>
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Erreur de chargement</AlertTitle>
-          <AlertDescription className="mt-2">
-            <p className="mb-3">
-              {deliveryError instanceof Error 
-                ? deliveryError.message 
-                : 'Livraison introuvable ou erreur lors du chargement'}
-            </p>
-            <div className="flex gap-2">
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={() => refetchDelivery()}
-                className="gap-2"
-              >
-                <RefreshCw className="w-4 h-4" />
-                Réessayer
-              </Button>
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={() => navigate("/livraisons")}
-              >
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                Retour aux livraisons
-              </Button>
-            </div>
-          </AlertDescription>
-        </Alert>
-      </div>
+      <AppErrorExperience
+        error={err}
+        onRetry={() => void refetchDelivery()}
+        onBack={() => navigate("/livraisons")}
+      />
     );
   }
 
@@ -647,12 +615,10 @@ const LivraisonDetails = () => {
                   ))}
                 </div>
               ) : isErrorHistory ? (
-                <Alert variant="destructive" className="mt-4">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>
-                    Erreur lors du chargement de l'historique
-                  </AlertDescription>
-                </Alert>
+                <AppErrorExperience
+                  error={historyError ?? new Error("Erreur lors du chargement de l'historique")}
+                  onRetry={() => void refetchHistory()}
+                />
               ) : livraisonHistorique.length > 0 ? (
                 <div className="space-y-4">
                   {livraisonHistorique.map((event) => {

@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { AppErrorExperience } from "@/components/errors/AppErrorExperience";
 import {
   Select,
   SelectContent,
@@ -62,7 +62,6 @@ import {
   Eye,
   Edit,
   Plus,
-  AlertCircle,
   RefreshCw,
   ChevronLeft,
   ChevronRight,
@@ -797,27 +796,7 @@ const Livraisons = () => {
         </div>
       </div>
 
-      {/* Error State */}
-      {isError && (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Erreur de chargement</AlertTitle>
-          <AlertDescription className="mt-2">
-            <p className="mb-3">
-              {error instanceof Error ? error.message : 'Impossible de charger les livraisons'}
-            </p>
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={() => refetch()}
-              className="gap-2"
-            >
-              <RefreshCw className="w-4 h-4" />
-              Réessayer
-            </Button>
-          </AlertDescription>
-        </Alert>
-      )}
+      {isError ? <AppErrorExperience error={error} onRetry={() => void refetch()} /> : null}
 
       {/* Table */}
       <div className="stat-card overflow-hidden p-0">

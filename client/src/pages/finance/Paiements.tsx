@@ -4,7 +4,7 @@ import { Link } from "react-router-dom";
 import { StatCard } from "@/components/ui/stat-card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { AppErrorExperience } from "@/components/errors/AppErrorExperience";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
@@ -22,7 +22,6 @@ import {
 import { cn } from "@/lib/utils";
 import {
   HandCoins,
-  AlertCircle,
   RefreshCw,
   Calendar,
   Users,
@@ -245,29 +244,7 @@ const Paiements = () => {
   }
 
   if (isError) {
-    return (
-      <div className="space-y-6 pb-8">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold">Paiements prestataires</h1>
-          <p className="text-muted-foreground">
-            Montants partenaire (net à reverser), comme sur le tableau de bord
-          </p>
-        </div>
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Erreur de chargement</AlertTitle>
-          <AlertDescription className="mt-2">
-            <p className="mb-3">
-              {error instanceof Error ? error.message : "Impossible de charger les données"}
-            </p>
-            <Button variant="outline" size="sm" onClick={() => refetch()} className="gap-2">
-              <RefreshCw className="w-4 h-4" />
-              Réessayer
-            </Button>
-          </AlertDescription>
-        </Alert>
-      </div>
-    );
+    return <AppErrorExperience error={error} onRetry={() => void refetch()} />;
   }
 
   return (

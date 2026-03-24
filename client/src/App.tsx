@@ -22,6 +22,8 @@ import Tarifs from "./pages/config/Tarifs";
 import Parametres from "./pages/config/Parametres";
 import Agencies from "./pages/admin/Agencies";
 import NotFound from "./pages/NotFound";
+import ServerError from "./pages/ServerError";
+import ErrorNetworkPreview from "./pages/dev/ErrorNetworkPreview";
 
 // Configure QueryClient with better error handling
 const queryClient = new QueryClient({
@@ -66,6 +68,10 @@ const App = () => (
         <Routes>
           {/* Public route */}
           <Route path="/login" element={<Login />} />
+          <Route path="/erreur" element={<ServerError />} />
+          {import.meta.env.DEV ? (
+            <Route path="/dev/error-network" element={<ErrorNetworkPreview />} />
+          ) : null}
 
           {/* Protected routes */}
           <Route

@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { AppErrorExperience } from "@/components/errors/AppErrorExperience";
 import {
   Select,
   SelectContent,
@@ -30,7 +30,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { Search, Truck, Plus, Upload, Eye, MapPin, Phone, FileImage, AlertCircle, RefreshCw } from "lucide-react";
+import { Search, Truck, Plus, Upload, Eye, MapPin, Phone, FileImage, RefreshCw } from "lucide-react";
 import { getDeliveries } from "@/services/deliveries";
 import { DeliveryForm } from "@/components/deliveries/DeliveryForm";
 import type { FrontendDelivery } from "@/types/delivery";
@@ -258,27 +258,7 @@ const Expeditions = () => {
         </Dialog>
       </div>
 
-      {/* Error State */}
-      {isError && (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Erreur de chargement</AlertTitle>
-          <AlertDescription className="mt-2">
-            <p className="mb-3">
-              {error instanceof Error ? error.message : 'Impossible de charger les expéditions'}
-            </p>
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={() => refetch()}
-              className="gap-2"
-            >
-              <RefreshCw className="w-4 h-4" />
-              Réessayer
-            </Button>
-          </AlertDescription>
-        </Alert>
-      )}
+      {isError ? <AppErrorExperience error={error} onRetry={() => void refetch()} /> : null}
 
       {/* Stats */}
       {!isLoading && (

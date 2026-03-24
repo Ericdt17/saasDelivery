@@ -10,7 +10,6 @@ import {
   Wallet,
   TrendingUp,
   ArrowUpRight,
-  AlertCircle,
   RefreshCw,
   Calendar,
   Receipt,
@@ -28,7 +27,7 @@ import { PerformanceChart } from "@/components/dashboard/PerformanceChart";
 import { EncaissementsChart } from "@/components/dashboard/EncaissementsChart";
 import { RecentDeliveries } from "@/components/dashboard/RecentDeliveries";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { AppErrorExperience } from "@/components/errors/AppErrorExperience";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getDailyStats } from "@/services/stats";
 import { getDeliveries } from "@/services/deliveries";
@@ -253,46 +252,12 @@ const Index = () => {
     );
   }
 
-  // Error state
   if (isError || !stats) {
-    return (
-      <div className="space-y-6 pb-8">
-        {/* Header */}
-        <div className="flex flex-col gap-1">
-          <h1 className="text-2xl md:text-3xl font-bold">Tableau de bord</h1>
-          <p className="text-muted-foreground">
-            Vue d'ensemble des livraisons du jour —{" "}
-            {new Date().toLocaleDateString("fr-FR", {
-              weekday: "long",
-              year: "numeric",
-              month: "long",
-              day: "numeric",
-            })}
-          </p>
-        </div>
-
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Erreur de chargement</AlertTitle>
-          <AlertDescription className="mt-2">
-            <p className="mb-3">
-              {error instanceof Error
-                ? error.message
-                : "Impossible de charger les statistiques"}
-            </p>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => refetch()}
-              className="gap-2"
-            >
-              <RefreshCw className="w-4 h-4" />
-              Réessayer
-            </Button>
-          </AlertDescription>
-        </Alert>
-      </div>
-    );
+    const err =
+      error instanceof Error
+        ? error
+        : new Error("Impossible de charger les statistiques");
+    return <AppErrorExperience error={err} onRetry={() => void refetch()} />;
   }
 
   return (
@@ -396,28 +361,9 @@ const Index = () => {
           )}
 
           {/* Error State */}
-          {isError && !isLoading && (
-            <Alert variant="destructive">
-              <AlertCircle className="h-4 w-4" />
-              <AlertTitle>Erreur de chargement</AlertTitle>
-              <AlertDescription className="mt-2">
-                <p className="mb-3">
-                  {error instanceof Error
-                    ? error.message
-                    : "Impossible de charger les données"}
-                </p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => refetch()}
-                  className="gap-2"
-                >
-                  <RefreshCw className="w-4 h-4" />
-                  Réessayer
-                </Button>
-              </AlertDescription>
-            </Alert>
-          )}
+          {isError && !isLoading ? (
+            <AppErrorExperience error={error} onRetry={() => void refetch()} />
+          ) : null}
 
           {/* Content */}
           {!isLoading && !isError && stats && (
