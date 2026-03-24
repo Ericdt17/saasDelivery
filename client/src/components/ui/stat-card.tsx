@@ -168,7 +168,7 @@ export function StatCard({
 
       {/* Value + optional label (baseline aligned like the mock) */}
       <div className="mt-4 flex flex-wrap items-baseline gap-2">
-        <p className="text-2xl font-bold tracking-tight text-foreground">{value}</p>
+        <p className="font-display text-2xl font-bold tracking-tight text-foreground">{value}</p>
         {valueLabel ? (
           <span className="text-sm font-normal text-muted-foreground">{valueLabel}</span>
         ) : null}
