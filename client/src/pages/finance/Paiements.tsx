@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { StatCard } from "@/components/ui/stat-card";
 import { Button } from "@/components/ui/button";
@@ -23,6 +23,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   PieChart,
   Pie,
   Cell,
@@ -42,6 +49,8 @@ import {
 } from "lucide-react";
 import { getDeliveries } from "@/services/deliveries";
 import { getDailyStats } from "@/services/stats";
+import { DeliveryForm } from "@/components/deliveries/DeliveryForm";
+import type { FrontendDelivery } from "@/types/delivery";
 import { toast } from "sonner";
 import { getDateRangeLocal, formatDateLocal } from "@/lib/date-utils";
 import { calculateStatsFromDeliveries } from "@/lib/stats-utils";
@@ -92,9 +101,12 @@ interface PaymentData {
 
 const Paiements = () => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [period, setPeriod] = useState<"jour" | "semaine" | "mois">("jour");
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [selectedDelivery, setSelectedDelivery] = useState<FrontendDelivery | null>(null);
 
   const dateRange = useMemo(() => getDateRangeLocal(period), [period]);
 
@@ -302,6 +314,26 @@ const Paiements = () => {
       return matchSearch && matchType;
     });
   }, [payments, search, typeFilter]);
+
+  const handlePaymentRowClick = (deliveryId: number) => {
+    const delivery = deliveriesData?.deliveries?.find((d) => d.id === deliveryId);
+    if (!delivery) {
+      navigate(`/livraisons/${deliveryId}`);
+      return;
+    }
+    setSelectedDelivery(delivery);
+    setIsEditDialogOpen(true);
+  };
+
+  const closeEditDialog = () => {
+    setIsEditDialogOpen(false);
+    setSelectedDelivery(null);
+  };
+
+  const refreshData = () => {
+    queryClient.invalidateQueries({ queryKey: ["deliveries"] });
+    queryClient.invalidateQueries({ queryKey: ["dailyStats"] });
+  };
 
   // Calculate totals - only from payments in the current period
   const totalPartiels = useMemo(() => {
@@ -625,9 +657,7 @@ const Paiements = () => {
                             <TableRow
                               key={paiement.id}
                               className="hover:bg-muted/50 cursor-pointer"
-                              onClick={() =>
-                                navigate(`/livraisons/${paiement.livraison_id}`)
-                              }
+                              onClick={() => handlePaymentRowClick(paiement.livraison_id)}
                             >
                               <TableCell className="font-medium">
                                 {paiement.telephone}
@@ -658,6 +688,35 @@ const Paiements = () => {
           )}
         </TabsContent>
       </Tabs>
+
+      <Dialog
+        open={isEditDialogOpen}
+        onOpenChange={(open) => {
+          setIsEditDialogOpen(open);
+          if (!open) {
+            setSelectedDelivery(null);
+          }
+        }}
+      >
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader className="text-center sm:text-center">
+            <DialogTitle>Modifier la livraison</DialogTitle>
+            <DialogDescription>
+              Modifiez les informations de la livraison
+            </DialogDescription>
+          </DialogHeader>
+          {selectedDelivery && (
+            <DeliveryForm
+              delivery={selectedDelivery}
+              onSuccess={() => {
+                closeEditDialog();
+                refreshData();
+              }}
+              onCancel={closeEditDialog}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

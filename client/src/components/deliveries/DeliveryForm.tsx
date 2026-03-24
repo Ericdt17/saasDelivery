@@ -26,12 +26,40 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 import { type FrontendDelivery } from "@/lib/data-transform";
 import { mapStatusToBackend, mapStatusToFrontend } from "@/lib/data-transform";
 import { useCreateDelivery, useUpdateDelivery } from "@/hooks/useDeliveries";
 import { Loader2 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { getGroups, getGroupById } from "@/services/groups";
+
+const formatPhoneForDisplay = (value: string): string => {
+  if (!value) return "";
+  const trimmed = value.trim();
+  const hasPlus = trimmed.startsWith("+");
+  const digitsOnly = trimmed.replace(/\D/g, "");
+  if (!digitsOnly) return hasPlus ? "+" : "";
+
+  // Group digits in blocks of 3 for simple, country-agnostic readability.
+  const grouped = digitsOnly.match(/.{1,3}/g)?.join(" ") ?? digitsOnly;
+  return hasPlus ? `+${grouped}` : grouped;
+};
+
+const normalizePhoneForSubmit = (value: string): string =>
+  value.replace(/\s+/g, "").trim();
+
+const toSafeNumber = (value: string | number | undefined): number => {
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+  if (typeof value === "string") {
+    const parsed = parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
+};
+
+const formatCurrency = (value: number): string =>
+  new Intl.NumberFormat("fr-FR").format(value) + " FCFA";
 
 // Form validation schema
 const deliveryFormSchema = z.object({
@@ -120,7 +148,7 @@ export function DeliveryForm({ delivery, groupId, onSuccess, onCancel }: Deliver
   const form = useForm<DeliveryFormValues>({
     resolver: zodResolver(deliveryFormSchema),
     defaultValues: delivery ? {
-      telephone: delivery.telephone,
+      telephone: formatPhoneForDisplay(delivery.telephone),
       quartier: delivery.quartier,
       produits: delivery.produits,
       montant_total: delivery.montant_total,
@@ -146,6 +174,15 @@ export function DeliveryForm({ delivery, groupId, onSuccess, onCancel }: Deliver
 
   // Synchroniser le state local avec la valeur du formulaire
   const feeValue = form.watch('frais_livraison');
+  const watchedMontantTotal = form.watch("montant_total");
+  const watchedMontantEncaisse = form.watch("montant_encaisse");
+
+  const remainingBalance = Math.max(
+    0,
+    toSafeNumber(watchedMontantTotal) - toSafeNumber(watchedMontantEncaisse)
+  );
+
+  const isDirty = form.formState.isDirty;
   useEffect(() => {
     if (feeValue !== undefined && feeValue !== null) {
       setFeeInputValue(String(feeValue));
@@ -158,7 +195,7 @@ export function DeliveryForm({ delivery, groupId, onSuccess, onCancel }: Deliver
     try {
       // Transform frontend values to backend format
       const backendData = {
-        phone: values.telephone,
+        phone: normalizePhoneForSubmit(values.telephone),
         items: values.produits,
         amount_due: typeof values.montant_total === 'string' 
           ? parseFloat(values.montant_total) 
@@ -199,6 +236,9 @@ export function DeliveryForm({ delivery, groupId, onSuccess, onCancel }: Deliver
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        {/* Section A: Contact et localisation */}
+        <div className="space-y-3">
+          <h4 className="text-sm font-semibold text-foreground">Contact et localisation</h4>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Téléphone */}
           <FormField
@@ -209,14 +249,12 @@ export function DeliveryForm({ delivery, groupId, onSuccess, onCancel }: Deliver
                 <FormLabel>Téléphone *</FormLabel>
                 <FormControl>
                   <Input 
-                    placeholder="+225 XX XX XX XX XX" 
+                    placeholder="+225 690 123 456" 
                     {...field} 
+                    onChange={(e) => field.onChange(formatPhoneForDisplay(e.target.value))}
                     disabled={isLoading}
                   />
                 </FormControl>
-                <FormDescription>
-                  Numéro de téléphone du client
-                </FormDescription>
                 <FormMessage />
               </FormItem>
             )}
@@ -231,62 +269,46 @@ export function DeliveryForm({ delivery, groupId, onSuccess, onCancel }: Deliver
                 <FormLabel>Quartier</FormLabel>
                 <FormControl>
                   <Input 
-                    placeholder="Nom du quartier" 
+                    placeholder="Ex: Akwa, Logbaba..." 
                     {...field} 
                     disabled={isLoading}
                   />
                 </FormControl>
-                <FormDescription>
-                  Quartier de livraison
-                </FormDescription>
                 <FormMessage />
               </FormItem>
             )}
           />
         </div>
+        </div>
 
-        {/* Groupe */}
+        {/* Prestataire */}
         {isEditMode || groupId ? (
-          // En mode édition OU si groupId est fourni → lecture seule
-          <FormField
-            control={form.control}
-            name="groupe"
-            render={({ field }) => {
-              // Déterminer le groupId à utiliser
-              const currentGroupId = groupId || delivery?.group_id;
-              // Récupérer le nom du groupe
-              let groupName = "Aucun groupe";
-              
-              if (currentGroupId) {
-                if (group?.name) {
-                  groupName = group.name;
-                } else if (delivery?.group_name) {
-                  groupName = delivery.group_name;
-                } else {
-                  groupName = `Groupe #${currentGroupId}`;
-                }
+          (() => {
+            const currentGroupId = groupId || delivery?.group_id;
+            let groupName = "Aucun prestataire";
+            if (currentGroupId) {
+              if (group?.name) {
+                groupName = group.name;
+              } else if (delivery?.group_name) {
+                groupName = delivery.group_name;
+              } else {
+                groupName = `Prestataire #${currentGroupId}`;
               }
-              
-              return (
-                <FormItem>
-                  <FormLabel>Groupe</FormLabel>
-                  <FormControl>
-                    <Input 
-                      value={groupName}
-                      disabled={true}
-                      readOnly
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    {isEditMode 
-                      ? "Le groupe ne peut pas être modifié lors de l'édition"
-                      : "Ce groupe est fixe pour cette page"
-                    }
-                  </FormDescription>
-                </FormItem>
-              );
-            }}
-          />
+            }
+            return (
+              <div className="rounded-lg border border-border bg-muted/20 p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-medium">Prestataire</p>
+                  <Badge variant="outline">{groupName}</Badge>
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {isEditMode
+                    ? "Le prestataire ne peut pas etre modifie lors de l'edition."
+                    : "Ce prestataire est fixe pour cette page."}
+                </p>
+              </div>
+            );
+          })()
         ) : (
           // Création sans groupId → Select pour choisir
           <FormField
@@ -294,7 +316,7 @@ export function DeliveryForm({ delivery, groupId, onSuccess, onCancel }: Deliver
             name="groupe"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Groupe</FormLabel>
+                <FormLabel>Prestataire</FormLabel>
                 <Select 
                   onValueChange={(value) => field.onChange(value === "none" ? undefined : parseInt(value))} 
                   value={field.value?.toString() || "none"}
@@ -302,11 +324,11 @@ export function DeliveryForm({ delivery, groupId, onSuccess, onCancel }: Deliver
                 >
                   <FormControl>
                     <SelectTrigger>
-                      <SelectValue placeholder="Sélectionner un groupe" />
+                      <SelectValue placeholder="Sélectionner un prestataire" />
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    <SelectItem value="none">Aucun groupe</SelectItem>
+                    <SelectItem value="none">Aucun prestataire</SelectItem>
                     {groups.map((group) => (
                       <SelectItem key={group.id} value={group.id.toString()}>
                         {group.name}
@@ -314,39 +336,39 @@ export function DeliveryForm({ delivery, groupId, onSuccess, onCancel }: Deliver
                     ))}
                   </SelectContent>
                 </Select>
-                <FormDescription>
-                  Groupe WhatsApp associé à cette livraison
-                </FormDescription>
                 <FormMessage />
               </FormItem>
             )}
           />
         )}
 
-        {/* Produits */}
-        <FormField
-          control={form.control}
-          name="produits"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Produits *</FormLabel>
-              <FormControl>
-                <Textarea 
-                  placeholder="Description des produits à livrer" 
-                  {...field} 
-                  disabled={isLoading}
-                  rows={3}
-                />
-              </FormControl>
-              <FormDescription>
-                Liste des produits ou articles à livrer
-              </FormDescription>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+        {/* Section B: Produits et financier */}
+        <div className="space-y-3">
+          <h4 className="text-sm font-semibold text-foreground">Produits et financier</h4>
+          <FormField
+            control={form.control}
+            name="produits"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Produits *</FormLabel>
+                <FormControl>
+                  <Textarea
+                    placeholder="Description des produits a livrer"
+                    {...field}
+                    disabled={isLoading}
+                    rows={3}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="rounded-lg border border-border bg-muted/10 p-4">
+            <p className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Equilibre financier
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {/* Montant total */}
           <FormField
             control={form.control}
@@ -358,7 +380,7 @@ export function DeliveryForm({ delivery, groupId, onSuccess, onCancel }: Deliver
                   <Input 
                     type="text"
                     inputMode="numeric"
-                    placeholder="0" 
+                    placeholder="0"
                     {...field}
                     value={field.value || ''}
                     onChange={(e) => {
@@ -368,9 +390,6 @@ export function DeliveryForm({ delivery, groupId, onSuccess, onCancel }: Deliver
                     disabled={isLoading}
                   />
                 </FormControl>
-                <FormDescription>
-                  Montant total de la livraison
-                </FormDescription>
                 <FormMessage />
               </FormItem>
             )}
@@ -387,7 +406,7 @@ export function DeliveryForm({ delivery, groupId, onSuccess, onCancel }: Deliver
                   <Input 
                     type="text"
                     inputMode="numeric"
-                    placeholder="0" 
+                    placeholder="0"
                     {...field}
                     value={field.value || ''}
                     onChange={(e) => {
@@ -397,78 +416,83 @@ export function DeliveryForm({ delivery, groupId, onSuccess, onCancel }: Deliver
                     disabled={isLoading}
                   />
                 </FormControl>
-                <FormDescription>
-                  Montant déjà payé par le client
-                </FormDescription>
                 <FormMessage />
               </FormItem>
             )}
           />
+
+              {/* Frais de livraison (optionnel) */}
+              <FormField
+                control={form.control}
+                name="frais_livraison"
+                render={({ field }) => (
+                  <FormItem>
+                    <div className="flex items-center gap-2">
+                      <FormLabel>Frais de livraison (FCFA)</FormLabel>
+                      {isEditMode && delivery?.tarif_non_applique && (
+                        <Badge variant="outline" className="text-warning border-warning/40">
+                          Tarif non applique
+                        </Badge>
+                      )}
+                    </div>
+                    <FormControl>
+                      <Input
+                        type="text"
+                        inputMode="numeric"
+                        placeholder="Auto si vide"
+                        value={feeInputValue}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setFeeInputValue(val);
+                          if (val === "" || val.trim() === "") {
+                            field.onChange(undefined);
+                          } else {
+                            const numValue = parseFloat(val);
+                            if (!isNaN(numValue) && numValue >= 0) {
+                              field.onChange(numValue);
+                            }
+                          }
+                        }}
+                        onBlur={(e) => {
+                          const val = e.target.value.trim();
+                          if (val === "") {
+                            setFeeInputValue("");
+                            field.onChange(undefined);
+                          } else {
+                            const numValue = parseFloat(val);
+                            if (!isNaN(numValue) && numValue >= 0) {
+                              setFeeInputValue(String(numValue));
+                              field.onChange(numValue);
+                            } else {
+                              setFeeInputValue("");
+                              field.onChange(undefined);
+                            }
+                          }
+                          field.onBlur();
+                        }}
+                        disabled={isLoading}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <div className="mt-4 rounded-md border border-border bg-card p-3">
+              <p className="text-sm font-medium">
+                {remainingBalance > 0
+                  ? `Reste a encaisser: ${formatCurrency(remainingBalance)}`
+                  : "Solde: Entierement regle"}
+              </p>
+            </div>
+          </div>
         </div>
 
-        {/* Frais de livraison (optionnel) */}
-        <FormField
-          control={form.control}
-          name="frais_livraison"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Frais de livraison (FCFA) - Optionnel</FormLabel>
-              <FormControl>
-                <Input 
-                  type="text"
-                  inputMode="numeric"
-                  placeholder="Laissez vide pour tarif automatique" 
-                  value={feeInputValue}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    // Mettre à jour le state local immédiatement pour permettre de vider
-                    setFeeInputValue(val);
-                    
-                    // Si le champ est vide, mettre undefined
-                    if (val === '' || val.trim() === '') {
-                      field.onChange(undefined);
-                    } else {
-                      // Essayer de convertir en nombre
-                      const numValue = parseFloat(val);
-                      // Si c'est un nombre valide et >= 0, mettre à jour le formulaire
-                      if (!isNaN(numValue) && numValue >= 0) {
-                        field.onChange(numValue);
-                      }
-                      // Si ce n'est pas un nombre valide, on ne met pas à jour le formulaire
-                      // mais on garde la valeur dans le state local pour permettre de continuer à taper
-                    }
-                  }}
-                  onBlur={(e) => {
-                    const val = e.target.value.trim();
-                    // Quand on quitte le champ, nettoyer la valeur
-                    if (val === '') {
-                      setFeeInputValue('');
-                      field.onChange(undefined);
-                    } else {
-                      const numValue = parseFloat(val);
-                      if (!isNaN(numValue) && numValue >= 0) {
-                        setFeeInputValue(String(numValue));
-                        field.onChange(numValue);
-                      } else {
-                        // Si la valeur n'est pas valide, réinitialiser
-                        setFeeInputValue('');
-                        field.onChange(undefined);
-                      }
-                    }
-                    field.onBlur();
-                  }}
-                  disabled={isLoading}
-                />
-              </FormControl>
-              <FormDescription>
-                Si vide, le tarif standard du quartier sera appliqué automatiquement. Remplir uniquement pour tarif exceptionnel (Premium/Gold).
-              </FormDescription>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Section C: Logistique (zone d'action) */}
+        <div className="space-y-3 rounded-lg border border-primary/25 bg-primary/5 p-4">
+          <h4 className="text-sm font-semibold text-foreground">Logistique (action)</h4>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Statut */}
           <FormField
             control={form.control}
@@ -500,9 +524,6 @@ export function DeliveryForm({ delivery, groupId, onSuccess, onCancel }: Deliver
                     <SelectItem value="present_ne_decroche_zone2">CPCNDP Z2</SelectItem>
                   </SelectContent>
                 </Select>
-                <FormDescription>
-                  Statut actuel de la livraison
-                </FormDescription>
                 <FormMessage />
               </FormItem>
             )}
@@ -517,18 +538,16 @@ export function DeliveryForm({ delivery, groupId, onSuccess, onCancel }: Deliver
                 <FormLabel>Transporteur</FormLabel>
                 <FormControl>
                   <Input 
-                    placeholder="Nom du transporteur" 
+                    placeholder="Nom du transporteur"
                     {...field} 
                     disabled={isLoading}
                   />
                 </FormControl>
-                <FormDescription>
-                  Transporteur (pour expéditions)
-                </FormDescription>
                 <FormMessage />
               </FormItem>
             )}
           />
+        </div>
         </div>
 
         {/* Instructions */}
@@ -540,22 +559,20 @@ export function DeliveryForm({ delivery, groupId, onSuccess, onCancel }: Deliver
               <FormLabel>Instructions</FormLabel>
               <FormControl>
                 <Textarea 
-                  placeholder="Instructions spéciales pour la livraison" 
+                  placeholder="Instructions speciales pour la livraison" 
                   {...field} 
                   disabled={isLoading}
                   rows={2}
                 />
               </FormControl>
-              <FormDescription>
-                Notes ou instructions particulières
-              </FormDescription>
               <FormMessage />
             </FormItem>
           )}
         />
 
-        {/* Form Actions */}
-        <div className="flex justify-end gap-3 pt-4">
+        {/* Sticky Form Actions */}
+        <div className="sticky bottom-0 z-10 -mx-1 border-t border-border bg-background px-1 pt-4">
+          <div className="flex justify-end gap-3">
           {onCancel && (
             <Button 
               type="button" 
@@ -566,10 +583,11 @@ export function DeliveryForm({ delivery, groupId, onSuccess, onCancel }: Deliver
               Annuler
             </Button>
           )}
-          <Button type="submit" disabled={isLoading}>
+          <Button type="submit" disabled={isLoading || (isEditMode && !isDirty)}>
             {isLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-            {isEditMode ? "Enregistrer" : "Créer la livraison"}
+            {isEditMode ? "Mettre a jour la livraison" : "Creer la livraison"}
           </Button>
+          </div>
         </div>
       </form>
     </Form>

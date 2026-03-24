@@ -82,6 +82,7 @@ export interface BackendDelivery {
   group_id?: number | null;
   agency_id?: number | null;
   delivery_fee?: number | null;
+  tariff_pending?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -153,6 +154,7 @@ export interface FrontendDelivery {
   group_name?: string | null;
   agency_id?: number | null;
   frais_livraison?: number;
+  tarif_non_applique?: boolean;
 }
 
 /**

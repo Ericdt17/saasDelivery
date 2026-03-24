@@ -379,10 +379,10 @@ const Livraisons = () => {
               }}
             >
               <SelectTrigger className="w-[160px]">
-                <SelectValue placeholder="Groupe" />
+                <SelectValue placeholder="Prestataire" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Tous les groupes</SelectItem>
+                <SelectItem value="all">Tous les prestataires</SelectItem>
                 {groups.map((group) => (
                   <SelectItem key={group.id} value={group.id.toString()}>
                     {group.name}
@@ -425,7 +425,7 @@ const Livraisons = () => {
                 <TableHead className="font-semibold w-[130px]">Téléphone</TableHead>
                 <TableHead className="font-semibold w-[200px]">Produits</TableHead>
                 <TableHead className="font-semibold w-[130px]">Quartier</TableHead>
-                <TableHead className="font-semibold w-[140px]">Groupe</TableHead>
+                <TableHead className="font-semibold w-[140px]">Prestataire</TableHead>
                 <TableHead className="font-semibold text-right w-[110px]">Montant</TableHead>
                 <TableHead className="font-semibold text-right w-[110px]">Encaissé</TableHead>
                 <TableHead className="font-semibold text-right w-[110px]">Reste</TableHead>
@@ -461,7 +461,7 @@ const Livraisons = () => {
                   <TableRow 
                     key={livraison.id}
                     className="cursor-pointer hover:bg-muted/50 transition-colors"
-                    onClick={() => navigate(`/livraisons/${livraison.id}`)}
+                    onClick={() => handleEdit(livraison)}
                   >
                     <TableCell className="font-medium">{livraison.telephone}</TableCell>
                     <TableCell className="max-w-[200px] truncate">
@@ -492,7 +492,14 @@ const Livraisons = () => {
                       )}
                     </TableCell>
                     <TableCell>
-                      <StatusBadge statut={livraison.statut} />
+                      <div className="flex flex-col gap-1">
+                        <StatusBadge statut={livraison.statut} />
+                        {livraison.tarif_non_applique && (
+                          <Badge variant="outline" className="w-fit text-warning border-warning/40">
+                            Frais de livraisons non appliquer
+                          </Badge>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell>
                       <span className="text-sm text-muted-foreground">
@@ -632,7 +639,7 @@ const Livraisons = () => {
       {/* Edit Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
+          <DialogHeader className="text-center sm:text-center">
             <DialogTitle>Modifier la livraison</DialogTitle>
             <DialogDescription>
               Modifiez les informations de la livraison

@@ -97,10 +97,10 @@ export default function Groups() {
         agency_id: undefined,
         is_active: true,
       });
-      toast.success("Groupe créé avec succès");
+      toast.success("Prestataire créé avec succès");
     },
     onError: (error: MutErr) => {
-      const errorMessage = error?.data?.message || error?.message || "Erreur lors de la création du groupe";
+      const errorMessage = error?.data?.message || error?.message || "Erreur lors de la création du prestataire";
       toast.error(errorMessage);
     },
   });
@@ -113,10 +113,10 @@ export default function Groups() {
       setIsEditDialogOpen(false);
       setSelectedGroup(null);
       setEditFormData({ name: "" });
-      toast.success("Groupe modifié avec succès");
+      toast.success("Prestataire modifié avec succès");
     },
     onError: (error: MutErr) => {
-      const errorMessage = error?.data?.message || error?.message || "Erreur lors de la modification du groupe";
+      const errorMessage = error?.data?.message || error?.message || "Erreur lors de la modification du prestataire";
       toast.error(errorMessage);
     },
   });
@@ -126,7 +126,7 @@ export default function Groups() {
       updateGroup(id, { is_active }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["groups"] });
-      toast.success("Statut du groupe mis à jour");
+      toast.success("Statut du prestataire mis à jour");
     },
     onError: (error: MutErr) => {
       const errorMessage = error?.data?.message || error?.message || "Erreur lors de la mise à jour du statut";
@@ -140,10 +140,10 @@ export default function Groups() {
       queryClient.invalidateQueries({ queryKey: ["groups"] });
       setIsDeleteDialogOpen(false);
       setSelectedGroup(null);
-      toast.success("Groupe désactivé avec succès");
+      toast.success("Prestataire désactivé avec succès");
     },
     onError: (error: MutErr) => {
-      const errorMessage = error?.data?.message || error?.message || "Erreur lors de la désactivation du groupe";
+      const errorMessage = error?.data?.message || error?.message || "Erreur lors de la désactivation du prestataire";
       toast.error(errorMessage);
     },
   });
@@ -154,7 +154,7 @@ export default function Groups() {
       queryClient.invalidateQueries({ queryKey: ["groups"] });
       setIsHardDeleteDialogOpen(false);
       setSelectedGroup(null);
-      toast.success("Groupe supprimé définitivement");
+      toast.success("Prestataire supprimé définitivement");
     },
     onError: (error: MutErr) => {
       const errorMessage = error?.data?.message || error?.message || "Erreur lors de la suppression définitive";
@@ -170,7 +170,7 @@ export default function Groups() {
 
   const handleEdit = () => {
     if (!selectedGroup || !editFormData.name.trim()) {
-      toast.error("Le nom du groupe est requis");
+      toast.error("Le nom du prestataire est requis");
       return;
     }
     updateMutation.mutate({ id: selectedGroup.id, data: { name: editFormData.name.trim() } });
@@ -260,26 +260,26 @@ export default function Groups() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Groupes</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Prestataires</h1>
           <p className="text-muted-foreground">
             {isSuperAdmin
-              ? "Tous les groupes de toutes les agences"
-              : "Groupes de votre agence"}
+              ? "Tous les prestataires de toutes les agences"
+              : "Prestataires de votre agence"}
           </p>
         </div>
         <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
           <DialogTrigger asChild>
             <Button>
               <Plus className="h-4 w-4 mr-2" />
-              Ajouter un groupe
+              Ajouter un prestataire
             </Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Ajouter un groupe WhatsApp</DialogTitle>
+              <DialogTitle>Ajouter un prestataire WhatsApp</DialogTitle>
               <DialogDescription>
-                Ajoutez un groupe WhatsApp pour commencer à recevoir des messages.
-                Utilisez la commande #link dans le groupe pour obtenir l'ID.
+                Ajoutez un prestataire WhatsApp pour commencer à recevoir des messages.
+                Utilisez la commande #link dans le prestataire pour obtenir l'ID.
               </DialogDescription>
             </DialogHeader>
             <form
@@ -312,19 +312,19 @@ export default function Groups() {
                   </div>
                 )}
                 <div className="space-y-2">
-                  <Label htmlFor="name">Nom du groupe *</Label>
+                  <Label htmlFor="name">Nom du prestataire *</Label>
                   <Input
                     id="name"
                     value={formData.name}
                     onChange={(e) =>
                       setFormData({ ...formData, name: e.target.value })
                     }
-                    placeholder="Ex: Groupe de livraison"
+                    placeholder="Ex: Prestataire de livraison"
                     required
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="whatsapp_group_id">ID du groupe WhatsApp *</Label>
+                  <Label htmlFor="whatsapp_group_id">ID du prestataire WhatsApp *</Label>
                   <Input
                     id="whatsapp_group_id"
                     value={formData.whatsapp_group_id}
@@ -337,7 +337,7 @@ export default function Groups() {
                   />
                   <p className="text-sm text-muted-foreground">
                     Utilisez la commande <code className="bg-muted px-1 rounded">#link</code> dans
-                    le groupe WhatsApp pour obtenir cet ID.
+                    le prestataire WhatsApp pour obtenir cet ID.
                   </p>
                 </div>
               </div>
@@ -366,14 +366,14 @@ export default function Groups() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Users className="h-5 w-5" />
-              Aucun groupe
+              Aucun prestataire
             </CardTitle>
             <CardDescription>
-              Ajoutez un groupe WhatsApp pour commencer à recevoir des messages.
+              Ajoutez un prestataire WhatsApp pour commencer à recevoir des messages.
               <br />
               <span className="mt-2 block">
                 💡 Utilisez la commande <code className="bg-muted px-1 rounded">#link</code> dans
-                le groupe WhatsApp pour obtenir l'ID du groupe.
+                le prestataire WhatsApp pour obtenir l'ID du prestataire.
               </span>
             </CardDescription>
           </CardHeader>
@@ -383,7 +383,7 @@ export default function Groups() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Nom du groupe</TableHead>
+                <TableHead>Nom du prestataire</TableHead>
                 {isSuperAdmin && <TableHead>Agence</TableHead>}
                 <TableHead>Statut</TableHead>
                 <TableHead>Date de création</TableHead>
@@ -455,7 +455,7 @@ export default function Groups() {
                         size="icon"
                         className="h-8 w-8"
                         onClick={() => handleEditClick(group)}
-                        title="Modifier le nom du groupe"
+                        title="Modifier le nom du prestataire"
                       >
                         <Edit className="h-4 w-4" />
                       </Button>
@@ -481,21 +481,21 @@ export default function Groups() {
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Modifier le groupe</DialogTitle>
+            <DialogTitle>Modifier le prestataire</DialogTitle>
             <DialogDescription>
-              Modifiez le nom du groupe "{selectedGroup?.name}".
+              Modifiez le nom du prestataire "{selectedGroup?.name}".
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="edit-name">Nom du groupe *</Label>
+              <Label htmlFor="edit-name">Nom du prestataire *</Label>
               <Input
                 id="edit-name"
                 value={editFormData.name}
                 onChange={(e) =>
                   setEditFormData({ ...editFormData, name: e.target.value })
                 }
-                placeholder="Ex: Groupe de livraison"
+                placeholder="Ex: Prestataire de livraison"
                 required
               />
             </div>
@@ -526,7 +526,7 @@ export default function Groups() {
           <AlertDialogHeader>
             <AlertDialogTitle>Suppression définitive</AlertDialogTitle>
             <AlertDialogDescription>
-              ⚠️ Cette action supprimera définitivement le groupe "{selectedGroup?.name}" de la base de données.
+              ⚠️ Cette action supprimera définitivement le prestataire "{selectedGroup?.name}" de la base de données.
               <br />
               <span className="font-semibold mt-2 block text-destructive">
                 Cette action est irréversible et supprimera toutes les données associées.

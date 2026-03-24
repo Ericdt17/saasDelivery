@@ -1,5 +1,4 @@
 import { Sidebar } from "./Sidebar";
-import { Header } from "./Header";
 import { Outlet } from "react-router-dom";
 
 export function DashboardLayout() {
@@ -7,8 +6,8 @@ export function DashboardLayout() {
     <div className="flex min-h-screen w-full bg-background">
       <Sidebar />
       <div className="flex-1 flex flex-col">
-        <Header />
-        <main className="flex-1 overflow-x-hidden">
+        <header className="h-6 md:h-8" aria-hidden="true" />
+        <main className="flex-1 overflow-x-hidden mt-3 md:mt-4">
           <div className="container mx-auto px-4 py-6 md:px-6 lg:px-8 max-w-7xl">
             <Outlet />
           </div>

@@ -7,18 +7,25 @@ import {
   Package,
   CreditCard,
   FileText,
+  Settings,
+  Menu,
+  Users,
+  MoreVertical,
+  LogOut,
   Truck,
   History,
-  Settings,
-  ChevronLeft,
-  ChevronRight,
-  Menu,
+  BadgeDollarSign,
+  Tags,
   Building2,
-  Users,
-  Receipt,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface NavItem {
   title: string;
@@ -30,87 +37,94 @@ interface NavItem {
 const allNavItems: NavItem[] = [
   { title: "Tableau de bord", href: "/", icon: LayoutDashboard },
   { title: "Livraisons", href: "/livraisons", icon: Package },
-  { title: "Groupes", href: "/groupes", icon: Users },
-  { title: "Agences", href: "/agences", icon: Building2, requireSuperAdmin: true },
-  { title: "Paiements", href: "/paiements", icon: CreditCard },
-  { title: "Tarifs", href: "/tarifs", icon: Receipt },
-  { title: "Rapports", href: "/rapports", icon: FileText },
   { title: "Expéditions", href: "/expeditions", icon: Truck },
   { title: "Modifications", href: "/modifications", icon: History },
+  { title: "Paiements", href: "/paiements", icon: BadgeDollarSign },
+  { title: "Tarifs", href: "/tarifs", icon: Tags },
+  { title: "Prestataires", href: "/groupes", icon: Users },
+  { title: "Agences", href: "/agences", icon: Building2, requireSuperAdmin: true },
+  { title: "Rapports", href: "/rapports", icon: FileText },
   { title: "Paramètres", href: "/parametres", icon: Settings },
 ];
 
+
 export function Sidebar() {
-  const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const location = useLocation();
-  const { isSuperAdmin } = useAuth();
+  const { isSuperAdmin, user, logout } = useAuth();
 
-  // Filter nav items based on role
-  const navItems = allNavItems.filter(
-    (item) => !item.requireSuperAdmin || isSuperAdmin
-  );
+  const visibleItems = allNavItems.filter((item) => !(item.requireSuperAdmin && !isSuperAdmin));
 
   const SidebarContent = ({ isMobile = false }: { isMobile?: boolean }) => (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full bg-sidebar">
       {/* Logo */}
-      <div className={cn(
-        "flex items-center gap-3 px-4 h-[100px] border-b border-sidebar-border",
-        collapsed && !isMobile && "justify-center px-2"
-      )}>
-        <div className="w-10 h-10 rounded-xl gradient-primary flex items-center justify-center flex-shrink-0">
-          <Truck className="w-5 h-5 text-primary-foreground" />
-        </div>
-        {(!collapsed || isMobile) && (
-          <div className="flex flex-col">
-            <span className="font-bold text-sidebar-foreground text-lg">LivSight</span>
-            <span className="text-xs text-sidebar-muted">Gestion des livraisons</span>
-          </div>
-        )}
+      <div className="flex items-center justify-center px-5 py-6">
+        <img
+          src="/logo.svg"
+          alt="LivSight"
+          className="h-40 w-40 object-contain"
+        />
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-        {navItems.map((item) => {
-          const isActive = location.pathname === item.href || 
-            (item.href !== "/" && location.pathname.startsWith(item.href));
-          
+      <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+        {visibleItems.map((item) => {
+          const isActive =
+            location.pathname === item.href ||
+            (item.href !== "/" && location.pathname.startsWith(item.href + "/"));
+
           return (
             <NavLink
               key={item.href}
               to={item.href}
               onClick={() => isMobile && setMobileOpen(false)}
               className={cn(
-                "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 group",
-                collapsed && !isMobile && "justify-center px-2",
-                isActive 
-                  ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-md" 
-                  : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                "flex items-center justify-between px-3 py-2.5 rounded-lg transition-all duration-150 group",
+                isActive
+                  ? "bg-sidebar-accent text-sidebar-accent-foreground font-semibold"
+                  : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
               )}
             >
-              <item.icon className={cn(
-                "w-5 h-5 flex-shrink-0 transition-transform",
-                !isActive && "group-hover:scale-110"
-              )} />
-              {(!collapsed || isMobile) && (
-                <span className="font-medium text-sm">{item.title}</span>
-              )}
+              <div className="flex items-center gap-3">
+                <item.icon className="w-4 h-4 flex-shrink-0" />
+                <span className="text-sm">{item.title}</span>
+              </div>
             </NavLink>
           );
         })}
       </nav>
 
-      {/* Toggle button - desktop only */}
-      {!isMobile && (
-        <div className="p-3 border-t border-sidebar-border">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setCollapsed(!collapsed)}
-            className="w-full justify-center text-sidebar-muted hover:text-sidebar-foreground hover:bg-sidebar-accent"
-          >
-            {collapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
-          </Button>
+      {/* User profile footer */}
+      {user && (
+        <div className="p-3">
+          <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-primary text-white">
+            <img
+              src={`https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}&background=ffffff&color=2F8FBF&rounded=true&bold=true&size=64`}
+              alt={user.name}
+              className="w-8 h-8 rounded-full flex-shrink-0 object-cover ring-2 ring-white/30"
+            />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold truncate leading-tight">{user.name}</p>
+              <p className="text-[11px] text-white/70 truncate leading-tight">{user.email}</p>
+            </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 text-white/80 hover:text-white hover:bg-white/20 flex-shrink-0"
+                >
+                  <MoreVertical className="w-4 h-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" side="top" className="w-44">
+                <DropdownMenuItem onClick={logout} className="text-destructive focus:text-destructive cursor-pointer">
+                  <LogOut className="w-4 h-4 mr-2" />
+                  Se déconnecter
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
       )}
     </div>
@@ -124,21 +138,18 @@ export function Sidebar() {
           <Button
             variant="ghost"
             size="icon"
-            className="fixed top-4 left-4 z-[110] md:hidden bg-background border border-border shadow-lg hover:bg-accent hover:shadow-xl transition-all duration-200 rounded-lg h-[70px] w-[70px]"
+            className="fixed top-4 left-4 z-[110] md:hidden bg-background border border-border shadow-lg hover:bg-accent hover:shadow-xl transition-all duration-200 rounded-lg h-10 w-10"
           >
-            <Menu className="w-6 h-6 text-foreground" />
+            <Menu className="w-5 h-5 text-foreground" />
           </Button>
         </SheetTrigger>
-        <SheetContent side="left" className="w-72 p-0 bg-sidebar border-sidebar-border">
+        <SheetContent side="left" className="w-80 p-0 bg-sidebar border-sidebar-border">
           <SidebarContent isMobile />
         </SheetContent>
       </Sheet>
 
       {/* Desktop Sidebar */}
-      <aside className={cn(
-        "hidden md:flex flex-col h-screen bg-sidebar border-r border-sidebar-border transition-all duration-300 sticky top-0",
-        collapsed ? "w-20" : "w-64"
-      )}>
+      <aside className="hidden md:flex flex-col h-screen w-72 border-r border-sidebar-border sticky top-0">
         <SidebarContent />
       </aside>
     </>
