@@ -492,7 +492,7 @@ export default function Tarifs() {
                     onClick={handleImport}
                     disabled={isImporting || !selectedFile || previewData.length === 0}
                   >
-                    {isImporting ? <LoadingSpinner size="sm" className="gap-0" /> : null}
+                    {isImporting ? <LoadingSpinner size="sm" variant="icon" className="gap-0" /> : null}
                     Importer
                   </Button>
                 )}
@@ -576,7 +576,7 @@ export default function Tarifs() {
                 Annuler
               </Button>
               <Button className="gap-2" onClick={handleCreate} disabled={createMutation.isPending}>
-                {createMutation.isPending ? <LoadingSpinner size="sm" className="gap-0" /> : null}
+                {createMutation.isPending ? <LoadingSpinner size="sm" variant="icon" className="gap-0" /> : null}
                 Créer
               </Button>
             </DialogFooter>
@@ -772,7 +772,7 @@ export default function Tarifs() {
               Annuler
             </Button>
             <Button className="gap-2" onClick={handleUpdate} disabled={updateMutation.isPending}>
-              {updateMutation.isPending ? <LoadingSpinner size="sm" className="gap-0" /> : null}
+              {updateMutation.isPending ? <LoadingSpinner size="sm" variant="icon" className="gap-0" /> : null}
               Enregistrer
             </Button>
           </DialogFooter>
@@ -798,7 +798,7 @@ export default function Tarifs() {
               disabled={deleteMutation.isPending}
               className="gap-2 bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              {deleteMutation.isPending ? <LoadingSpinner size="sm" className="gap-0" /> : null}
+              {deleteMutation.isPending ? <LoadingSpinner size="sm" variant="icon" className="gap-0" /> : null}
               Supprimer
             </AlertDialogAction>
           </AlertDialogFooter>

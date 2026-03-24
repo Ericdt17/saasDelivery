@@ -178,7 +178,7 @@ const Parametres = () => {
                 </div>
               ) : isLoadingAgency ? (
                 <div className="flex items-center justify-center py-8">
-                  <LoadingSpinner size="md" />
+                  <LoadingSpinner size="md" variant="gif" />
                 </div>
               ) : (
                 <>
@@ -403,7 +403,7 @@ const Parametres = () => {
                    disabled={saveMutation.isPending || (isLoadingAgency && !agencyId)}
                  >
                    {saveMutation.isPending ? (
-                     <LoadingSpinner size="sm" className="gap-0" />
+                     <LoadingSpinner size="sm" variant="icon" className="gap-0" />
                    ) : (
                      <Save className="w-4 h-4" />
                    )}

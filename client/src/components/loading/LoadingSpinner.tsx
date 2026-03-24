@@ -22,7 +22,8 @@ const iconSizeClasses = {
 };
 
 /**
- * Indicateur de chargement — par défaut l’animation GIF livreur (`/loadinganimation.gif`).
+ * Indicateur de chargement — GIF livreur par défaut (`/loadinganimation.gif`).
+ * Dans les boutons, utiliser `variant="icon"` (spinner Lucide) pour éviter le GIF.
  */
 export function LoadingSpinner({ size = "md", variant = "gif", className, text }: LoadingSpinnerProps) {
   return (
