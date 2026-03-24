@@ -26,6 +26,7 @@ import {
   Eye,
   Download,
   ArrowLeft,
+  CircleAlert,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { StatCard } from "@/components/ui/stat-card";
@@ -67,7 +68,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { Badge } from "@/components/ui/badge";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { getGroupById } from "@/services/groups";
 import { getDailyStats } from "@/services/stats";
 import { buildApiUrl, API_ENDPOINTS } from "@/lib/api-config";
@@ -874,8 +879,32 @@ export default function GroupDetail() {
                                 <span className="text-muted-foreground">-</span>
                               )}
                             </TableCell>
-                            <TableCell>
-                              <div className="flex flex-col gap-1">
+                            <TableCell className="overflow-visible align-middle pt-1">
+                              <div
+                                className="relative inline-block"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                {livraison.tarif_non_applique ? (
+                                  <Tooltip delayDuration={200}>
+                                    <TooltipTrigger asChild>
+                                      <button
+                                        type="button"
+                                        className="absolute -left-2 -top-2 z-10 flex size-6 items-center justify-center rounded-full border border-border bg-card text-red-600 shadow-sm outline-none hover:bg-muted/90 focus-visible:ring-2 focus-visible:ring-ring dark:text-red-400"
+                                        aria-label="Frais de livraison non appliqués — voir l'info-bulle"
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        <CircleAlert className="size-3.5" strokeWidth={2.25} />
+                                      </button>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="top" align="start" className="max-w-xs text-left">
+                                      <p className="font-medium text-foreground">Frais de livraison non appliqués</p>
+                                      <p className="mt-1 text-muted-foreground">
+                                        Le tarif du quartier n&apos;a pas été appliqué automatiquement à cette livraison.
+                                        Vérifiez les tarifs ou saisissez les frais à la main si besoin.
+                                      </p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                ) : null}
                                 <Select
                                   value={livraison.statut}
                                   onValueChange={(value) => {
@@ -907,11 +936,6 @@ export default function GroupDetail() {
                                     <SelectItem value="present_ne_decroche_zone2">Chauffeur présent - Client ne décroche pas Zone 2</SelectItem>
                                   </SelectContent>
                                 </Select>
-                                {livraison.tarif_non_applique && (
-                                  <Badge variant="outline" className="w-fit text-warning border-warning/40">
-                                    Frais de livraisons non appliquer
-                                  </Badge>
-                                )}
                               </div>
                             </TableCell>
                             <TableCell className="hidden lg:table-cell">

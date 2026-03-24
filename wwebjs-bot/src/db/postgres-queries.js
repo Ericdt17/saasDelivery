@@ -332,6 +332,7 @@ function createPostgresQueries(pool) {
       "status",
       "amount_due",
       "amount_paid",
+      "group_id",
     ];
     const safeSortBy = allowedSortFields.includes(sortBy)
       ? sortBy
