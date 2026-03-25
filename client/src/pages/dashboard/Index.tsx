@@ -111,6 +111,7 @@ const Index = () => {
   const {
     data: dayDeliveriesData,
     isLoading: isLoadingDayDeliveries,
+    isError: isErrorDayDeliveries,
   } = useQuery({
     queryKey: [
       "deliveries",
@@ -200,10 +201,10 @@ const Index = () => {
   }, [isSingleDay, dailyStats, deliveriesData, dayDeliveriesData]);
 
   const isLoading =
-    isSingleDay 
+    isSingleDay
       ? (isLoadingDailyStats || isLoadingDayDeliveries)
       : isLoadingDeliveries;
-  const isError = isSingleDay ? isErrorDailyStats : isErrorDeliveries;
+  const isError = isSingleDay ? (isErrorDailyStats || isErrorDayDeliveries) : isErrorDeliveries;
   const error = isSingleDay ? dailyStatsError : deliveriesError;
   const refetch = isSingleDay ? refetchDailyStats : refetchDeliveries;
 
@@ -407,7 +408,7 @@ const Index = () => {
                 />
                 <StatCard
                   title="Montant Total"
-                  value={formatCurrency(stats.montantEncaisse)}
+                  value={formatCurrency(stats.chiffreAffaires)}
                   icon={Wallet}
                   variant="success"
                 />
