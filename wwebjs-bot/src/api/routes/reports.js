@@ -15,6 +15,7 @@ const {
   adapter,
 } = require("../../db");
 const { buildReportPdfData } = require("../../lib/reportAggregates");
+const logger = require("../../logger");
 
 // All routes require authentication
 router.use(authenticateToken);
@@ -114,7 +115,7 @@ router.get("/groups/:groupId/pdf", async (req, res, next) => {
         }
       });
     } catch (error) {
-      console.error("[Reports API] Error fetching standard tariffs:", error);
+      logger.error({ err: error }, "Reports API: error fetching standard tariffs");
     }
 
     // Totals and per-quartier breakdown (see reportAggregates.js)
@@ -140,7 +141,7 @@ router.get("/groups/:groupId/pdf", async (req, res, next) => {
     // ---------------- PDF Debug Harness (temporary) ----------------
     // Helps identify who creates extra pages (manual addPage vs PDFKit auto pageAdded)
     // and why a footer-only page appears.
-    const PDF_DEBUG = true;
+    const PDF_DEBUG = false;
     let debugPageIndex = 1; // starts at 1
     let isManualAddPage = false;
     let manualAddPageReason = "";
@@ -171,25 +172,11 @@ router.get("/groups/:groupId/pdf", async (req, res, next) => {
       const reason = isManualAddPage ? manualAddPageReason : undefined;
       lastPageAddKind = kind;
 
-      console.log("[PDFDBG] pageAdded", {
-        page: debugPageIndex,
-        kind,
-        reason,
-        currentY,
-        docY: doc?.y,
-        hasContentOnPage,
-        footerInProgress,
-      });
+      if (PDF_DEBUG) console.log("[PDFDBG] pageAdded", { page: debugPageIndex, kind, reason, currentY, docY: doc?.y, hasContentOnPage, footerInProgress });
 
       // Redessiner un header léger sur chaque nouvelle page
       // (sans gros logo, mais avec infos agence + client + période)
-      console.log(
-        `[PDFDBG] Drawing header on page ${debugPageIndex} (kind: ${kind})`
-      );
       drawHeader(false);
-      console.log(
-        `[PDFDBG] Header drawn on page ${debugPageIndex}, currentY after header: ${currentY}`
-      );
 
       // Si la page a été créée automatiquement pendant un footer,
       // on considère que le footer a simplement "poussé" sur une nouvelle page.
@@ -203,9 +190,6 @@ router.get("/groups/:groupId/pdf", async (req, res, next) => {
         // on NE doit PAS appeler manuellement addPage("beforeResume") ensuite.
         if (footerInProgress) {
           suppressNextManualAddForResume = true;
-          console.log(
-            "[PDFDBG] auto pageAdded during footer → suppress next manual beforeResume"
-          );
         }
       } else {
         // manual addPage: currentY sera repositionné par notre code juste après
@@ -220,17 +204,7 @@ router.get("/groups/:groupId/pdf", async (req, res, next) => {
       // Si une page auto a déjà été créée juste après le footer du bloc Résumé,
       // ne pas recréer une nouvelle page "manuelle" pour le même bloc.
       if (reason === "beforeResume" && suppressNextManualAddForResume) {
-        console.log(
-          "[PDFDBG] addPage() suppressed (auto page already created for Résumé)",
-          {
-            reason,
-            currentPage: doc.page?.number,
-            currentY,
-          }
-        );
-        dbg("addPage() suppressed (auto page already created for Résumé)", {
-          reason,
-        });
+        dbg("addPage() suppressed (auto page already created for Résumé)", { reason });
         suppressNextManualAddForResume = false;
         return;
       }
@@ -238,20 +212,8 @@ router.get("/groups/:groupId/pdf", async (req, res, next) => {
       const pageBeforeAdd = doc.page?.number;
       isManualAddPage = true;
       manualAddPageReason = reason || "";
-      console.log("[PDFDBG] addPage() called", {
-        reason,
-        pageBeforeAdd,
-        currentY,
-        docY: doc?.y,
-        hasContentOnPage,
-      });
       dbg("addPage()", { reason });
       doc.addPage();
-      console.log("[PDFDBG] addPage() completed", {
-        reason,
-        pageBeforeAdd,
-        pageAfterAdd: doc.page?.number,
-      });
     };
 
     const markContent = (tag) => {
@@ -304,7 +266,7 @@ router.get("/groups/:groupId/pdf", async (req, res, next) => {
             fit: [logoWidth, logoHeight],
           });
         } catch (error) {
-          console.error("[PDF] Error loading logo:", error);
+          logger.error({ err: error }, "PDF: error loading logo");
         }
       }
 
@@ -385,13 +347,6 @@ router.get("/groups/:groupId/pdf", async (req, res, next) => {
       const pageBeforeFooter = docInstance.page?.number;
       const currentYBeforeFooter = currentY;
       footerInProgress = true;
-      console.log("[PDFDBG] drawFooter() called", {
-        pageBeforeFooter,
-        currentYBeforeFooter,
-        docY: docInstance?.y,
-        hasContentOnPage,
-        stackTop: new Error().stack?.split("\n").slice(0, 5).join("\n"),
-      });
       dbg("drawFooter()", {
         stackTop: new Error().stack?.split("\n").slice(0, 5).join("\n"),
       });
@@ -451,14 +406,6 @@ router.get("/groups/:groupId/pdf", async (req, res, next) => {
       docInstance.fillColor("#000000");
       const pageAfterFooter = docInstance.page?.number;
       const currentYAfterFooter = currentY;
-      console.log("[PDFDBG] drawFooter() finished", {
-        pageBeforeFooter,
-        pageAfterFooter,
-        pageChanged: pageBeforeFooter !== pageAfterFooter,
-        currentYBeforeFooter,
-        currentYAfterFooter,
-        docY: docInstance?.y,
-      });
       footerInProgress = false;
     };
 
@@ -480,16 +427,6 @@ router.get("/groups/:groupId/pdf", async (req, res, next) => {
 
         if (hasContentOnPage && currentY >= MIN_CONTENT_HEIGHT) {
           // Page avec VRAI contenu (au moins 200pt) → on la clôture proprement avec footer
-          console.log(
-            "[PDF] ensureSpace ferme une page - hasContentOnPage =",
-            hasContentOnPage,
-            "neededHeight =",
-            neededHeight,
-            "currentY =",
-            currentY,
-            "page =",
-            doc.page.number
-          );
           drawFooter(doc);
           addPage("ensureSpace");
           currentY = 50;
@@ -497,14 +434,6 @@ router.get("/groups/:groupId/pdf", async (req, res, next) => {
           if (onNewPage) onNewPage();
         } else {
           // Page vide ou quasi-vide : NE PAS dessiner de footer pour éviter une page "footer seul"
-          console.log(
-            "[PDF] ensureSpace page vide/quasi-vide - pas de footer, currentY =",
-            currentY,
-            "neededHeight =",
-            neededHeight,
-            "hasContentOnPage =",
-            hasContentOnPage
-          );
           // On remet juste le curseur en haut et on attend le vrai contenu.
           currentY = 50;
           hasContentOnPage = false; // Reset car on change de page sans footer
@@ -969,16 +898,6 @@ router.get("/groups/:groupId/pdf", async (req, res, next) => {
     //                (18 * 3 lines: Total encaissé, Total tarifs, Reste à percevoir) = ~142 points
     const spaceForResume = 45 + 15 + 28 + 18 * 3; // ~142 points (reduced after removing "Net à reverser")
 
-    console.log("[PDFDBG] Before Résumé section check:", {
-      currentY,
-      spaceForResume,
-      SAFE_PAGE_BREAK,
-      needsPageBreak: currentY + spaceForResume > SAFE_PAGE_BREAK,
-      pageNumber: doc.page?.number,
-      docY: doc?.y,
-      hasContentOnPage,
-    });
-
     // Manual page break check for Résumé (like we did before)
     // This ensures content is immediately written on the new page if needed
     const MIN_CONTENT_HEIGHT_FOR_FOOTER = 200; // Même seuil que dans ensureSpace
@@ -1064,48 +983,14 @@ router.get("/groups/:groupId/pdf", async (req, res, next) => {
     doc.fillColor("#000000");
 
     // Draw footer on the last page if it has content
-    console.log("[PDFDBG] Before final footer check:", {
-      hasContentOnPage,
-      currentY,
-      pageNumber: doc.page?.number,
-      docY: doc?.y,
-      willDrawFooter: hasContentOnPage && currentY >= 200,
-    });
-
     if (hasContentOnPage && currentY >= 200) {
-      console.log("[PDFDBG] Drawing final footer on page", doc.page?.number);
       drawFooter(doc);
-      console.log(
-        "[PDFDBG] Final footer drawn, currentY:",
-        currentY,
-        "docY:",
-        doc?.y,
-        "pageNumber:",
-        doc.page?.number
-      );
-    } else {
-      console.log(
-        "[PDFDBG] Skipping final footer (hasContentOnPage:",
-        hasContentOnPage,
-        "currentY:",
-        currentY,
-        "< 200)"
-      );
     }
 
     // Finalize PDF
-    console.log(
-      "[PDFDBG] About to call doc.end(), current page count:",
-      debugPageIndex,
-      "currentY:",
-      currentY,
-      "docY:",
-      doc?.y
-    );
     doc.end();
-    console.log("[PDFDBG] doc.end() called, final page count:", debugPageIndex);
   } catch (error) {
-    console.error("[Reports API] Error generating PDF:", error);
+    logger.error({ err: error }, "Reports API: error generating PDF");
     next(error);
   }
 });

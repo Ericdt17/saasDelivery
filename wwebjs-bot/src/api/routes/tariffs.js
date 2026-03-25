@@ -21,6 +21,7 @@ const {
   getTariffByAgencyAndQuartier,
   adapter,
 } = require("../../db");
+const logger = require("../../logger");
 
 // Configure multer for file uploads
 const upload = multer({
@@ -44,15 +45,12 @@ router.get("/", async (req, res, next) => {
     // Super admin sees all tariffs, agency admin sees only their tariffs
     if (req.user.role === "super_admin") {
       tariffs = await getAllTariffs();
-      console.log(`[Tariffs API] Super admin - Found ${tariffs?.length || 0} tariffs`);
     } else {
       // Agency admin - only their tariffs
       // Use agencyId from token, or fallback to userId if agencyId is not set
       const agencyId = req.user.agencyId !== null && req.user.agencyId !== undefined 
         ? req.user.agencyId 
         : req.user.userId;
-      
-      console.log("[Tariffs API] Using agencyId:", agencyId);
       
       if (!agencyId) {
         return res.status(403).json({
@@ -63,7 +61,6 @@ router.get("/", async (req, res, next) => {
       }
       
       tariffs = await getTariffsByAgency(agencyId);
-      console.log(`[Tariffs API] Agency admin - Found ${tariffs?.length || 0} tariffs`);
     }
 
     // Handle array response from queries
@@ -74,7 +71,7 @@ router.get("/", async (req, res, next) => {
       data: tariffList,
     });
   } catch (error) {
-    console.error("[Tariffs API] Error:", error);
+    logger.error({ err: error }, "Tariffs API error");
     next(error);
   }
 });
@@ -119,7 +116,7 @@ router.get("/:id", async (req, res, next) => {
       data: tariff,
     });
   } catch (error) {
-    console.error("[Tariffs API] Error:", error);
+    logger.error({ err: error }, "Tariffs API error");
     next(error);
   }
 });
@@ -227,7 +224,7 @@ router.post("/", async (req, res, next) => {
       data: tariff,
     });
   } catch (error) {
-    console.error("[Tariffs API] Error:", error);
+    logger.error({ err: error }, "Tariffs API error");
     next(error);
   }
 });
@@ -330,7 +327,7 @@ router.put("/:id", async (req, res, next) => {
       data: updated,
     });
   } catch (error) {
-    console.error("[Tariffs API] Error:", error);
+    logger.error({ err: error }, "Tariffs API error");
     next(error);
   }
 });
@@ -380,7 +377,7 @@ router.delete("/:id", async (req, res, next) => {
       message: "Tariff deleted successfully",
     });
   } catch (error) {
-    console.error("[Tariffs API] Error:", error);
+    logger.error({ err: error }, "Tariffs API error");
     next(error);
   }
 });
@@ -509,7 +506,7 @@ router.post("/import", upload.single("file"), async (req, res, next) => {
           created++;
         }
       } catch (error) {
-        console.error(`[Tariffs API] Error processing row ${rowNumber}:`, error);
+        logger.error({ err: error, row: rowNumber }, "Tariffs import: error processing row");
         errors.push({
           row: rowNumber,
           quartier: quartier,
@@ -529,7 +526,7 @@ router.post("/import", upload.single("file"), async (req, res, next) => {
       },
     });
   } catch (error) {
-    console.error("[Tariffs API] Import error:", error);
+    logger.error({ err: error }, "Tariffs API: import error");
     next(error);
   }
 });

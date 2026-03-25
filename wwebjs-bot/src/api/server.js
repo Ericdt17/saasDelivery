@@ -1,4 +1,5 @@
 const express = require("express");
+const helmet = require("helmet");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
 const pinoHttp = require("pino-http");
@@ -16,6 +17,12 @@ const errorHandler = require("./middleware/errorHandler");
 const app = express();
 // Use Render's PORT env var (standard), fallback to API_PORT for local dev
 const PORT = process.env.PORT || process.env.API_PORT || 3000;
+
+// Fail fast if ALLOWED_ORIGINS is not configured in production
+if (process.env.NODE_ENV === "production" && !process.env.ALLOWED_ORIGINS) {
+  logger.fatal("ALLOWED_ORIGINS is not set in production — refusing to start");
+  process.exit(1);
+}
 
 // Middleware
 // CORS configuration - allow requests from frontend
@@ -57,9 +64,8 @@ const corsOptions = {
           callback(new Error("Not allowed by CORS"));
         }
       } else {
-        // If ALLOWED_ORIGINS not set, allow all (less secure but works)
-        logger.warn("CORS: ALLOWED_ORIGINS not set, allowing all origins");
-        callback(null, true);
+        // Unreachable in production (fail-fast check above ensures ALLOWED_ORIGINS is set)
+        callback(new Error("Not allowed by CORS"));
       }
     } else {
       // Development: allow all
@@ -72,6 +78,11 @@ const corsOptions = {
   exposedHeaders: ["Set-Cookie"],
 };
 
+app.use(helmet({
+  // crossOriginResourcePolicy is set to same-site by default which blocks
+  // cross-origin PDF downloads — relax to cross-origin for the reports route.
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+}));
 app.use(cors(corsOptions)); // Enable CORS with configuration
 app.use(cookieParser()); // Parse cookies
 
@@ -246,9 +257,44 @@ app.use(errorHandler);
 
 // Start server
 if (require.main === module) {
-  app.listen(PORT, () => {
-    logger.info({ port: PORT }, `API server started`);
+  process.on('uncaughtException', (err) => {
+    logger.fatal({ err }, 'uncaughtException — process will exit');
+    process.exit(1);
   });
+
+  process.on('unhandledRejection', (reason) => {
+    logger.fatal({ err: reason }, 'unhandledRejection — process will exit');
+    process.exit(1);
+  });
+
+  const server = app.listen(PORT, () => {
+    logger.info({ port: PORT }, 'API server started');
+  });
+
+  async function shutdown(signal) {
+    logger.info({ signal }, 'Shutdown signal received — draining connections');
+
+    server.close(async () => {
+      try {
+        const { adapter } = require('../db');
+        await adapter.close();
+        logger.info('Postgres pool closed — exiting cleanly');
+      } catch (err) {
+        logger.error({ err }, 'Error closing Postgres pool');
+      } finally {
+        process.exit(0);
+      }
+    });
+
+    // Force-exit if drain exceeds 25 s (Render sends SIGKILL at 30 s)
+    setTimeout(() => {
+      logger.warn('Graceful shutdown timed out — forcing exit');
+      process.exit(1);
+    }, 25_000).unref();
+  }
+
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT',  () => shutdown('SIGINT'));
 }
 
 module.exports = app;

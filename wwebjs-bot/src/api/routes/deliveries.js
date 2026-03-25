@@ -16,6 +16,7 @@ const {
   computeTariffPending,
   computeAmountPaidAfterFee,
 } = require('../../lib/deliveryCalculations');
+const logger = require('../../logger');
 
 const VALID_STATUSES = [
   'pending', 'delivered', 'failed', 'cancelled', 'pickup',
@@ -272,21 +273,17 @@ router.post('/', async (req, res, next) => {
         if (parsedAmountPaid === 0 && parsedAmountDue > 0) {
           finalAmountPaid = computeAmountPaidAfterFee(parsedAmountDue, finalDeliveryFee);
         }
-        console.log(`[Delivery Create] Applied automatic pickup tariff: ${finalDeliveryFee} FCFA`);
       } else if (parsedStatus === 'present_ne_decroche_zone1') {
         // Apply fixed zone1 tariff of 500 FCFA
         finalDeliveryFee = 500;
         finalAmountPaid = 0; // Force to 0 for this status
-        console.log(`[Delivery Create] Applied automatic zone1 tariff: ${finalDeliveryFee} FCFA`);
       } else if (parsedStatus === 'present_ne_decroche_zone2') {
         // Apply fixed zone2 tariff of 1000 FCFA
         finalDeliveryFee = 1000;
         finalAmountPaid = 0; // Force to 0 for this status
-        console.log(`[Delivery Create] Applied automatic zone2 tariff: ${finalDeliveryFee} FCFA`);
       } else if (parsedStatus === 'delivered' || parsedStatus === 'client_absent') {
         // Apply tariff from quartier (same as PUT route logic)
         if (!quartier) {
-          console.log(`[Delivery Create] Warning: No quartier specified for status "${parsedStatus}", status change allowed without tariff`);
         } else {
           try {
             const tariffResult = await getTariffByAgencyAndQuartier(agencyId, quartier);
@@ -304,13 +301,9 @@ router.post('/', async (req, res, next) => {
                 // For "client_absent": force amount_paid = 0
                 finalAmountPaid = 0;
               }
-              
-              console.log(`[Delivery Create] Applied automatic tariff: ${finalDeliveryFee} for quartier "${quartier}"`);
             } else {
-              console.log(`[Delivery Create] Warning: No tariff found for quartier "${quartier}", status change allowed without tariff`);
             }
           } catch (error) {
-            console.log(`[Delivery Create] Error applying tariff: ${error.message}`);
           }
         }
       }
@@ -320,12 +313,10 @@ router.post('/', async (req, res, next) => {
       if (parsedStatus === 'client_absent' || parsedStatus === 'present_ne_decroche_zone1' || parsedStatus === 'present_ne_decroche_zone2') {
         // These statuses always force amount_paid = 0, regardless of delivery_fee
         finalAmountPaid = 0;
-        console.log(`[Delivery Create] Applied delivery_fee: ${parsedDeliveryFee}, amount_paid forced to 0 (status: ${parsedStatus})`);
       } else if (parsedStatus === 'delivered' || parsedStatus === 'pickup') {
         // For statuses where delivery is completed (delivered, pickup), calculate amount_paid if needed
         if (parsedAmountPaid === 0 && parsedAmountDue > 0) {
           finalAmountPaid = computeAmountPaidAfterFee(parsedAmountDue, parsedDeliveryFee);
-          console.log(`[Delivery Create] Applied delivery_fee: ${parsedDeliveryFee}, calculated amount_paid: ${parsedAmountDue} -> ${finalAmountPaid} (${parsedAmountDue} - ${parsedDeliveryFee})`);
         }
       }
       // For "pending" and other statuses, keep amount_paid as provided by user (don't auto-calculate)
@@ -396,8 +387,6 @@ router.put('/:id', async (req, res, next) => {
     const manualDeliveryFee = updates.delivery_fee !== undefined && updates.delivery_fee !== null;
     // Convert to number to handle both string (PostgreSQL) and number types
     const currentDeliveryFee = parseFloat(delivery.delivery_fee) || 0;
-    
-    console.log(`[Delivery Update] Debug - manualDeliveryFee: ${manualDeliveryFee}, currentDeliveryFee: ${currentDeliveryFee}, delivery.delivery_fee (raw): ${delivery.delivery_fee}, type: ${typeof delivery.delivery_fee}`);
 
     // Helper function to apply tariff logic (used for both "delivered" and "client_absent")
     const applyTariffLogic = async (forceAmountPaidToZero = false) => {
@@ -419,7 +408,6 @@ router.put('/:id', async (req, res, next) => {
       if (!quartier) {
         // Allow status change without quartier (same behavior as creation)
         // Just log a warning and continue without applying tariff
-        console.log(`[Delivery Update] Warning: No quartier specified for status "${updates.status || delivery.status}", status change allowed without tariff`);
         if (forceAmountPaidToZero) {
           updates.amount_paid = 0;
         }
@@ -436,7 +424,6 @@ router.put('/:id', async (req, res, next) => {
         // If forcing amount_paid to 0 (client_absent), set it to 0
         if (forceAmountPaidToZero) {
           updates.amount_paid = 0;
-          console.log(`[Delivery Update] Using manual delivery_fee: ${manualFee} for quartier "${quartier}", amount_paid forced to 0 (client_absent)`);
         } else {
           // Calculate new amount_paid (subtract manual fee from current amount_paid)
           // Only update amount_paid if it's not explicitly set in the request
@@ -449,35 +436,25 @@ router.put('/:id', async (req, res, next) => {
               // No payment recorded yet, assume full payment was made
               const newAmountPaid = computeAmountPaidAfterFee(currentAmountDue, manualFee);
               updates.amount_paid = newAmountPaid;
-              console.log(`[Delivery Update] Using manual delivery_fee: ${manualFee} for quartier "${quartier}"`);
-              console.log(`[Delivery Update] No payment recorded, assuming full payment: ${currentAmountDue} -> ${newAmountPaid} (${currentAmountDue} - ${manualFee})`);
             } else if (currentAmountPaid > 0) {
               // Payment already recorded: subtract manual fee
               const newAmountPaid = computeAmountPaidAfterFee(currentAmountPaid, manualFee);
               updates.amount_paid = newAmountPaid;
-              console.log(`[Delivery Update] Using manual delivery_fee: ${manualFee} for quartier "${quartier}"`);
-              console.log(`[Delivery Update] Amount paid: ${currentAmountPaid} -> ${newAmountPaid}`);
             } else {
               // amount_paid is 0 and amount_due is 0, keep it at 0
-              console.log(`[Delivery Update] Using manual delivery_fee: ${manualFee} for quartier "${quartier}"`);
-              console.log(`[Delivery Update] Amount paid remains 0 (no payment received yet)`);
             }
           } else {
             // amount_paid is explicitly set in the request, use it as is
-            console.log(`[Delivery Update] Using manual delivery_fee: ${manualFee} for quartier "${quartier}"`);
-            console.log(`[Delivery Update] Amount paid explicitly set to: ${updates.amount_paid}`);
           }
         }
       } else if (currentDeliveryFee > 0) {
         // Delivery already has a manual delivery_fee set, preserve it
         const existingFee = parseFloat(currentDeliveryFee) || 0;
-        console.log(`[Delivery Update] Found existing delivery_fee: ${existingFee} (from delivery.delivery_fee: ${delivery.delivery_fee}), preserving it`);
         updates.delivery_fee = existingFee;
         
         // If forcing amount_paid to 0 (client_absent), set it to 0
         if (forceAmountPaidToZero) {
           updates.amount_paid = 0;
-          console.log(`[Delivery Update] Preserving existing delivery_fee: ${existingFee} for quartier "${quartier}", amount_paid forced to 0 (client_absent)`);
         } else {
           // Calculate new amount_paid using existing fee
           // Only update amount_paid if it's not explicitly set in the request
@@ -490,23 +467,15 @@ router.put('/:id', async (req, res, next) => {
               // No payment recorded yet, assume full payment was made
               const newAmountPaid = computeAmountPaidAfterFee(currentAmountDue, existingFee);
               updates.amount_paid = newAmountPaid;
-              console.log(`[Delivery Update] Preserving existing delivery_fee: ${existingFee} for quartier "${quartier}"`);
-              console.log(`[Delivery Update] No payment recorded, assuming full payment: ${currentAmountDue} -> ${newAmountPaid} (${currentAmountDue} - ${existingFee})`);
             } else if (currentAmountPaid > 0) {
               // Payment already recorded: subtract existing fee
               const newAmountPaid = computeAmountPaidAfterFee(currentAmountPaid, existingFee);
               updates.amount_paid = newAmountPaid;
-              console.log(`[Delivery Update] Preserving existing delivery_fee: ${existingFee} for quartier "${quartier}"`);
-              console.log(`[Delivery Update] Amount paid: ${currentAmountPaid} -> ${newAmountPaid}`);
             } else {
               // amount_paid is 0 and amount_due is 0, keep it at 0
-              console.log(`[Delivery Update] Preserving existing delivery_fee: ${existingFee} for quartier "${quartier}"`);
-              console.log(`[Delivery Update] Amount paid remains 0 (no payment received yet)`);
             }
           } else {
             // amount_paid is explicitly set in the request, use it as is
-            console.log(`[Delivery Update] Preserving existing delivery_fee: ${existingFee} for quartier "${quartier}"`);
-            console.log(`[Delivery Update] Amount paid explicitly set to: ${updates.amount_paid}`);
           }
         }
       } else {
@@ -518,7 +487,6 @@ router.put('/:id', async (req, res, next) => {
         if (!tariff || !tariff.tarif_amount) {
           // If no tariff found, log a warning but allow the status change
           // The delivery will be updated without tariff applied (delivery_fee remains 0)
-          console.log(`[Delivery Update] Warning: No tariff found for quartier "${quartier}", status change allowed without tariff`);
           if (forceAmountPaidToZero) {
             updates.amount_paid = 0;
           }
@@ -531,7 +499,6 @@ router.put('/:id', async (req, res, next) => {
           // If forcing amount_paid to 0 (client_absent), set it to 0
           if (forceAmountPaidToZero) {
             updates.amount_paid = 0;
-            console.log(`[Delivery Update] Applied automatic tariff: ${tariffAmount} for quartier "${quartier}", amount_paid forced to 0 (client_absent)`);
           } else {
             // Calculate new amount_paid (subtract tariff from current amount_paid)
             // Only update amount_paid if it's not explicitly set in the request
@@ -545,29 +512,19 @@ router.put('/:id', async (req, res, next) => {
                 // No payment recorded yet, assume full payment was made
                 const newAmountPaid = computeAmountPaidAfterFee(currentAmountDue, tariffAmount);
                 updates.amount_paid = newAmountPaid;
-                console.log(`[Delivery Update] Applied automatic tariff: ${tariffAmount} for quartier "${quartier}"`);
-                console.log(`[Delivery Update] No payment recorded, assuming full payment: ${currentAmountDue} -> ${newAmountPaid} (${currentAmountDue} - ${tariffAmount})`);
               } else if (currentAmountPaid > 0 && currentAmountPaid < currentAmountDue) {
                 // Partial payment: subtract tariff from current amount_paid
                 const newAmountPaid = computeAmountPaidAfterFee(currentAmountPaid, tariffAmount);
                 updates.amount_paid = newAmountPaid;
-                console.log(`[Delivery Update] Applied automatic tariff: ${tariffAmount} for quartier "${quartier}"`);
-                console.log(`[Delivery Update] Partial payment: ${currentAmountPaid} -> ${newAmountPaid}`);
               } else if (currentAmountPaid >= currentAmountDue && currentAmountDue > 0) {
                 // Full payment already recorded: recalculate with tariff
                 const newAmountPaid = computeAmountPaidAfterFee(currentAmountDue, tariffAmount);
                 updates.amount_paid = newAmountPaid;
-                console.log(`[Delivery Update] Applied automatic tariff: ${tariffAmount} for quartier "${quartier}"`);
-                console.log(`[Delivery Update] Full payment recalculated: ${currentAmountPaid} -> ${newAmountPaid} (${currentAmountDue} - ${tariffAmount})`);
               } else {
                 // Edge case: keep current value
-                console.log(`[Delivery Update] Applied automatic tariff: ${tariffAmount} for quartier "${quartier}"`);
-                console.log(`[Delivery Update] Amount paid unchanged: ${currentAmountPaid}`);
               }
             } else {
               // amount_paid is explicitly set in the request, use it as is
-              console.log(`[Delivery Update] Applied automatic tariff: ${tariffAmount} for quartier "${quartier}"`);
-              console.log(`[Delivery Update] Amount paid explicitly set to: ${updates.amount_paid}`);
             }
           }
         }
@@ -614,19 +571,14 @@ router.put('/:id', async (req, res, next) => {
                 const currentAmountDue = parseFloat(updates.amount_due || delivery.amount_due) || 0;
                 const newAmountPaid = computeAmountPaidAfterFee(currentAmountDue, newTariff);
                 updates.amount_paid = newAmountPaid;
-                console.log(`[Delivery Update] Quartier changed: recalculated tariff from ${delivery.quartier} to ${newQuartier}`);
-                console.log(`[Delivery Update] New tariff: ${newTariff}, new amount_paid: ${newAmountPaid}`);
               }
             } else {
-              console.log(`[Delivery Update] Quartier changed but no tariff found for "${newQuartier}"`);
             }
           } catch (error) {
-            console.log(`[Delivery Update] Error recalculating tariff for new quartier: ${error.message}`);
           }
         }
       } else {
         // Tarif manuel fourni, l'utiliser (pas de recalcul automatique)
-        console.log(`[Delivery Update] Quartier changed but manual delivery_fee provided, using manual fee`);
       }
     }
     // CAS 3: Changement vers "failed" → annuler tarif et rembourser complètement
@@ -643,14 +595,10 @@ router.put('/:id', async (req, res, next) => {
         // On vient de "delivered" : rembourser le tarif d'abord, puis mettre à 0
         const amountPaidBrut = currentAmountPaid + currentDeliveryFee;
         updates.amount_paid = 0;
-        console.log(`[Delivery Update] Status changed from "delivered" to "failed": refunding tariff (${currentDeliveryFee} F) and full amount (${amountPaidBrut} F -> 0)`);
       } else if (currentAmountPaid > 0) {
         // Autre cas : rembourser le montant actuel
         updates.amount_paid = 0;
-        console.log(`[Delivery Update] Status changed to "failed": refunding ${currentAmountPaid} F (amount_paid set to 0)`);
       }
-      
-      console.log(`[Delivery Update] Status changed to "failed": tariff cancelled (delivery_fee set to 0)`);
     }
     // CAS 4: Changement vers "pickup" → appliquer tarif fixe 1000 FCFA et modifier amount_paid (comme "delivered")
     else if (statusChange.toPickup) {
@@ -674,13 +622,9 @@ router.put('/:id', async (req, res, next) => {
             // This ensures correct calculation when coming from "delivered" or other statuses with tariffs
             const newAmountPaid = computeAmountPaidAfterFee(currentAmountDue, manualFee);
             updates.amount_paid = newAmountPaid;
-            console.log(`[Delivery Update] Using manual delivery_fee: ${manualFee} for pickup`);
-            console.log(`[Delivery Update] Recalculated from amount_due: ${currentAmountDue} -> ${newAmountPaid} (${currentAmountDue} - ${manualFee})`);
           }
         } else {
           // amount_paid is explicitly set in the request, use it as is
-          console.log(`[Delivery Update] Using manual delivery_fee: ${manualFee} for pickup`);
-          console.log(`[Delivery Update] Amount paid explicitly set to: ${updates.amount_paid}`);
         }
       } else {
         // Always apply fixed pickup tariff of 1000 FCFA (replace any existing tariff)
@@ -696,13 +640,9 @@ router.put('/:id', async (req, res, next) => {
             // This ensures correct calculation when coming from "delivered" or other statuses with tariffs
             const newAmountPaid = computeAmountPaidAfterFee(currentAmountDue, pickupTariff);
             updates.amount_paid = newAmountPaid;
-            console.log(`[Delivery Update] Applied fixed pickup tariff: ${pickupTariff} FCFA`);
-            console.log(`[Delivery Update] Recalculated from amount_due: ${currentAmountDue} -> ${newAmountPaid} (${currentAmountDue} - ${pickupTariff})`);
           }
         } else {
           // amount_paid is explicitly set in the request, use it as is
-          console.log(`[Delivery Update] Applied fixed pickup tariff: ${pickupTariff} FCFA`);
-          console.log(`[Delivery Update] Amount paid explicitly set to: ${updates.amount_paid}`);
         }
       }
     }
@@ -717,12 +657,10 @@ router.put('/:id', async (req, res, next) => {
         const manualFee = parseFloat(updates.delivery_fee) || 0;
         updates.delivery_fee = manualFee;
         updates.amount_paid = 0;
-        console.log(`[Delivery Update] Using manual delivery_fee: ${manualFee} for present_ne_decroche_zone1, amount_paid forced to 0`);
       } else {
         // Always apply fixed zone1 tariff of 500 FCFA (replace any existing tariff)
         updates.delivery_fee = zone1Tariff;
         updates.amount_paid = 0;
-        console.log(`[Delivery Update] Applied fixed zone1 tariff: ${zone1Tariff} FCFA, amount_paid forced to 0`);
       }
     }
     // CAS 6: Changement vers "present_ne_decroche_zone2" → appliquer tarif fixe 1000 FCFA (comme "client_absent")
@@ -736,12 +674,10 @@ router.put('/:id', async (req, res, next) => {
         const manualFee = parseFloat(updates.delivery_fee) || 0;
         updates.delivery_fee = manualFee;
         updates.amount_paid = 0;
-        console.log(`[Delivery Update] Using manual delivery_fee: ${manualFee} for present_ne_decroche_zone2, amount_paid forced to 0`);
       } else {
         // Always apply fixed zone2 tariff of 1000 FCFA (replace any existing tariff)
         updates.delivery_fee = zone2Tariff;
         updates.amount_paid = 0;
-        console.log(`[Delivery Update] Applied fixed zone2 tariff: ${zone2Tariff} FCFA, amount_paid forced to 0`);
       }
     }
     // CAS 7: Changement DEPUIS "present_ne_decroche_zone1" ou "present_ne_decroche_zone2" vers un autre statut
@@ -752,7 +688,6 @@ router.put('/:id', async (req, res, next) => {
       if (currentDeliveryFee > 0) {
         updates.delivery_fee = 0;
         // amount_paid était déjà à 0 pour ces statuts, donc pas besoin de le modifier
-        console.log(`[Delivery Update] Status changed from "${delivery.status}" to "${updates.status}": tariff cancelled (delivery_fee: ${currentDeliveryFee} -> 0)`);
       }
     }
     // CAS 8: Changement DEPUIS "delivered" vers un autre statut (sauf "client_absent", "failed", "pickup", "present_ne_decroche_zone1", "present_ne_decroche_zone2" déjà gérés)
@@ -766,9 +701,6 @@ router.put('/:id', async (req, res, next) => {
         
         // Remettre amount_paid à 0 car on revient à "en cours" (pas encore payé)
         updates.amount_paid = 0;
-        
-        console.log(`[Delivery Update] Status changed from "delivered" to "${updates.status}": tariff cancelled (delivery_fee: ${currentDeliveryFee} -> 0)`);
-        console.log(`[Delivery Update] Amount paid reset to 0 (back to pending status, not yet paid)`);
       }
     }
     // Autre changement de statut ou pas de changement de statut
@@ -798,20 +730,15 @@ router.put('/:id', async (req, res, next) => {
             
             // Force recalculation if delivery_fee changed (ignore amount_paid from request)
             updates.amount_paid = newAmountPaid;
-            
-            console.log(`[Delivery Update] Manual delivery_fee update: ${previousFee} -> ${manualFee}`);
-            console.log(`[Delivery Update] Amount paid FORCED recalculation from amount_due: ${currentAmountDue} -> ${newAmountPaid} (${currentAmountDue} - ${manualFee})`);
           } else {
             // delivery_fee didn't change, use amount_paid from request if provided
             if (updates.amount_paid === undefined) {
               // Keep current amount_paid if not provided
               updates.amount_paid = parseFloat(delivery.amount_paid) || 0;
             }
-            console.log(`[Delivery Update] Manual delivery_fee update: ${previousFee} -> ${manualFee} (no change, keeping amount_paid as is)`);
           }
         } else {
           // For other statuses, just update the delivery_fee without recalculating amount_paid
-          console.log(`[Delivery Update] Manual delivery_fee update: ${parseFloat(delivery.delivery_fee) || 0} -> ${manualFee} (status: ${currentStatus}, no amount_paid recalculation)`);
         }
       }
       
@@ -825,8 +752,6 @@ router.put('/:id', async (req, res, next) => {
         if (updates.amount_paid === undefined && currentDeliveryFee > 0) {
           const newAmountPaid = computeAmountPaidAfterFee(newAmountDue, currentDeliveryFee);
           updates.amount_paid = newAmountPaid;
-          console.log(`[Delivery Update] amount_due changed: recalculated amount_paid from ${delivery.amount_due} to ${newAmountDue}`);
-          console.log(`[Delivery Update] New amount_paid: ${newAmountPaid} (${newAmountDue} - ${currentDeliveryFee})`);
         }
       }
     }
@@ -878,18 +803,11 @@ router.put('/:id', async (req, res, next) => {
     // Log final values for verification (important for group report calculations)
     // The amount to reverse to group is calculated as: sum(amount_paid) for all "delivered" deliveries
     // This is because: netARever = sum(amount_paid + delivery_fee) - sum(delivery_fee) = sum(amount_paid)
-    console.log(`[Delivery Update] Final values after update:`);
-    console.log(`   Status: ${delivery.status} -> ${updatedDelivery.status}`);
-    console.log(`   Amount Due: ${updatedDelivery.amount_due}`);
-    console.log(`   Amount Paid: ${delivery.amount_paid} -> ${updatedDelivery.amount_paid}`);
-    console.log(`   Delivery Fee: ${delivery.delivery_fee || 0} -> ${updatedDelivery.delivery_fee || 0}`);
     if (updatedDelivery.status === 'delivered') {
       // For "delivered" status, this delivery contributes to group reverse amount
       // Contribution = amount_paid (net amount after tariff deduction)
       const contribution = parseFloat(updatedDelivery.amount_paid) || 0;
-      console.log(`   ✅ This delivery contributes ${contribution} FCFA to group reverse amount`);
     } else {
-      console.log(`   ⚠️  This delivery does NOT contribute to group reverse (status: ${updatedDelivery.status})`);
     }
 
     // Save history for each modified field
@@ -928,7 +846,7 @@ router.put('/:id', async (req, res, next) => {
             });
           } catch (historyError) {
             // Log error but don't fail the update
-            console.error(`[Delivery Update] Error saving history for ${field}:`, historyError.message);
+            logger.error({ err: historyError, field }, "Error saving delivery history");
           }
         }
       }

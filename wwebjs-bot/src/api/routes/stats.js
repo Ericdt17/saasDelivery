@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const { authenticateToken } = require("../middleware/auth");
 const { getDeliveryStats } = require("../../db");
+const logger = require("../../logger");
 
 // All routes require authentication (cookie-based or Authorization header)
 router.use(authenticateToken);
@@ -38,14 +39,6 @@ router.get("/daily", async (req, res, next) => {
   try {
     const { date, group_id, agency_id: queryAgencyId } = req.query;
 
-    // Debug: Log user info
-    console.log("[Stats API] User info:", {
-      userId: req.user?.userId,
-      agencyId: req.user?.agencyId,
-      role: req.user?.role,
-      email: req.user?.email,
-    });
-
     // Validate and normalize date if provided
     const normalizedDate = date ? validateDate(date) : null;
 
@@ -66,11 +59,9 @@ router.get("/daily", async (req, res, next) => {
           ? req.user.agencyId
           : req.user.userId;
 
-      console.log("[Stats API] Using agencyId:", agency_id);
     } else if (req.user && req.user.role === "super_admin" && queryAgencyId) {
       // Super admin can filter by agency_id if provided in query
       agency_id = parseInt(queryAgencyId);
-      console.log("[Stats API] Super admin filtering by agencyId:", agency_id);
     }
 
     const stats = await getDeliveryStats(
@@ -78,8 +69,6 @@ router.get("/daily", async (req, res, next) => {
       agency_id,
       group_id ? parseInt(group_id) : null
     );
-
-    console.log("[Stats API] Stats result:", stats);
 
     const responseDate =
       normalizedDate || new Date().toISOString().split("T")[0];
@@ -92,7 +81,7 @@ router.get("/daily", async (req, res, next) => {
       group_id: group_id ? parseInt(group_id) : null,
     });
   } catch (error) {
-    console.error("[Stats API] Error:", error);
+    logger.error({ err: error }, "Stats API error");
     next(error);
   }
 });

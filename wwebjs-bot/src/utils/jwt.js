@@ -10,10 +10,11 @@ const config = require("../config");
 const JWT_SECRET = process.env.JWT_SECRET || "change-this-secret-in-production";
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "24h"; // 24 hours default
 
-// Validate JWT_SECRET in production
+// Validate JWT_SECRET in production — refuse to start with the insecure default
 if (process.env.NODE_ENV === "production" && (!process.env.JWT_SECRET || JWT_SECRET === "change-this-secret-in-production")) {
-  console.error("⚠️  WARNING: JWT_SECRET is not set or using default value in production!");
-  console.error("⚠️  This is a security risk. Please set JWT_SECRET environment variable.");
+  const logger = require("../logger");
+  logger.fatal("JWT_SECRET is not set or is using the default value in production — refusing to start");
+  process.exit(1);
 }
 
 /**

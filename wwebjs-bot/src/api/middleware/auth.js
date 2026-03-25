@@ -62,14 +62,6 @@ function authenticateToken(req, res, next) {
       throw error;
     }
 
-    // Debug: Log decoded token
-    console.log("[Auth Middleware] Decoded token:", {
-      userId: decoded.userId,
-      agencyId: decoded.agencyId,
-      email: decoded.email,
-      role: decoded.role,
-    });
-
     // Add user info to request object
     req.user = {
       userId: decoded.userId,
