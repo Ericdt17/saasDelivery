@@ -137,7 +137,7 @@ NODE_ENV=production
 
 # Database (Render PostgreSQL)
 DB_TYPE=postgres
-DATABASE_URL=postgresql://saas_delivery_db_user:Gryh4H17hHcGpaVu8tftB8V8IYdxyOzW@dpg-d4s9r7ggjchc73e8rdu0-a/saas_delivery_db
+DATABASE_URL=postgresql://USER:PASSWORD@HOST:5432/DATABASE_NAME
 
 # API Server (runs on VPS)
 API_PORT=3001
@@ -148,7 +148,7 @@ WHATSAPP_QR_PATH=./qr
 #GROUP_ID=your-group-id@g.us  # Optional: specific group, or leave empty for all groups
 
 # JWT Secret (generate a strong random string)
-JWT_SECRET=opensslrand-base6432`
+JWT_SECRET=<paste-output-of-openssl-rand-base64-32>
 
 # Timezone
 TIME_ZONE=UTC
