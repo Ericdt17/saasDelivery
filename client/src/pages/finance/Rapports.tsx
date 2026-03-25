@@ -330,9 +330,7 @@ const Rapports = () => {
                       Chiffre d'affaires
                     </p>
                     <p className="text-2xl font-bold text-success">
-                      {formatCurrency(
-                        currentData.encaisse + currentData.restant
-                      )}
+                      {formatCurrency(currentData.totalTarifs)}
                     </p>
                   </div>
                   <div className="p-4 rounded-xl bg-primary/10 border border-primary/20">
