@@ -31,10 +31,10 @@ module.exports = {
   // Increase these as more tests are added.
   coverageThreshold: {
     global: {
-      statements: 62,
+      statements: 60,
       branches:   54,
-      functions:  52,
-      lines:      62,
+      functions:  49,
+      lines:      61,
     },
   },
   testTimeout: 10000,

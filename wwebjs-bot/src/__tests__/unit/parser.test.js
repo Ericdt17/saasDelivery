@@ -86,4 +86,18 @@ describe('isDeliveryMessage', () => {
   it('returns false for a plain text message', () => {
     expect(isDeliveryMessage('ok merci')).toBe(false);
   });
+
+  it('returns false for a long free-text paragraph containing a phone and amount', () => {
+    // Regression: a conversational message that happens to contain a phone-like
+    // number and an amount must NOT be treated as a delivery order.
+    const msg =
+      "@52127 svp j'ai besoin qu'on me fasse le dépôt de la totalité de mon argent ce matin , " +
+      "bientôt mes publicités seront désactivées et j'aimerais payer à l'avance. " +
+      "Actuellement j'ai un solde publicitaire de 151000fr et je n'ai même pas la moitié entre les mains.";
+    expect(isDeliveryMessage(msg)).toBe(false);
+  });
+
+  it('returns false for a message with only 3 lines', () => {
+    expect(isDeliveryMessage('612345678\n2 robes\n15k')).toBe(false);
+  });
 });
