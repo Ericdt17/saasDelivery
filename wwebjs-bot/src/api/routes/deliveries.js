@@ -12,6 +12,10 @@ const {
   saveHistory,
   deleteDelivery,
 } = require('../../db');
+const {
+  computeTariffPending,
+  computeAmountPaidAfterFee,
+} = require('../../lib/deliveryCalculations');
 
 const VALID_STATUSES = [
   'pending', 'delivered', 'failed', 'cancelled', 'pickup',
@@ -31,20 +35,6 @@ const createDeliverySchema = z.object({
   delivery_fee: z.coerce.number().min(0).optional().nullable(),
   group_id: z.coerce.number().int().positive().optional().nullable(),
 });
-
-function computeTariffPending(status, quartier, deliveryFee) {
-  const normalizedStatus = (status || "").toString().toLowerCase();
-  const hasQuartier =
-    quartier !== null &&
-    quartier !== undefined &&
-    String(quartier).trim() !== "";
-  const fee =
-    deliveryFee !== null && deliveryFee !== undefined
-      ? parseFloat(deliveryFee)
-      : NaN;
-
-  return normalizedStatus === "pending" && hasQuartier && (!Number.isFinite(fee) || fee <= 0);
-}
 
 // All routes require authentication (cookie-based or Authorization header)
 router.use(authenticateToken);
@@ -280,7 +270,7 @@ router.post('/', async (req, res, next) => {
         // Apply fixed pickup tariff of 1000 FCFA
         finalDeliveryFee = 1000;
         if (parsedAmountPaid === 0 && parsedAmountDue > 0) {
-          finalAmountPaid = Math.max(0, Math.round((parsedAmountDue - finalDeliveryFee) * 100) / 100);
+          finalAmountPaid = computeAmountPaidAfterFee(parsedAmountDue, finalDeliveryFee);
         }
         console.log(`[Delivery Create] Applied automatic pickup tariff: ${finalDeliveryFee} FCFA`);
       } else if (parsedStatus === 'present_ne_decroche_zone1') {
@@ -308,7 +298,7 @@ router.post('/', async (req, res, next) => {
               if (parsedStatus === 'delivered') {
                 // For "delivered": calculate amount_paid = amount_due - delivery_fee
                 if (parsedAmountPaid === 0 && parsedAmountDue > 0) {
-                  finalAmountPaid = Math.max(0, Math.round((parsedAmountDue - finalDeliveryFee) * 100) / 100);
+                  finalAmountPaid = computeAmountPaidAfterFee(parsedAmountDue, finalDeliveryFee);
                 }
               } else if (parsedStatus === 'client_absent') {
                 // For "client_absent": force amount_paid = 0
@@ -334,7 +324,7 @@ router.post('/', async (req, res, next) => {
       } else if (parsedStatus === 'delivered' || parsedStatus === 'pickup') {
         // For statuses where delivery is completed (delivered, pickup), calculate amount_paid if needed
         if (parsedAmountPaid === 0 && parsedAmountDue > 0) {
-          finalAmountPaid = Math.max(0, Math.round((parsedAmountDue - parsedDeliveryFee) * 100) / 100);
+          finalAmountPaid = computeAmountPaidAfterFee(parsedAmountDue, parsedDeliveryFee);
           console.log(`[Delivery Create] Applied delivery_fee: ${parsedDeliveryFee}, calculated amount_paid: ${parsedAmountDue} -> ${finalAmountPaid} (${parsedAmountDue} - ${parsedDeliveryFee})`);
         }
       }
@@ -457,13 +447,13 @@ router.put('/:id', async (req, res, next) => {
             // When status changes to "delivered", if amount_paid is 0, assume full payment
             if (currentAmountPaid === 0 && currentAmountDue > 0) {
               // No payment recorded yet, assume full payment was made
-              const newAmountPaid = Math.max(0, Math.round((currentAmountDue - manualFee) * 100) / 100);
+              const newAmountPaid = computeAmountPaidAfterFee(currentAmountDue, manualFee);
               updates.amount_paid = newAmountPaid;
               console.log(`[Delivery Update] Using manual delivery_fee: ${manualFee} for quartier "${quartier}"`);
               console.log(`[Delivery Update] No payment recorded, assuming full payment: ${currentAmountDue} -> ${newAmountPaid} (${currentAmountDue} - ${manualFee})`);
             } else if (currentAmountPaid > 0) {
               // Payment already recorded: subtract manual fee
-              const newAmountPaid = Math.max(0, Math.round((currentAmountPaid - manualFee) * 100) / 100);
+              const newAmountPaid = computeAmountPaidAfterFee(currentAmountPaid, manualFee);
               updates.amount_paid = newAmountPaid;
               console.log(`[Delivery Update] Using manual delivery_fee: ${manualFee} for quartier "${quartier}"`);
               console.log(`[Delivery Update] Amount paid: ${currentAmountPaid} -> ${newAmountPaid}`);
@@ -498,13 +488,13 @@ router.put('/:id', async (req, res, next) => {
             // When status changes to "delivered", if amount_paid is 0, assume full payment
             if (currentAmountPaid === 0 && currentAmountDue > 0) {
               // No payment recorded yet, assume full payment was made
-              const newAmountPaid = Math.max(0, Math.round((currentAmountDue - existingFee) * 100) / 100);
+              const newAmountPaid = computeAmountPaidAfterFee(currentAmountDue, existingFee);
               updates.amount_paid = newAmountPaid;
               console.log(`[Delivery Update] Preserving existing delivery_fee: ${existingFee} for quartier "${quartier}"`);
               console.log(`[Delivery Update] No payment recorded, assuming full payment: ${currentAmountDue} -> ${newAmountPaid} (${currentAmountDue} - ${existingFee})`);
             } else if (currentAmountPaid > 0) {
               // Payment already recorded: subtract existing fee
-              const newAmountPaid = Math.max(0, Math.round((currentAmountPaid - existingFee) * 100) / 100);
+              const newAmountPaid = computeAmountPaidAfterFee(currentAmountPaid, existingFee);
               updates.amount_paid = newAmountPaid;
               console.log(`[Delivery Update] Preserving existing delivery_fee: ${existingFee} for quartier "${quartier}"`);
               console.log(`[Delivery Update] Amount paid: ${currentAmountPaid} -> ${newAmountPaid}`);
@@ -553,19 +543,19 @@ router.put('/:id', async (req, res, next) => {
               // we assume the client paid the full amount_due, so calculate: amount_paid = amount_due - delivery_fee
               if (currentAmountPaid === 0 && currentAmountDue > 0) {
                 // No payment recorded yet, assume full payment was made
-                const newAmountPaid = Math.max(0, Math.round((currentAmountDue - tariffAmount) * 100) / 100);
+                const newAmountPaid = computeAmountPaidAfterFee(currentAmountDue, tariffAmount);
                 updates.amount_paid = newAmountPaid;
                 console.log(`[Delivery Update] Applied automatic tariff: ${tariffAmount} for quartier "${quartier}"`);
                 console.log(`[Delivery Update] No payment recorded, assuming full payment: ${currentAmountDue} -> ${newAmountPaid} (${currentAmountDue} - ${tariffAmount})`);
               } else if (currentAmountPaid > 0 && currentAmountPaid < currentAmountDue) {
                 // Partial payment: subtract tariff from current amount_paid
-                const newAmountPaid = Math.max(0, Math.round((currentAmountPaid - tariffAmount) * 100) / 100);
+                const newAmountPaid = computeAmountPaidAfterFee(currentAmountPaid, tariffAmount);
                 updates.amount_paid = newAmountPaid;
                 console.log(`[Delivery Update] Applied automatic tariff: ${tariffAmount} for quartier "${quartier}"`);
                 console.log(`[Delivery Update] Partial payment: ${currentAmountPaid} -> ${newAmountPaid}`);
               } else if (currentAmountPaid >= currentAmountDue && currentAmountDue > 0) {
                 // Full payment already recorded: recalculate with tariff
-                const newAmountPaid = Math.max(0, Math.round((currentAmountDue - tariffAmount) * 100) / 100);
+                const newAmountPaid = computeAmountPaidAfterFee(currentAmountDue, tariffAmount);
                 updates.amount_paid = newAmountPaid;
                 console.log(`[Delivery Update] Applied automatic tariff: ${tariffAmount} for quartier "${quartier}"`);
                 console.log(`[Delivery Update] Full payment recalculated: ${currentAmountPaid} -> ${newAmountPaid} (${currentAmountDue} - ${tariffAmount})`);
@@ -622,7 +612,7 @@ router.put('/:id', async (req, res, next) => {
               // Recalculer amount_paid avec le nouveau tarif
               if (updates.amount_paid === undefined) {
                 const currentAmountDue = parseFloat(updates.amount_due || delivery.amount_due) || 0;
-                const newAmountPaid = Math.max(0, Math.round((currentAmountDue - newTariff) * 100) / 100);
+                const newAmountPaid = computeAmountPaidAfterFee(currentAmountDue, newTariff);
                 updates.amount_paid = newAmountPaid;
                 console.log(`[Delivery Update] Quartier changed: recalculated tariff from ${delivery.quartier} to ${newQuartier}`);
                 console.log(`[Delivery Update] New tariff: ${newTariff}, new amount_paid: ${newAmountPaid}`);
@@ -682,7 +672,7 @@ router.put('/:id', async (req, res, next) => {
           if (currentAmountDue > 0) {
             // Always recalculate from amount_due when changing status (like delivered logic)
             // This ensures correct calculation when coming from "delivered" or other statuses with tariffs
-            const newAmountPaid = Math.max(0, Math.round((currentAmountDue - manualFee) * 100) / 100);
+            const newAmountPaid = computeAmountPaidAfterFee(currentAmountDue, manualFee);
             updates.amount_paid = newAmountPaid;
             console.log(`[Delivery Update] Using manual delivery_fee: ${manualFee} for pickup`);
             console.log(`[Delivery Update] Recalculated from amount_due: ${currentAmountDue} -> ${newAmountPaid} (${currentAmountDue} - ${manualFee})`);
@@ -704,7 +694,7 @@ router.put('/:id', async (req, res, next) => {
           if (currentAmountDue > 0) {
             // Always recalculate from amount_due when changing status (like delivered logic)
             // This ensures correct calculation when coming from "delivered" or other statuses with tariffs
-            const newAmountPaid = Math.max(0, Math.round((currentAmountDue - pickupTariff) * 100) / 100);
+            const newAmountPaid = computeAmountPaidAfterFee(currentAmountDue, pickupTariff);
             updates.amount_paid = newAmountPaid;
             console.log(`[Delivery Update] Applied fixed pickup tariff: ${pickupTariff} FCFA`);
             console.log(`[Delivery Update] Recalculated from amount_due: ${currentAmountDue} -> ${newAmountPaid} (${currentAmountDue} - ${pickupTariff})`);
@@ -804,7 +794,7 @@ router.put('/:id', async (req, res, next) => {
           if (feeChanged) {
             // Always recalculate from amount_due when delivery_fee changes for delivered/pickup
             // This ensures correct calculation even if frontend sends old amount_paid value
-            const newAmountPaid = Math.max(0, Math.round((currentAmountDue - manualFee) * 100) / 100);
+            const newAmountPaid = computeAmountPaidAfterFee(currentAmountDue, manualFee);
             
             // Force recalculation if delivery_fee changed (ignore amount_paid from request)
             updates.amount_paid = newAmountPaid;
@@ -833,7 +823,7 @@ router.put('/:id', async (req, res, next) => {
         
         // Only recalculate if amount_paid is not explicitly set in the request
         if (updates.amount_paid === undefined && currentDeliveryFee > 0) {
-          const newAmountPaid = Math.max(0, Math.round((newAmountDue - currentDeliveryFee) * 100) / 100);
+          const newAmountPaid = computeAmountPaidAfterFee(newAmountDue, currentDeliveryFee);
           updates.amount_paid = newAmountPaid;
           console.log(`[Delivery Update] amount_due changed: recalculated amount_paid from ${delivery.amount_due} to ${newAmountDue}`);
           console.log(`[Delivery Update] New amount_paid: ${newAmountPaid} (${newAmountDue} - ${currentDeliveryFee})`);
