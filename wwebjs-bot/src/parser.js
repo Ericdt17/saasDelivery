@@ -457,50 +457,10 @@ function parseDeliveryMessage(text) {
     };
   }
 
-  // Fallback to flexible parsing (for backward compatibility)
-  const phone = extractPhone(text);
-  const amount = extractAmount(text);
-  const quartier = extractQuartier(text);
-  const carrier = extractCarrier(text);
-  const customer_name = extractCustomerName(text);
-
-  // Extract items
-  let items = text;
-  if (phone) {
-    items = items.replace(new RegExp(phone, "gi"), "");
-  }
-  if (amount) {
-    items = items.replace(new RegExp(amount.toString(), "gi"), "");
-    items = items.replace(new RegExp(amount / 1000 + "k", "gi"), "");
-  }
-  if (quartier) {
-    items = items.replace(new RegExp(quartier, "gi"), "");
-  }
-  if (carrier) {
-    items = items.replace(new RegExp(carrier, "gi"), "");
-  }
-
-  items = items
-    .replace(/client[:\s]+[^\n]+/gi, "")
-    .replace(/nom[:\s]+[^\n]+/gi, "")
-    .replace(/name[:\s]+[^\n]+/gi, "")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  if (items.length < 5) {
-    items = text.substring(0, 200);
-  }
-
+  // Message does not follow the required structured format (4 lines minimum)
   return {
-    valid: true,
-    phone,
-    amount_due: amount,
-    quartier,
-    carrier,
-    customer_name,
-    items: items || text.substring(0, 200),
-    hasPhone: !!phone,
-    hasAmount: !!amount,
+    valid: false,
+    error: "Format invalide: Le message doit suivre le format structuré (4 lignes: numéro, produits, montant, quartier)",
   };
 }
 
@@ -542,17 +502,8 @@ function isDeliveryMessage(text) {
     return parsed.valid === true; // Return true if valid structured format
   }
 
-  // For short messages (< 4 lines), require BOTH phone AND amount
-  // This prevents false positives like "Le 25..." being detected as deliveries
-  const parsed = parseDeliveryMessage(text);
-  
-  // Reject very short messages that are clearly not deliveries
-  if (text.trim().length < 10) {
-    return false;
-  }
-  
-  // For flexible format, require both phone and amount to reduce false positives
-  return parsed.valid && parsed.hasPhone && parsed.hasAmount;
+  // Messages with fewer than 4 lines don't follow the required structured format
+  return false;
 }
 
 module.exports = {
