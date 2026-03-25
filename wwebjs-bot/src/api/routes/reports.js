@@ -14,6 +14,7 @@ const {
   getTariffsByAgency,
   adapter,
 } = require("../../db");
+const { buildReportPdfData } = require("../../lib/reportAggregates");
 
 // All routes require authentication
 router.use(authenticateToken);
@@ -97,103 +98,7 @@ router.get("/groups/:groupId/pdf", async (req, res, next) => {
 
     const deliveries = deliveriesResult.deliveries || [];
 
-    // Filter deliveries that have tariffs applied (delivered, client_absent, pickup, and present zone deliveries)
-    const deliveriesWithTariffs = deliveries.filter(
-      (d) =>
-        d.status === "delivered" ||
-        d.status === "client_absent" ||
-        d.status === "pickup" ||
-        d.status === "present_ne_decroche_zone1" ||
-        d.status === "present_ne_decroche_zone2"
-    );
-
-    // Filter delivered and pickup deliveries for amount calculations
-    const deliveredAndPickupDeliveries = deliveries.filter(
-      (d) => d.status === "delivered" || d.status === "pickup"
-    );
-
-    // Calculate totals
-    // IMPORTANT:
-    // - totalEncaisse = sum(amount_paid + delivery_fee) for "delivered" AND "pickup" deliveries
-    // - totalTarifs = sum(delivery_fee) for "delivered", "client_absent", "pickup", and present zone deliveries
-    // - netARever = totalEncaisse - totalTarifs
-    // This means client_absent deliveries contribute to tariffs but not to collected amount
-    let totalEncaisse = 0; // Gross amount (amount_paid + delivery_fee) for delivered and pickup
-    let totalTarifs = 0; // Sum of delivery_fee for delivered + client_absent + pickup
-    const tarifsParQuartier = {};
-
-    // Calculate totalEncaisse for delivered and pickup deliveries
-    deliveredAndPickupDeliveries.forEach((delivery) => {
-      // Convert to numbers explicitly to handle PostgreSQL DECIMAL types
-      const deliveryFee = parseFloat(delivery.delivery_fee) || 0;
-      const amountPaid = parseFloat(delivery.amount_paid) || 0;
-      const amountPaidBrut = amountPaid + deliveryFee; // Gross amount
-
-      totalEncaisse += amountPaidBrut;
-    });
-
-    // Separate fixed-status deliveries (pickup, zone1, zone2) from quartier-based deliveries
-    const fixedStatusTarifs = {
-      pickup: { label: "Au bureau", count: 0, total: 0, fixedTariff: 1000 },
-      present_ne_decroche_zone1: {
-        label: "CPCNDP Z1",
-        count: 0,
-        total: 0,
-        fixedTariff: 500,
-      },
-      present_ne_decroche_zone2: {
-        label: "CPCNDP Z2",
-        count: 0,
-        total: 0,
-        fixedTariff: 1000,
-      },
-    };
-
-    // Calculate totalTarifs and group deliveries
-    deliveriesWithTariffs.forEach((delivery) => {
-      // Convert to numbers explicitly to handle PostgreSQL DECIMAL types
-      const deliveryFee = parseFloat(delivery.delivery_fee) || 0;
-
-      totalTarifs += deliveryFee;
-
-      // Handle fixed-status deliveries (pickup, zone1, zone2) separately
-      if (
-        delivery.status === "pickup" ||
-        delivery.status === "present_ne_decroche_zone1" ||
-        delivery.status === "present_ne_decroche_zone2"
-      ) {
-        if (fixedStatusTarifs[delivery.status]) {
-          fixedStatusTarifs[delivery.status].count += 1;
-          fixedStatusTarifs[delivery.status].total += deliveryFee; // Use real delivery_fee (may be modified)
-        }
-      }
-      // Group quartier-based deliveries (delivered, client_absent only) by quartier + delivery_fee
-      // This ensures each unique tariff per quartier gets its own line (no mixing of standard and modified tariffs)
-      else if (
-        (delivery.status === "delivered" ||
-          delivery.status === "client_absent") &&
-        delivery.quartier &&
-        deliveryFee > 0
-      ) {
-        // Create unique key: quartier + delivery_fee (to separate different tariffs for same quartier)
-        const tariffKey = `${delivery.quartier}_${deliveryFee}`;
-
-        if (!tarifsParQuartier[tariffKey]) {
-          tarifsParQuartier[tariffKey] = {
-            quartier: delivery.quartier,
-            count: 0,
-            total: 0,
-            deliveryFee: deliveryFee, // Store the specific tariff amount for this group
-          };
-        }
-        tarifsParQuartier[tariffKey].count += 1;
-        tarifsParQuartier[tariffKey].total += deliveryFee;
-      }
-    });
-
-    const netARever = totalEncaisse - totalTarifs;
-
-    // Get standard tariffs for each quartier from the tariffs table
+    // Get standard tariffs for each quartier from the tariffs table (used by PDF aggregates)
     const standardTariffs = {};
     try {
       const tariffsResult = await getTariffsByAgency(agency.id);
@@ -212,60 +117,15 @@ router.get("/groups/:groupId/pdf", async (req, res, next) => {
       console.error("[Reports API] Error fetching standard tariffs:", error);
     }
 
-    // Update tarifsParQuartier - each entry now represents a unique quartier+tariff combination
-    // Use standard tariff if it matches the delivery_fee, otherwise use the actual delivery_fee
-    Object.keys(tarifsParQuartier).forEach((tariffKey) => {
-      const quartierData = tarifsParQuartier[tariffKey];
-      const standardTariff = standardTariffs[quartierData.quartier];
-
-      // Use the specific delivery_fee as the standard tariff for this group
-      // If it matches the standard from database, use it; otherwise use the actual fee (modified tariff)
-      if (
-        standardTariff !== undefined &&
-        Math.abs(quartierData.deliveryFee - standardTariff) < 0.01
-      ) {
-        // This group uses the standard tariff from database
-        quartierData.standardTariff = standardTariff;
-      } else {
-        // This group uses a modified tariff (different from standard)
-        quartierData.standardTariff = quartierData.deliveryFee;
-      }
-      // Total is already correct (sum of delivery_fee for this group)
-      // But recalculate to ensure consistency: count × delivery_fee
-      quartierData.total = quartierData.deliveryFee * quartierData.count;
-    });
-
-    // Prepare ALL deliveries for display (not just delivered)
-    const allLivraisonsDetails = deliveries.map((delivery) => {
-      const amountDue = parseFloat(delivery.amount_due) || 0;
-      const deliveryFee = parseFloat(delivery.delivery_fee) || 0;
-      const amountPaid = parseFloat(delivery.amount_paid) || 0;
-      // For delivered and pickup: amount_paid + delivery_fee (montant collecté)
-      // For client_absent: delivery_fee (tarif appliqué même si amount_paid = 0)
-      // For present_ne_decroche_zone1/zone2: 0 (amount_paid = 0, only tariff applies)
-      // For others: amount_paid
-      let amountPaidBrut;
-      if (delivery.status === "delivered" || delivery.status === "pickup") {
-        amountPaidBrut = amountPaid + deliveryFee; // Montant collecté
-      } else if (delivery.status === "client_absent") {
-        amountPaidBrut = deliveryFee; // Afficher le tarif appliqué
-      } else if (
-        delivery.status === "present_ne_decroche_zone1" ||
-        delivery.status === "present_ne_decroche_zone2"
-      ) {
-        amountPaidBrut = 0; // amount_paid = 0 for these statuses
-      } else {
-        amountPaidBrut = amountPaid;
-      }
-
-      return {
-        quartier: delivery.quartier || "",
-        phone: delivery.phone || "",
-        status: delivery.status || "pending",
-        amountDue: amountDue,
-        amountPaid: amountPaidBrut,
-      };
-    });
+    // Totals and per-quartier breakdown (see reportAggregates.js)
+    const {
+      totalEncaisse,
+      totalTarifs,
+      netARever,
+      fixedStatusTarifs,
+      tarifsParQuartier,
+      allLivraisonsDetails,
+    } = buildReportPdfData(deliveries, standardTariffs);
 
     // Generate PDF with better margins
     const doc = new PDFDocument({

@@ -16,6 +16,10 @@ const {
 } = require("./db");
 const { generateDailyReport } = require("./daily-report");
 const { getGroup, getAgencyIdForGroup } = require("./utils/group-manager");
+const {
+  computeAmountPaidAfterFee,
+  roundAmount,
+} = require("./lib/deliveryCalculations");
 
 // Log startup time
 const startupStartTime = Date.now();
@@ -768,9 +772,9 @@ client.on("message", async (msg) => {
           } else {
             // For delivered: apply tariff and calculate amount_paid
             const currentAmountPaid = parseFloat(delivery.amount_paid) || 0;
-            const newAmountPaid = Math.max(
-              0,
-              Math.round((currentAmountPaid - tariffAmount) * 100) / 100
+            const newAmountPaid = computeAmountPaidAfterFee(
+              currentAmountPaid,
+              tariffAmount
             );
             updateData.amount_paid = newAmountPaid;
             console.log(
@@ -869,25 +873,29 @@ client.on("message", async (msg) => {
               // If amount is not specified, use the remaining amount due
               // Convert to numbers to handle PostgreSQL DECIMAL types (returned as strings)
               // Round to 2 decimal places to avoid floating point precision issues
-              const currentAmountPaid =
-                Math.round((parseFloat(delivery.amount_paid) || 0) * 100) / 100;
-              const currentAmountDue =
-                Math.round((parseFloat(delivery.amount_due) || 0) * 100) / 100;
+              const currentAmountPaid = roundAmount(
+                parseFloat(delivery.amount_paid) || 0
+              );
+              const currentAmountDue = roundAmount(
+                parseFloat(delivery.amount_due) || 0
+              );
 
-              let paymentAmount =
-                Math.round((parseFloat(statusData.amount) || 0) * 100) / 100;
+              let paymentAmount = roundAmount(
+                parseFloat(statusData.amount) || 0
+              );
               if (!paymentAmount || paymentAmount === 0) {
                 const remainingAmount = currentAmountDue - currentAmountPaid;
                 paymentAmount =
                   remainingAmount > 0 ? remainingAmount : currentAmountDue;
-                paymentAmount = Math.round(paymentAmount * 100) / 100;
+                paymentAmount = roundAmount(paymentAmount);
                 console.log(
                   `   💡 Montant non spécifié, utilisation du montant restant: ${paymentAmount} FCFA`
                 );
               }
 
-              const newAmountPaid =
-                Math.round((currentAmountPaid + paymentAmount) * 100) / 100;
+              const newAmountPaid = roundAmount(
+                currentAmountPaid + paymentAmount
+              );
               updateData.amount_paid = newAmountPaid;
               historyAction = "payment_collected";
               console.log(`   💰 Paiement collecté: ${paymentAmount} FCFA`);
@@ -941,9 +949,9 @@ client.on("message", async (msg) => {
 
                 if (currentAmountPaid === 0 && currentAmountDue > 0) {
                   // No payment recorded yet, assume full payment was made
-                  const newAmountPaid = Math.max(
-                    0,
-                    Math.round((currentAmountDue - pickupTariff) * 100) / 100
+                  const newAmountPaid = computeAmountPaidAfterFee(
+                    currentAmountDue,
+                    pickupTariff
                   );
                   updateData.amount_paid = newAmountPaid;
                   console.log(
@@ -957,9 +965,9 @@ client.on("message", async (msg) => {
                   currentAmountPaid < currentAmountDue
                 ) {
                   // Partial payment: subtract tariff from current amount_paid
-                  const newAmountPaid = Math.max(
-                    0,
-                    Math.round((currentAmountPaid - pickupTariff) * 100) / 100
+                  const newAmountPaid = computeAmountPaidAfterFee(
+                    currentAmountPaid,
+                    pickupTariff
                   );
                   updateData.amount_paid = newAmountPaid;
                   console.log(
@@ -973,9 +981,9 @@ client.on("message", async (msg) => {
                   currentAmountDue > 0
                 ) {
                   // Full payment already recorded: recalculate with tariff
-                  const newAmountPaid = Math.max(
-                    0,
-                    Math.round((currentAmountDue - pickupTariff) * 100) / 100
+                  const newAmountPaid = computeAmountPaidAfterFee(
+                    currentAmountDue,
+                    pickupTariff
                   );
                   updateData.amount_paid = newAmountPaid;
                   console.log(
