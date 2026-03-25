@@ -644,10 +644,16 @@ export default function GroupDetail() {
                   variant="expedition"
                 />
                 <StatCard
-                  title="Montant Total"
+                  title="Montant collecté"
                   value={formatCurrency(stats.montantEncaisse)}
                   icon={Wallet}
                   variant="success"
+                />
+                <StatCard
+                  title="Montant à collecter"
+                  value={formatCurrency(stats.montantRestant || 0)}
+                  icon={Wallet}
+                  variant="warning"
                 />
                 <StatCard
                   title="Frais de livraison"

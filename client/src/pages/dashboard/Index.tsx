@@ -407,10 +407,16 @@ const Index = () => {
                   variant="expedition"
                 />
                 <StatCard
-                  title="Montant Total"
-                  value={formatCurrency(stats.chiffreAffaires)}
+                  title="Montant collecté"
+                  value={formatCurrency(stats.montantEncaisse)}
                   icon={Wallet}
                   variant="success"
+                />
+                <StatCard
+                  title="Montant à collecter"
+                  value={formatCurrency(stats.montantRestant)}
+                  icon={Wallet}
+                  variant="warning"
                 />
                 <StatCard
                   title="Frais de livraison"

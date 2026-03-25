@@ -335,7 +335,7 @@ const Rapports = () => {
                   </div>
                   <div className="p-4 rounded-xl bg-primary/10 border border-primary/20">
                     <p className="text-sm text-muted-foreground mb-1">
-                      Montant Total
+                      Montant collecté
                     </p>
                     <p className="text-2xl font-bold text-primary">
                       {formatCurrency(currentData.encaisse)}
@@ -343,7 +343,7 @@ const Rapports = () => {
                   </div>
                   <div className="p-4 rounded-xl bg-warning/10 border border-warning/20">
                     <p className="text-sm text-muted-foreground mb-1">
-                      À encaisser
+                      Montant à collecter
                     </p>
                     <p className="text-2xl font-bold text-warning">
                       {formatCurrency(currentData.restant)}
