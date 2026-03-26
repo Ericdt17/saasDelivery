@@ -140,8 +140,8 @@ const formatHistoryEvent = (action: string, details: string) => {
             "échec": "Annulé",  // Changé de "Échec" à "Annulé" (pour compatibilité)
             "annulé": "Annulé",
             "renvoyé": "Renvoyé",
-            "present_ne_decroche_zone1": "CPCNDP Z1",
-            "present_ne_decroche_zone2": "CPCNDP Z2",
+            "present_ne_decroche_zone1": "Ne décroche pas",
+            "present_ne_decroche_zone2": "Ne décroche pas",
           };
           return statusMap[status.toLowerCase()] || status;
         };
@@ -364,8 +364,6 @@ const LivraisonDetails = () => {
                 <SelectItem value="expedition">Expédition</SelectItem>
                 <SelectItem value="injoignable">Injoignable</SelectItem>
                 <SelectItem value="ne_decroche_pas">Ne décroche pas</SelectItem>
-                <SelectItem value="present_ne_decroche_zone1">CPCNDP Z1</SelectItem>
-                <SelectItem value="present_ne_decroche_zone2">CPCNDP Z2</SelectItem>
               </SelectContent>
             </Select>
             <DialogFooter>

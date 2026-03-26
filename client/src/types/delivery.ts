@@ -21,9 +21,7 @@ export type StatutLivraison =
   | "renvoyé"
   | "client_absent"
   | "injoignable"
-  | "ne_decroche_pas"
-  | "present_ne_decroche_zone1"
-  | "present_ne_decroche_zone2";
+  | "ne_decroche_pas";
 
 /**
  * Delivery type values
@@ -43,9 +41,7 @@ export type BackendStatus =
   | "postponed"
   | "client_absent"
   | "unreachable"
-  | "no_answer"
-  | "present_ne_decroche_zone1"
-  | "present_ne_decroche_zone2";
+  | "no_answer";
 
 /**
  * Modification type values

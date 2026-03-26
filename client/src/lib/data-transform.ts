@@ -40,8 +40,8 @@ function mapStatusToFrontend(backendStatus: string): StatutLivraison {
     client_absent: "client_absent",
     unreachable: "injoignable",
     no_answer: "ne_decroche_pas",
-    present_ne_decroche_zone1: "present_ne_decroche_zone1",
-    present_ne_decroche_zone2: "present_ne_decroche_zone2",
+    present_ne_decroche_zone1: "ne_decroche_pas",
+    present_ne_decroche_zone2: "ne_decroche_pas",
   };
 
   return statusMap[backendStatus.toLowerCase()] || "en_cours";
@@ -62,8 +62,6 @@ export function mapStatusToBackend(frontendStatus: StatutLivraison): string {
     client_absent: "client_absent",
     injoignable: "unreachable",
     ne_decroche_pas: "no_answer",
-    present_ne_decroche_zone1: "present_ne_decroche_zone1",
-    present_ne_decroche_zone2: "present_ne_decroche_zone2",
   };
 
   return statusMap[frontendStatus] || "pending";
@@ -106,13 +104,11 @@ export function transformDeliveryToFrontend(
   // For "delivered" status: restant should be 0 (completely paid)
   // For "pickup" status: restant should be 0 (client picked up at office, applied 1000 FCFA tariff)
   // For "failed"/"cancelled"/"postponed"/"unreachable"/"no_answer" status: restant should be 0 (no delivery made, cannot collect anymore)
-  // For "present_ne_decroche_zone1" and "present_ne_decroche_zone2": restant should be 0 (chauffeur présent, client ne décroche pas, cannot collect anymore)
   // For other statuses: restant = amount_due - amount_paid
   const backendStatus = backend.status?.toLowerCase();
   const isDelivered = backendStatus === "delivered";
   const isPickup = backendStatus === "pickup";
   const isCancelled = backendStatus === "failed" || backendStatus === "cancelled" || backendStatus === "postponed" || backendStatus === "unreachable" || backendStatus === "no_answer";
-  const isPresentZone = backendStatus === "present_ne_decroche_zone1" || backendStatus === "present_ne_decroche_zone2";
   
   // Convertir explicitement en nombres pour éviter les problèmes avec les strings PostgreSQL
   // PostgreSQL retourne les DECIMAL/NUMERIC comme des strings en JavaScript
@@ -128,7 +124,7 @@ export function transformDeliveryToFrontend(
         ? parseFloat(String(backend.amount_paid)) || 0
         : 0);
   
-  const restant = isDelivered || isPickup || isCancelled || isPresentZone
+  const restant = isDelivered || isPickup || isCancelled
     ? 0 // Delivered, pickup, cancelled, or present_ne_decroche zones: no remaining amount
     : Math.max(0, amountDue - amountPaid);
 
