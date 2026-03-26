@@ -39,6 +39,14 @@ export type {
   ReportData,
 } from './stats';
 
+// Expedition Types
+export type {
+  ExpeditionStatus,
+  BackendExpedition,
+  FrontendExpedition,
+  ExpeditionStats,
+} from './expedition';
+
 
 
 

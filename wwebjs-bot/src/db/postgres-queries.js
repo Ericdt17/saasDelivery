@@ -467,6 +467,212 @@ function createPostgresQueries(pool) {
     };
   }
 
+  async function createExpedition({
+    agency_id,
+    group_id,
+    destination,
+    agence_de_voyage,
+    frais_de_course = 0,
+    frais_de_lagence_de_voyage = 0,
+    status = "en_attente",
+    notes = null,
+  }) {
+    const res = await query(
+      `INSERT INTO expeditions
+        (agency_id, group_id, destination, agence_de_voyage, frais_de_course, frais_de_lagence_de_voyage, status, notes)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       RETURNING id`,
+      [
+        agency_id,
+        group_id,
+        destination,
+        agence_de_voyage,
+        Math.round(parseFloat(frais_de_course || 0) * 100) / 100,
+        Math.round(parseFloat(frais_de_lagence_de_voyage || 0) * 100) / 100,
+        status,
+        notes,
+      ]
+    );
+    return res.id || res[0]?.id;
+  }
+
+  async function getExpeditionById(id) {
+    return query(
+      `SELECT e.*, g.name as group_name
+       FROM expeditions e
+       LEFT JOIN groups g ON g.id = e.group_id
+       WHERE e.id = $1
+       LIMIT 1`,
+      [id]
+    );
+  }
+
+  async function getExpeditions({
+    page = 1,
+    limit = 50,
+    startDate = null,
+    endDate = null,
+    status = null,
+    group_id = null,
+    agency_id = null,
+    search = null,
+    sortBy = "created_at",
+    sortOrder = "DESC",
+  } = {}) {
+    const validSortBy = ["created_at", "updated_at", "destination", "agence_de_voyage", "status"];
+    const validSortOrder = ["ASC", "DESC"];
+    const safeSortBy = validSortBy.includes(sortBy) ? sortBy : "created_at";
+    const safeSortOrder = validSortOrder.includes(String(sortOrder).toUpperCase())
+      ? String(sortOrder).toUpperCase()
+      : "DESC";
+
+    const offset = (Number(page) - 1) * Number(limit);
+    const conditions = [];
+    const params = [];
+    let paramIndex = 1;
+
+    const addParam = (value) => {
+      params.push(value);
+      return `$${paramIndex++}`;
+    };
+
+    if (startDate) {
+      conditions.push(`e.created_at::date >= ${addParam(startDate)}::date`);
+    }
+    if (endDate) {
+      conditions.push(`e.created_at::date <= ${addParam(endDate)}::date`);
+    }
+    if (status) {
+      conditions.push(`e.status = ${addParam(status)}`);
+    }
+    if (group_id !== null && group_id !== undefined) {
+      conditions.push(`e.group_id = ${addParam(group_id)}`);
+    }
+    if (agency_id !== null && agency_id !== undefined) {
+      conditions.push(`e.agency_id = ${addParam(agency_id)}`);
+    }
+    if (search && String(search).trim()) {
+      const term = `%${String(search).trim()}%`;
+      const p = addParam(term);
+      conditions.push(`(e.destination ILIKE ${p} OR e.agence_de_voyage ILIKE ${p} OR g.name ILIKE ${p})`);
+    }
+
+    const whereClause = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+    const countSql = `
+      SELECT COUNT(*) as total
+      FROM expeditions e
+      LEFT JOIN groups g ON g.id = e.group_id
+      ${whereClause}
+    `;
+    const totalResult = await query(countSql, params);
+    const total = Number(Array.isArray(totalResult) ? totalResult[0]?.total : totalResult?.total) || 0;
+
+    const dataSql = `
+      SELECT e.*, g.name as group_name
+      FROM expeditions e
+      LEFT JOIN groups g ON g.id = e.group_id
+      ${whereClause}
+      ORDER BY e.${safeSortBy} ${safeSortOrder}
+      LIMIT ${addParam(Number(limit))}
+      OFFSET ${addParam(offset)}
+    `;
+    const rows = await query(dataSql, params);
+
+    return {
+      expeditions: Array.isArray(rows) ? rows : [rows].filter(Boolean),
+      pagination: {
+        page: Number(page),
+        limit: Number(limit),
+        total: Number(total),
+        totalPages: Math.ceil(Number(total) / Number(limit || 1)),
+      },
+    };
+  }
+
+  async function updateExpedition(id, updates = {}) {
+    const allowedFields = [
+      "group_id",
+      "destination",
+      "agence_de_voyage",
+      "frais_de_course",
+      "frais_de_lagence_de_voyage",
+      "status",
+      "notes",
+    ];
+
+    const fields = [];
+    const values = [];
+
+    for (const [key, rawValue] of Object.entries(updates)) {
+      if (!allowedFields.includes(key)) {
+        continue;
+      }
+      let value = rawValue;
+      if ((key === "frais_de_course" || key === "frais_de_lagence_de_voyage") && value != null) {
+        value = Math.round(parseFloat(value) * 100) / 100;
+      }
+      fields.push(`${key} = $${fields.length + 1}`);
+      values.push(value);
+    }
+
+    if (fields.length === 0) {
+      return { changes: 0 };
+    }
+
+    fields.push(`updated_at = CURRENT_TIMESTAMP`);
+    values.push(id);
+    return query(
+      `UPDATE expeditions SET ${fields.join(", ")} WHERE id = $${values.length}`,
+      values
+    );
+  }
+
+  async function deleteExpedition(id) {
+    return query("DELETE FROM expeditions WHERE id = $1", [id]);
+  }
+
+  async function getExpeditionStats({
+    startDate = null,
+    endDate = null,
+    group_id = null,
+    agency_id = null,
+    status = null,
+  } = {}) {
+    const conditions = [];
+    const params = [];
+    let paramIndex = 1;
+    const addParam = (value) => {
+      params.push(value);
+      return `$${paramIndex++}`;
+    };
+
+    if (startDate) conditions.push(`created_at::date >= ${addParam(startDate)}::date`);
+    if (endDate) conditions.push(`created_at::date <= ${addParam(endDate)}::date`);
+    if (group_id !== null && group_id !== undefined) conditions.push(`group_id = ${addParam(group_id)}`);
+    if (agency_id !== null && agency_id !== undefined) conditions.push(`agency_id = ${addParam(agency_id)}`);
+    if (status) conditions.push(`status = ${addParam(status)}`);
+
+    const whereClause = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+    const result = await query(
+      `SELECT
+        COUNT(*)::int as total_expeditions,
+        COALESCE(SUM(frais_de_course), 0) as total_frais_de_course,
+        COALESCE(SUM(frais_de_lagence_de_voyage), 0) as total_frais_de_lagence_de_voyage
+       FROM expeditions
+       ${whereClause}`,
+      params
+    );
+
+    const row = Array.isArray(result) ? result[0] : result;
+    const totalCourse = Number(row?.total_frais_de_course) || 0;
+    const totalVoyage = Number(row?.total_frais_de_lagence_de_voyage) || 0;
+    return {
+      total_expeditions: Number(row?.total_expeditions) || 0,
+      total_frais_de_course: totalCourse,
+      total_frais_de_lagence_de_voyage: totalVoyage,
+    };
+  }
+
   async function searchDeliveries(term) {
     if (!term || !term.trim()) return [];
     const searchTerm = `%${term.trim()}%`;
@@ -507,7 +713,7 @@ function createPostgresQueries(pool) {
 
   async function getAgencyById(id) {
     const result = await query(
-      `SELECT id, name, email, agency_code, role, is_active, created_at, updated_at 
+      `SELECT id, name, email, agency_code, role, is_active, address, phone, logo_base64, created_at, updated_at
        FROM agencies 
        WHERE id = $1 LIMIT 1`,
       [id]
@@ -700,6 +906,11 @@ function createPostgresQueries(pool) {
     return await updateGroup(id, { is_active: false });
   }
 
+  async function hardDeleteGroup(id) {
+    const result = await query(`DELETE FROM groups WHERE id = $1`, [id]);
+    return { changes: result.changes || 0 };
+  }
+
   // ============================================
   // Tariff Queries
   // ============================================
@@ -799,6 +1010,12 @@ function createPostgresQueries(pool) {
     getTodayDeliveries,
     getDeliveries,
     getDailyStats,
+    createExpedition,
+    getExpeditions,
+    getExpeditionById,
+    updateExpedition,
+    deleteExpedition,
+    getExpeditionStats,
     searchDeliveries,
     saveHistory,
     deleteDelivery,
@@ -817,6 +1034,7 @@ function createPostgresQueries(pool) {
     getAllGroups,
     updateGroup,
     deleteGroup,
+    hardDeleteGroup,
     // Tariff queries
     createTariff,
     getTariffById,

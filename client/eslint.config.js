@@ -23,4 +23,18 @@ export default tseslint.config(
       "@typescript-eslint/no-unused-vars": "off",
     },
   },
+  // shadcn/ui generated files export variant helpers alongside components — suppress HMR warning
+  {
+    files: ["src/components/ui/**"],
+    rules: {
+      "react-refresh/only-export-components": "off",
+    },
+  },
+  // Context files intentionally export both the provider component and the hook — suppress HMR warning
+  {
+    files: ["src/contexts/**"],
+    rules: {
+      "react-refresh/only-export-components": "off",
+    },
+  },
 );

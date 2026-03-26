@@ -35,6 +35,7 @@ import type { FrontendDelivery } from "@/types/delivery";
 import { toast } from "sonner";
 import { getDateRangeForPreset, type DateRange } from "@/lib/date-utils";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
+import { StatCard } from "@/components/ui/stat-card";
 
 const formatDate = (dateString: string) => {
   return new Date(dateString).toLocaleDateString('fr-FR', {
@@ -47,6 +48,8 @@ const formatDate = (dateString: string) => {
 };
 
 const typeLabels = {
+  status: "Changement de statut",
+  tarif: "Changement de tarif",
   numero: "Changement de numéro",
   montant: "Changement de montant",
   produits: "Modification produits",
@@ -56,6 +59,8 @@ const typeLabels = {
 };
 
 const typeIcons = {
+  status: RefreshCw,
+  tarif: DollarSign,
   numero: Phone,
   montant: DollarSign,
   produits: Package,
@@ -73,6 +78,17 @@ const typeBadgeStyles = {
   suppression_produit: "bg-destructive/15 text-destructive"
 };
 
+const typeCardVariants: Record<string, "info" | "warning" | "default" | "expedition" | "success" | "destructive"> = {
+  status: "info",
+  tarif: "warning",
+  numero: "info",
+  montant: "warning",
+  produits: "default",
+  quartier: "expedition",
+  ajout_produit: "success",
+  suppression_produit: "destructive",
+};
+
 // Modification data structure
 interface ModificationData {
   id: number;
@@ -85,26 +101,73 @@ interface ModificationData {
   telephone?: string;
 }
 
-// Map history action to modification type
+const mapFieldToType = (field: string): string | null => {
+  const fieldLower = field.toLowerCase();
+
+  if (fieldLower.includes("status") || fieldLower.includes("statut")) return "status";
+  if (
+    fieldLower.includes("tarif") ||
+    fieldLower.includes("fee") ||
+    fieldLower.includes("frais") ||
+    fieldLower.includes("amount") ||
+    fieldLower.includes("montant") ||
+    fieldLower.includes("prix")
+  ) {
+    return "tarif";
+  }
+  if (
+    fieldLower.includes("phone") ||
+    fieldLower.includes("numero") ||
+    fieldLower.includes("number") ||
+    fieldLower.includes("telephone")
+  ) {
+    return "numero";
+  }
+  if (
+    fieldLower.includes("items") ||
+    fieldLower.includes("produits") ||
+    fieldLower.includes("product") ||
+    fieldLower.includes("article")
+  ) {
+    return "produits";
+  }
+  if (fieldLower.includes("quartier") || fieldLower.includes("location") || fieldLower.includes("address")) {
+    return "quartier";
+  }
+
+  return null;
+};
+
+// Map history entry to modification type
 const mapActionToType = (action: string, details: string | null): string | null => {
   const actionLower = action.toLowerCase();
   
-  // Try to parse details as JSON to extract field changes
-  let parsedDetails: Record<string, unknown> | null = null;
+  // First priority: explicit changed field in details payload
   if (details) {
     try {
-      parsedDetails = JSON.parse(details);
+      const parsedDetails = JSON.parse(details) as Record<string, unknown>;
+      if (typeof parsedDetails === "object" && parsedDetails !== null) {
+        const field = (parsedDetails.field ?? parsedDetails.champ ?? "").toString();
+        const byField = mapFieldToType(field);
+        if (byField) return byField;
+      }
     } catch {
-      // Not JSON, use as-is
+      // Ignore parse error and fallback on action name
     }
   }
   
-  // Map common actions to modification types
+  // Fallback: infer from action text when field is unavailable
+  if (actionLower.includes('status') || actionLower.includes('statut')) {
+    return 'status';
+  }
+  if (actionLower.includes('tarif') || actionLower.includes('fee') || actionLower.includes('frais')) {
+    return 'tarif';
+  }
   if (actionLower.includes('phone') || actionLower.includes('numero') || actionLower.includes('number')) {
     return 'numero';
   }
   if (actionLower.includes('amount') || actionLower.includes('montant') || actionLower.includes('payment')) {
-    return 'montant';
+    return 'tarif';
   }
   if (actionLower.includes('items') || actionLower.includes('produits') || actionLower.includes('product')) {
     return 'produits';
@@ -147,35 +210,35 @@ const translateStatus = (status: string): string => {
 
 // Extract old/new values from history details
 const extractModificationValues = (action: string, details: string | null, delivery: Record<string, unknown>): { old: string; new: string } => {
+  // Creation entries store the full delivery object — there is no old/new value to show
+  if (action === 'created') {
+    return { old: '', new: 'Nouvelle livraison' };
+  }
+
   let oldValue = '';
   let newValue = '';
-  
+
   if (details) {
     try {
       const parsed = JSON.parse(details);
-      
-      // Si c'est un objet JSON, extraire old_value et new_value
+
       if (typeof parsed === 'object' && parsed !== null) {
-        // Extraire le champ modifié
         const field = parsed.field || parsed.champ || "";
-        
-        // Extraire les valeurs
-        oldValue = parsed.old_value !== undefined ? String(parsed.old_value) : 
-                   parsed.ancienne_valeur !== undefined ? String(parsed.ancienne_valeur) : 
+
+        oldValue = parsed.old_value !== undefined ? String(parsed.old_value) :
+                   parsed.ancienne_valeur !== undefined ? String(parsed.ancienne_valeur) :
                    parsed.from !== undefined ? String(parsed.from) : "";
-        
-        newValue = parsed.new_value !== undefined ? String(parsed.new_value) : 
-                   parsed.nouvelle_valeur !== undefined ? String(parsed.nouvelle_valeur) : 
+
+        newValue = parsed.new_value !== undefined ? String(parsed.new_value) :
+                   parsed.nouvelle_valeur !== undefined ? String(parsed.nouvelle_valeur) :
                    parsed.to !== undefined ? String(parsed.to) : "";
-        
+
         // Formater les valeurs selon le type de champ
         if (field && (field.toLowerCase().includes("status") || field.toLowerCase().includes("statut"))) {
-          // Traduire les statuts
           if (oldValue) oldValue = translateStatus(oldValue);
           if (newValue) newValue = translateStatus(newValue);
-        } else if (field && (field.toLowerCase().includes("amount") || field.toLowerCase().includes("montant") || 
+        } else if (field && (field.toLowerCase().includes("amount") || field.toLowerCase().includes("montant") ||
                              field.toLowerCase().includes("fee") || field.toLowerCase().includes("frais"))) {
-          // Formater les montants
           if (oldValue) {
             const oldNum = parseFloat(oldValue);
             if (!isNaN(oldNum)) oldValue = formatCurrency(oldNum);
@@ -185,18 +248,7 @@ const extractModificationValues = (action: string, details: string | null, deliv
             if (!isNaN(newNum)) newValue = formatCurrency(newNum);
           }
         }
-        
-        // Si les valeurs sont toujours vides, essayer d'autres clés communes
-        if (!oldValue && !newValue) {
-          // Peut-être que les données sont structurées différemment
-          const keys = Object.keys(parsed);
-          if (keys.length > 0) {
-            // Utiliser les valeurs brutes si disponibles
-            newValue = JSON.stringify(parsed);
-          }
-        }
       } else {
-        // Si ce n'est pas un objet, utiliser directement
         newValue = String(parsed);
       }
     } catch {
@@ -205,13 +257,11 @@ const extractModificationValues = (action: string, details: string | null, deliv
       oldValue = '';
     }
   }
-  
-  // Si toujours vide, utiliser des valeurs par défaut
+
   if (!oldValue && !newValue) {
-    oldValue = '';
     newValue = action || 'Modification';
   }
-  
+
   return { old: oldValue, new: newValue };
 };
 
@@ -388,22 +438,18 @@ const Modifications = () => {
 
       {/* Stats */}
       {!isLoading && (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 gap-4">
           {Object.entries(typeLabels).map(([type, label]) => {
             const Icon = typeIcons[type as keyof typeof typeIcons];
             const count = modifications.filter(m => m.type === type).length;
             return (
-              <div key={type} className="stat-card">
-                <div className="flex items-center gap-2">
-                  <div className={`p-2 rounded-lg ${typeBadgeStyles[type as keyof typeof typeBadgeStyles]}`}>
-                    <Icon className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <p className="text-xl font-bold">{count}</p>
-                    <p className="text-xs text-muted-foreground truncate">{label.split(' ')[0]}</p>
-                  </div>
-                </div>
-              </div>
+              <StatCard
+                key={type}
+                title={label}
+                value={count}
+                icon={Icon}
+                variant={typeCardVariants[type] || "default"}
+              />
             );
           })}
         </div>
@@ -411,7 +457,7 @@ const Modifications = () => {
 
       {/* Loading Stats */}
       {isLoading && (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 gap-4">
           {Array.from({ length: 6 }).map((_, i) => (
             <div key={i} className="stat-card">
               <Skeleton className="h-16 w-full" />

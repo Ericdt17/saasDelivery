@@ -178,8 +178,6 @@ export default function Groups() {
   };
 
   const handleToggleActive = (group: Group, newStatus: boolean) => {
-    console.log('[Toggle] handleToggleActive called:', { groupId: group.id, newStatus, group });
-    console.log('[Toggle] Calling toggleActiveMutation with:', { id: group.id, is_active: newStatus });
     toggleActiveMutation.mutate({ id: group.id, is_active: newStatus });
   };
 

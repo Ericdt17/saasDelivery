@@ -13,6 +13,9 @@ export const API_ENDPOINTS = {
   DELIVERIES_BULK: "/api/v1/deliveries/bulk",
   DELIVERY_BY_ID: (id: number | string) => `/api/v1/deliveries/${id}`,
   DELIVERY_HISTORY: (id: number | string) => `/api/v1/deliveries/${id}/history`,
+  EXPEDITIONS: "/api/v1/expeditions",
+  EXPEDITION_BY_ID: (id: number | string) => `/api/v1/expeditions/${id}`,
+  EXPEDITIONS_STATS: "/api/v1/expeditions/stats/summary",
   STATS_DAILY: "/api/v1/stats/daily",
   SEARCH: "/api/v1/search",
 };

@@ -124,10 +124,6 @@ function AgenciesPage() {
       agency_code: agencyCode && agencyCode.trim() ? agencyCode.trim() : null,
     };
     
-    // Debug: Log the data being sent
-    console.log("Creating agency with data:", createData);
-    console.log("Agency code value:", createData.agency_code);
-    
     createMutation.mutate(createData);
   };
 
@@ -166,10 +162,6 @@ function AgenciesPage() {
     } else {
       updateData.agency_code = null; // Explicitly set to null
     }
-    
-    // Debug: Log the data being sent
-    console.log("Updating agency with data:", JSON.stringify(updateData, null, 2));
-    console.log("Agency code value:", updateData.agency_code, "Type:", typeof updateData.agency_code);
     
     updateMutation.mutate({ id: selectedAgency.id, data: updateData });
   };

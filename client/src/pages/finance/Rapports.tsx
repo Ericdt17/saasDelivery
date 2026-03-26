@@ -28,6 +28,7 @@ import {
   HandCoins,
 } from "lucide-react";
 import { getDeliveries } from "@/services/deliveries";
+import { getExpeditionStats } from "@/services/expeditions";
 import { toast } from "sonner";
 import { type DateRange, getDateRangeForPreset } from "@/lib/date-utils";
 import { calculateStatsFromDeliveries } from "@/lib/stats-utils";
@@ -69,6 +70,17 @@ const Rapports = () => {
     refetchOnWindowFocus: false,
   });
 
+  const { data: expeditionStats } = useQuery({
+    queryKey: ["expeditions", "stats", "reports", dateRange.startDate, dateRange.endDate],
+    queryFn: () =>
+      getExpeditionStats({
+        startDate: dateRange.startDate,
+        endDate: dateRange.endDate,
+      }),
+    retry: 2,
+    refetchOnWindowFocus: false,
+  });
+
   useEffect(() => {
     if (isError && error) {
       toast.error("Erreur lors du chargement des livraisons", {
@@ -87,10 +99,12 @@ const Rapports = () => {
         livrees: stats.livreesReussies,
         echecs: stats.echecs,
         pickups: stats.pickups,
-        expeditions: stats.expeditions,
+        expeditions: expeditionStats?.totalExpeditions || 0,
+        fraisExpeditions: expeditionStats?.totalFraisDeCourse || 0,
         encaisse: stats.montantEncaisse, // Montant brut
         restant: stats.montantRestant,
         totalTarifs: stats.totalTarifs || 0,
+        chiffreAffaires: (stats.totalTarifs || 0) + (expeditionStats?.totalFraisDeCourse || 0),
         montantNetEncaisse: stats.montantNetEncaisse || 0, // Montant NET (à reverser)
       };
     }
@@ -102,12 +116,14 @@ const Rapports = () => {
       echecs: 0,
       pickups: 0,
       expeditions: 0,
+      fraisExpeditions: 0,
       encaisse: 0,
       restant: 0,
+      chiffreAffaires: 0,
       totalTarifs: 0,
       montantNetEncaisse: 0,
     };
-  }, [deliveriesData]);
+  }, [deliveriesData, expeditionStats]);
 
   return (
     <div className="space-y-6 pb-8">
@@ -224,6 +240,12 @@ const Rapports = () => {
                   variant="expedition"
                 />
                 <StatCard
+                  title="Frais d'expédition"
+                  value={formatCurrency(currentData.fraisExpeditions)}
+                  icon={Receipt}
+                  variant="warning"
+                />
+                <StatCard
                   title="Taux de réussite"
                   value={
                     currentData.livraisons > 0
@@ -324,13 +346,13 @@ const Rapports = () => {
               {/* Financial Summary */}
               <div className="stat-card">
                 <h3 className="text-lg font-semibold mb-4">Résumé financier</h3>
-                <div className="grid sm:grid-cols-3 gap-4">
+                <div className={`grid gap-4 ${isSuperAdmin ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
                   <div className="p-4 rounded-xl bg-success/10 border border-success/20">
                     <p className="text-sm text-muted-foreground mb-1">
                       Chiffre d'affaires
                     </p>
                     <p className="text-2xl font-bold text-success">
-                      {formatCurrency(currentData.totalTarifs)}
+                      {formatCurrency(currentData.chiffreAffaires)}
                     </p>
                   </div>
                   <div className="p-4 rounded-xl bg-primary/10 border border-primary/20">
@@ -341,14 +363,16 @@ const Rapports = () => {
                       {formatCurrency(currentData.encaisse)}
                     </p>
                   </div>
-                  <div className="p-4 rounded-xl bg-warning/10 border border-warning/20">
-                    <p className="text-sm text-muted-foreground mb-1">
-                      Montant à collecter
-                    </p>
-                    <p className="text-2xl font-bold text-warning">
-                      {formatCurrency(currentData.restant)}
-                    </p>
-                  </div>
+                  {isSuperAdmin ? (
+                    <div className="p-4 rounded-xl bg-warning/10 border border-warning/20">
+                      <p className="text-sm text-muted-foreground mb-1">
+                        Montant à collecter
+                      </p>
+                      <p className="text-2xl font-bold text-warning">
+                        {formatCurrency(currentData.restant)}
+                      </p>
+                    </div>
+                  ) : null}
                 </div>
               </div>
             </>

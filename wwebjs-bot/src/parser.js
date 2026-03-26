@@ -493,6 +493,13 @@ function isDeliveryMessage(text) {
     return false;
   }
 
+  // Reject messages that start with a WhatsApp @mention — these are always
+  // conversational (group tags, follow-ups) and never delivery orders.
+  const firstNonEmpty = text.trimStart();
+  if (firstNonEmpty.startsWith("@")) {
+    return false;
+  }
+
   // Check if it follows a structured format (4+ lines)
   const lines = text.split("\n").filter((line) => line.trim().length > 0);
 

@@ -26,6 +26,7 @@ import {
   Download,
   ArrowLeft,
   CircleAlert,
+  FileText,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { StatCard } from "@/components/ui/stat-card";
@@ -86,6 +87,7 @@ import { mapStatusToBackend, type StatutLivraison, type TypeLivraison } from "@/
 import { toast } from "sonner";
 import type { FrontendDelivery } from "@/types/delivery";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
+import { getExpeditionStats } from "@/services/expeditions";
 
 const formatCurrency = (value: number | undefined | null) => {
   // Handle NaN, undefined, null, or invalid numbers
@@ -116,6 +118,7 @@ export default function GroupDetail() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const groupId = id ? parseInt(id) : null;
+  const { isSuperAdmin } = useAuth();
 
   const [period, setPeriod] = useState<"jour" | "semaine" | "mois">("jour");
   const [dateRange, setDateRange] = useState<DateRange>(() => getDateRangeForPreset("today"));
@@ -128,6 +131,9 @@ export default function GroupDetail() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [selectedDelivery, setSelectedDelivery] = useState<FrontendDelivery | null>(null);
+  const [isPdfPreviewOpen, setIsPdfPreviewOpen] = useState(false);
+  const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
+  const [isLoadingPdf, setIsLoadingPdf] = useState(false);
 
   const limit = 20;
 
@@ -198,6 +204,19 @@ export default function GroupDetail() {
       }
       return failureCount < 2;
     },
+    refetchOnWindowFocus: false,
+  });
+
+  const { data: expeditionStats } = useQuery({
+    queryKey: ["expeditions", "stats", "group-detail", groupId, dateRange.startDate, dateRange.endDate],
+    queryFn: () =>
+      getExpeditionStats({
+        group_id: groupId || undefined,
+        startDate: dateRange.startDate,
+        endDate: dateRange.endDate,
+      }),
+    enabled: !!groupId,
+    retry: 2,
     refetchOnWindowFocus: false,
   });
 
@@ -291,24 +310,31 @@ export default function GroupDetail() {
           echecs: dailyStats.echecs,
           enCours: dailyStats.enCours,
           pickups: dailyStats.pickups,
-          expeditions: dailyStats.expeditions,
+          expeditions: expeditionStats?.totalExpeditions || 0,
           montantEncaisse: Number(dayStats.montantEncaisse) || 0, // Brut amount (from deliveries calculation)
           montantRestant: Number(dayStats.montantRestant) || 0, // Remaining (0 for delivered)
-          chiffreAffaires: (Number(dayStats.montantEncaisse) || 0) + (Number(dayStats.montantRestant) || 0),
           totalTarifs: Number(dayStats.totalTarifs) || 0, // Sum of delivery_fee for delivered
+          chiffreAffaires: (Number(dayStats.totalTarifs) || 0) + (Number(expeditionStats?.totalFraisDeCourse) || 0),
           montantNetEncaisse: Number(dayStats.montantNetEncaisse) || 0, // Net amount to reverse (montantEncaisse - totalTarifs)
         };
       }
       // Fallback: use dayStats directly if dailyStats is not available
       return {
         ...dayStats,
+        expeditions: expeditionStats?.totalExpeditions || 0,
+        chiffreAffaires: (Number(dayStats.totalTarifs) || 0) + (Number(expeditionStats?.totalFraisDeCourse) || 0),
         montantNetEncaisse: dayStats.montantNetEncaisse || (dayStats.montantEncaisse - (dayStats.totalTarifs || 0)),
       };
     }
 
     // For non-single day (semaine/mois): use deliveries data directly
     if (deliveriesData) {
-      return calculateStatsFromDeliveries(deliveriesData.deliveries);
+      const periodStats = calculateStatsFromDeliveries(deliveriesData.deliveries);
+      return {
+        ...periodStats,
+        expeditions: expeditionStats?.totalExpeditions || 0,
+        chiffreAffaires: (Number(periodStats.totalTarifs) || 0) + (Number(expeditionStats?.totalFraisDeCourse) || 0),
+      };
     }
 
     return {
@@ -324,7 +350,7 @@ export default function GroupDetail() {
       totalTarifs: 0,
       montantNetEncaisse: 0,
     };
-  }, [isSingleDay, dailyStats, deliveriesData]);
+  }, [isSingleDay, dailyStats, deliveriesData, expeditionStats]);
 
   // Get unique quartiers
   const availableQuartiers = useMemo(() => {
@@ -525,6 +551,39 @@ export default function GroupDetail() {
     );
   }
 
+  const buildPdfUrl = () => {
+    const params = new URLSearchParams();
+    if (dateRange.startDate) params.append("startDate", dateRange.startDate);
+    if (dateRange.endDate) params.append("endDate", dateRange.endDate);
+    return buildApiUrl(`/api/v1/reports/groups/${groupId}/pdf${params.toString() ? `?${params.toString()}` : ""}`);
+  };
+
+  const handlePdfPreview = async () => {
+    setIsLoadingPdf(true);
+    try {
+      const response = await fetch(buildPdfUrl(), { credentials: "include" });
+      if (!response.ok) throw new Error(`Erreur ${response.status}`);
+      const blob = await response.blob();
+      // Revoke previous URL to avoid memory leaks
+      if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl);
+      const objectUrl = URL.createObjectURL(blob);
+      setPdfPreviewUrl(objectUrl);
+      setIsPdfPreviewOpen(true);
+    } catch (err) {
+      toast.error("Impossible de charger le rapport PDF");
+    } finally {
+      setIsLoadingPdf(false);
+    }
+  };
+
+  const handleClosePdfPreview = () => {
+    setIsPdfPreviewOpen(false);
+    if (pdfPreviewUrl) {
+      URL.revokeObjectURL(pdfPreviewUrl);
+      setPdfPreviewUrl(null);
+    }
+  };
+
   return (
     <div className="space-y-6 pb-8">
       {/* Header */}
@@ -547,19 +606,25 @@ export default function GroupDetail() {
               Retour aux prestataires
             </Button>
             <Button
-              variant="default"
-              onClick={() => {
-                // Generate PDF with current date range
-                const params = new URLSearchParams();
-                if (dateRange.startDate) params.append("startDate", dateRange.startDate);
-                if (dateRange.endDate) params.append("endDate", dateRange.endDate);
-                
-                const url = buildApiUrl(`/api/v1/reports/groups/${groupId}/pdf${params.toString() ? `?${params.toString()}` : ""}`);
-                window.open(url, "_blank");
-              }}
+              variant="outline"
+              onClick={handlePdfPreview}
+              disabled={isLoadingPdf}
+              className="gap-2"
             >
-              <Download className="w-4 h-4 mr-2" />
-              Télécharger rapport
+              {isLoadingPdf ? (
+                <RefreshCw className="w-4 h-4 animate-spin" />
+              ) : (
+                <FileText className="w-4 h-4" />
+              )}
+              Prévisualiser
+            </Button>
+            <Button
+              variant="default"
+              onClick={() => window.open(buildPdfUrl(), "_blank")}
+              className="gap-2"
+            >
+              <Download className="w-4 h-4" />
+              Télécharger
             </Button>
           </div>
         </div>
@@ -649,12 +714,14 @@ export default function GroupDetail() {
                   icon={Wallet}
                   variant="success"
                 />
-                <StatCard
-                  title="Montant à collecter"
-                  value={formatCurrency(stats.montantRestant || 0)}
-                  icon={Wallet}
-                  variant="warning"
-                />
+                {isSuperAdmin ? (
+                  <StatCard
+                    title="Montant à collecter"
+                    value={formatCurrency(stats.montantRestant || 0)}
+                    icon={Wallet}
+                    variant="warning"
+                  />
+                ) : null}
                 <StatCard
                   title="Frais de livraison"
                   value={formatCurrency(stats.totalTarifs || 0)}
@@ -667,6 +734,30 @@ export default function GroupDetail() {
                   icon={HandCoins}
                   variant="success"
                 />
+              </div>
+
+              <div className="stat-card">
+                <h3 className="text-sm font-semibold mb-3">Expéditions (période)</h3>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                  <StatCard
+                    title="Total expéditions"
+                    value={expeditionStats?.totalExpeditions || 0}
+                    icon={Truck}
+                    variant="expedition"
+                  />
+                  <StatCard
+                    title="Frais de course"
+                    value={formatCurrency(expeditionStats?.totalFraisDeCourse || 0)}
+                    icon={Wallet}
+                    variant="success"
+                  />
+                  <StatCard
+                    title="Frais agence voyage"
+                    value={formatCurrency(expeditionStats?.totalFraisDeLAgenceDeVoyage || 0)}
+                    icon={Receipt}
+                    variant="warning"
+                  />
+                </div>
               </div>
 
               {/* Search and Filters */}
@@ -1068,6 +1159,42 @@ export default function GroupDetail() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* PDF Preview Dialog */}
+      <Dialog open={isPdfPreviewOpen} onOpenChange={(open) => { if (!open) handleClosePdfPreview(); }}>
+        <DialogContent className="max-w-5xl w-full h-[90vh] flex flex-col p-0">
+          <DialogHeader className="px-6 pt-6 pb-3 flex-shrink-0">
+            <div className="flex items-center justify-between">
+              <div>
+                <DialogTitle>Rapport — {group?.name}</DialogTitle>
+                <DialogDescription>
+                  {dateRange.startDate === dateRange.endDate
+                    ? dateRange.startDate
+                    : `${dateRange.startDate} — ${dateRange.endDate}`}
+                </DialogDescription>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2 mr-8"
+                onClick={() => window.open(buildPdfUrl(), "_blank")}
+              >
+                <Download className="w-4 h-4" />
+                Télécharger
+              </Button>
+            </div>
+          </DialogHeader>
+          <div className="flex-1 px-6 pb-6 min-h-0">
+            {pdfPreviewUrl ? (
+              <iframe
+                src={pdfPreviewUrl}
+                className="w-full h-full rounded-lg border"
+                title="Aperçu du rapport PDF"
+              />
+            ) : null}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -100,4 +100,11 @@ describe('isDeliveryMessage', () => {
   it('returns false for a message with only 3 lines', () => {
     expect(isDeliveryMessage('612345678\n2 robes\n15k')).toBe(false);
   });
+
+  it('returns false for a 4-line message starting with a @mention', () => {
+    // Regression: @mention as first line was treated as "quartier" by the
+    // alternative format parser, allowing conversational messages through.
+    const msg = '@223355697397803 vous m\'avez parlez de combien ?\n3 appels\n500fr\n697397803';
+    expect(isDeliveryMessage(msg)).toBe(false);
+  });
 });

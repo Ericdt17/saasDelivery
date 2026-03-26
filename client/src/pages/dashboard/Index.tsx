@@ -31,6 +31,7 @@ import { AppErrorExperience } from "@/components/errors/AppErrorExperience";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getDailyStats } from "@/services/stats";
 import { getDeliveries } from "@/services/deliveries";
+import { getExpeditionStats } from "@/services/expeditions";
 import { toast } from "sonner";
 import { getDateRangeLocal, getDateRangeForPreset, type DateRange } from "@/lib/date-utils";
 import { calculateStatsFromDeliveries } from "@/lib/stats-utils";
@@ -135,6 +136,25 @@ const Index = () => {
     refetchOnWindowFocus: false,
   });
 
+  const { data: expeditionStats } = useQuery({
+    queryKey: [
+      "expeditions",
+      "stats",
+      "dashboard",
+      dateRange.startDate,
+      dateRange.endDate,
+      selectedAgencyId,
+    ],
+    queryFn: () =>
+      getExpeditionStats({
+        startDate: dateRange.startDate,
+        endDate: dateRange.endDate,
+        agency_id: selectedAgencyId || undefined,
+      }),
+    retry: 2,
+    refetchOnWindowFocus: false,
+  });
+
   // Calculate current data based on date range
   const stats = useMemo(() => {
     if (isSingleDay) {
@@ -156,11 +176,11 @@ const Index = () => {
           echecs: dailyStats.echecs,
           enCours: dailyStats.enCours,
           pickups: dayStats.pickups,
-          expeditions: dayStats.expeditions,
+          expeditions: expeditionStats?.totalExpeditions || 0,
           montantEncaisse: Number(dayStats.montantEncaisse) || 0, // Brut amount (from deliveries calculation)
           montantRestant: Number(dayStats.montantRestant) || 0, // Remaining (0 for delivered)
-          chiffreAffaires: (Number(dayStats.montantEncaisse) || 0) + (Number(dayStats.montantRestant) || 0),
           totalTarifs: Number(dayStats.totalTarifs) || 0, // Sum of delivery_fee for delivered
+          chiffreAffaires: (Number(dayStats.totalTarifs) || 0) + (Number(expeditionStats?.totalFraisDeCourse) || 0),
           montantNetEncaisse: Number(dayStats.montantNetEncaisse) || 0, // Net amount to reverse (montantEncaisse - totalTarifs)
         };
       }
@@ -171,17 +191,22 @@ const Index = () => {
         echecs: dayStats.echecs,
         enCours: dayStats.enCours,
         pickups: dayStats.pickups,
-        expeditions: dayStats.expeditions,
+        expeditions: expeditionStats?.totalExpeditions || 0,
         montantEncaisse: Number(dayStats.montantEncaisse) || 0, // Already brut from calculateStatsFromDeliveries
         montantRestant: Number(dayStats.montantRestant) || 0,
-        chiffreAffaires: Number(dayStats.chiffreAffaires) || 0,
         totalTarifs: Number(dayStats.totalTarifs) || 0,
+        chiffreAffaires: (Number(dayStats.totalTarifs) || 0) + (Number(expeditionStats?.totalFraisDeCourse) || 0),
         montantNetEncaisse: Number(dayStats.montantNetEncaisse) || 0, // Montant NET (après tarifs)
       };
     }
 
     if (!isSingleDay && deliveriesData) {
-      return calculateStatsFromDeliveries(deliveriesData.deliveries);
+      const periodStats = calculateStatsFromDeliveries(deliveriesData.deliveries);
+      return {
+        ...periodStats,
+        expeditions: expeditionStats?.totalExpeditions || 0,
+        chiffreAffaires: (Number(periodStats.totalTarifs) || 0) + (Number(expeditionStats?.totalFraisDeCourse) || 0),
+      };
     }
 
     // Date range sans données -> valeurs neutres
@@ -198,7 +223,7 @@ const Index = () => {
       totalTarifs: 0,
       montantNetEncaisse: 0,
     };
-  }, [isSingleDay, dailyStats, deliveriesData, dayDeliveriesData]);
+  }, [isSingleDay, dailyStats, deliveriesData, dayDeliveriesData, expeditionStats]);
 
   const isLoading =
     isSingleDay
@@ -407,17 +432,25 @@ const Index = () => {
                   variant="expedition"
                 />
                 <StatCard
+                  title="Frais d'expédition"
+                  value={formatCurrency(expeditionStats?.totalFraisDeCourse || 0)}
+                  icon={Receipt}
+                  variant="warning"
+                />
+                <StatCard
                   title="Montant collecté"
                   value={formatCurrency(stats.montantEncaisse)}
                   icon={Wallet}
                   variant="success"
                 />
-                <StatCard
-                  title="Montant à collecter"
-                  value={formatCurrency(stats.montantRestant)}
-                  icon={Wallet}
-                  variant="warning"
-                />
+                {isSuperAdmin ? (
+                  <StatCard
+                    title="Montant à collecter"
+                    value={formatCurrency(stats.montantRestant)}
+                    icon={Wallet}
+                    variant="warning"
+                  />
+                ) : null}
                 <StatCard
                   title="Frais de livraison"
                   value={formatCurrency(stats.totalTarifs || 0)}
