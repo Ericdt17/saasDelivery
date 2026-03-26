@@ -88,6 +88,7 @@ const api = {
   getAllGroups: queries.getAllGroups,
   updateGroup: queries.updateGroup,
   deleteGroup: queries.deleteGroup,
+  hardDeleteGroup: queries.hardDeleteGroup,
   // Tariff queries
   createTariff: queries.createTariff,
   getTariffById: queries.getTariffById,

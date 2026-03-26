@@ -91,10 +91,7 @@ export async function updateGroup(
   id: number,
   data: UpdateGroupRequest
 ): Promise<Group | null> {
-  console.log('[updateGroup] Called with:', { id, data });
-  console.log('[updateGroup] Making PUT request to:', `/api/v1/groups/${id}`);
   const response = await apiPut<Group>(`/api/v1/groups/${id}`, data);
-  console.log('[updateGroup] Response:', response);
   if (response.success && response.data) {
     return response.data;
   }
@@ -120,8 +117,6 @@ export async function deleteGroup(id: number, permanent: boolean = false): Promi
  * - Super admins can hard delete any group
  */
 export async function hardDeleteGroup(id: number): Promise<boolean> {
-  console.log('[hardDeleteGroup] Called with id:', id);
-  console.log('[hardDeleteGroup] Making DELETE request to:', `/api/v1/groups/${id}?permanent=true`);
   return deleteGroup(id, true);
 }
 

@@ -700,6 +700,11 @@ function createPostgresQueries(pool) {
     return await updateGroup(id, { is_active: false });
   }
 
+  async function hardDeleteGroup(id) {
+    const result = await query(`DELETE FROM groups WHERE id = $1`, [id]);
+    return { changes: result.changes || 0 };
+  }
+
   // ============================================
   // Tariff Queries
   // ============================================
@@ -817,6 +822,7 @@ function createPostgresQueries(pool) {
     getAllGroups,
     updateGroup,
     deleteGroup,
+    hardDeleteGroup,
     // Tariff queries
     createTariff,
     getTariffById,
