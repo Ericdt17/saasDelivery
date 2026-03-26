@@ -24,21 +24,18 @@ router.use(authenticateToken);
  * Helper function to format currency (without slashes)
  */
 function formatCurrency(amount) {
-  // Convert to number and handle NaN/undefined/null cases
   const numAmount = parseFloat(amount);
   if (isNaN(numAmount) || !isFinite(numAmount)) {
-    return "0,00";
+    return "0";
   }
-
-  // Format number and ensure no slashes - use spaces for thousands separator
+  // FCFA is a whole-number currency — no decimals needed
   const formatted = new Intl.NumberFormat("fr-FR", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
     useGrouping: true,
-  }).format(numAmount);
-
-  // Replace any slashes, non-breaking spaces, or other separators with regular spaces
-  return formatted.replace(/[/\u00A0\u202F]/g, " ").trim();
+  }).format(Math.round(numAmount));
+  // Replace non-breaking spaces or other separators with regular spaces
+  return formatted.replace(/[\u00A0\u202F]/g, " ").trim();
 }
 
 /**
@@ -295,45 +292,28 @@ router.get("/groups/:groupId/pdf", async (req, res, next) => {
       }
 
       // 4) Colonne droite : client / période / rapport
+      // Fixed value column so all values align vertically
+      const rightValueX = rightColumnX + 75;
       let rightY = currentY;
-      doc.fontSize(8).font("Helvetica").fillColor("#4a4a4a");
-      doc
-        .text(`Client N°: `, rightColumnX, rightY)
-        .fillColor("#000000")
-        .font("Helvetica-Bold")
-        .text(`${group.id}`, rightColumnX + 55, rightY);
-      rightY += 12;
 
       const reportNumber = `R${new Date().getFullYear()}${String(
         new Date().getMonth() + 1
-      ).padStart(2, "0")}${String(new Date().getDate()).padStart(
-        2,
-        "0"
-      )}${String(group.id).padStart(3, "0")}`;
-      doc.fontSize(8).font("Helvetica").fillColor("#4a4a4a");
-      doc
-        .text(`Rapport N°: `, rightColumnX, rightY)
-        .fillColor("#000000")
-        .font("Helvetica-Bold")
-        .text(reportNumber, rightColumnX + 60, rightY);
-      rightY += 12;
+      ).padStart(2, "0")}${String(new Date().getDate()).padStart(2, "0")}${String(group.id).padStart(3, "0")}`;
 
-      doc.fontSize(8).font("Helvetica").fillColor("#4a4a4a");
-      doc
-        .text(`Destinataire: `, rightColumnX, rightY)
-        .fillColor("#000000")
-        .font("Helvetica-Bold")
-        .text(group.name, rightColumnX + 70, rightY);
-      rightY += 12;
+      const rightRows = [
+        { label: "Client N°:", value: String(group.id) },
+        { label: "Rapport N°:", value: reportNumber },
+        { label: "Destinataire:", value: group.name },
+        { label: "Période:", value: `${startDate || new Date().toISOString().split("T")[0]} - ${endDate || new Date().toISOString().split("T")[0]}` },
+      ];
 
-      const periodStart = startDate || new Date().toISOString().split("T")[0];
-      const periodEnd = endDate || new Date().toISOString().split("T")[0];
-      doc.fontSize(8).font("Helvetica").fillColor("#4a4a4a");
-      doc
-        .text(`Période: `, rightColumnX, rightY)
-        .fillColor("#000000")
-        .font("Helvetica-Bold")
-        .text(`${periodStart} - ${periodEnd}`, rightColumnX + 50, rightY);
+      rightRows.forEach(({ label, value }) => {
+        doc.fontSize(8).font("Helvetica").fillColor("#4a4a4a");
+        doc.text(label, rightColumnX, rightY, { width: 70, align: "left" });
+        doc.fontSize(8).font("Helvetica-Bold").fillColor("#000000");
+        doc.text(value, rightValueX, rightY, { width: 225 - 75, ellipsis: true });
+        rightY += 12;
+      });
 
       doc.fillColor("#000000");
 
@@ -531,7 +511,6 @@ router.get("/groups/:groupId/pdf", async (req, res, next) => {
 
     // Table rows - Display ALL deliveries
     doc.fontSize(8).font("Helvetica"); // Reduced from 9.5
-    let totalHT = 0;
     let totalEncaisseTable = 0; // Total collected amount for the table (delivered and pickup)
     let rowIndex = 0;
 
@@ -542,10 +521,13 @@ router.get("/groups/:groupId/pdf", async (req, res, next) => {
       failed: "Annulé",
       cancelled: "Annulé",
       postponed: "Renvoyé",
+      renvoyé: "Renvoyé",
+      injoignable: "Injoignable",
       pickup: "Au bureau",
       expedition: "Expédition",
       client_absent: "Client absent",
       unreachable: "Injoignable",
+      ne_decroche_pas: "Ne décroche pas",
       no_answer: "Ne décroche pas",
       present_ne_decroche_zone1: "CPCNDP Z1",
       present_ne_decroche_zone2: "CPCNDP Z2",
@@ -567,9 +549,8 @@ router.get("/groups/:groupId/pdf", async (req, res, next) => {
           rowIndex = 0;
         });
 
-        // Calculate totals for delivered and pickup deliveries
+        // Accumulate encaissé for delivered and pickup deliveries
         if (item.status === "delivered" || item.status === "pickup") {
-          totalHT += item.amountDue || 0;
           totalEncaisseTable += item.amountPaid || 0;
         }
 
@@ -946,39 +927,23 @@ router.get("/groups/:groupId/pdf", async (req, res, next) => {
 
     currentY += 28; // Reduced from 35
 
-    // Summary items with better visual hierarchy
-    doc.fontSize(9).font("Helvetica").fillColor("#4a4a4a"); // Reduced from 11
-    doc.text(`Total encaissé: `, leftColumnX, currentY);
-    doc
-      .font("Helvetica-Bold")
-      .fillColor("#000000")
-      .text(
-        `${formatCurrency(totalEncaisse)} FCFA`,
-        leftColumnX + 90,
-        currentY
-      );
-    currentY += 18; // Reduced from 22
-
-    doc.fontSize(9).font("Helvetica").fillColor("#4a4a4a"); // Reduced from 11
-    doc.text(`Total tarifs (retirés): `, leftColumnX, currentY);
-    doc
-      .font("Helvetica-Bold")
-      .fillColor("#000000")
-      .text(`${formatCurrency(totalTarifs)} FCFA`, leftColumnX + 120, currentY);
-    currentY += 18; // Reduced from 22
-
-    // Reste à percevoir = montant collecté - total tarifs
+    // Summary items — fixed value column so all three numbers align vertically
+    const resumeValueX = leftColumnX + 140;
     const resteAPercevoir = totalEncaisse - totalTarifs;
-    doc.fontSize(9).font("Helvetica").fillColor("#4a4a4a"); // Reduced from 11
-    doc.text(`Reste à percevoir: `, leftColumnX, currentY);
-    doc
-      .font("Helvetica-Bold")
-      .fillColor("#000000")
-      .text(
-        `${formatCurrency(resteAPercevoir)} FCFA`,
-        leftColumnX + 110,
-        currentY
-      );
+
+    const resumeRows = [
+      { label: "Total encaissé:", value: `${formatCurrency(totalEncaisse)} FCFA` },
+      { label: "Total tarifs (retirés):", value: `${formatCurrency(totalTarifs)} FCFA` },
+      { label: "Reste à percevoir:", value: `${formatCurrency(resteAPercevoir)} FCFA` },
+    ];
+
+    resumeRows.forEach(({ label, value }) => {
+      doc.fontSize(9).font("Helvetica").fillColor("#4a4a4a");
+      doc.text(label, leftColumnX, currentY, { width: 135 });
+      doc.fontSize(9).font("Helvetica-Bold").fillColor("#000000");
+      doc.text(value, resumeValueX, currentY, { width: 200 });
+      currentY += 18;
+    });
 
     doc.fillColor("#000000");
 

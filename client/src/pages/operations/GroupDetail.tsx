@@ -26,6 +26,7 @@ import {
   Download,
   ArrowLeft,
   CircleAlert,
+  FileText,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { StatCard } from "@/components/ui/stat-card";
@@ -130,6 +131,9 @@ export default function GroupDetail() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [selectedDelivery, setSelectedDelivery] = useState<FrontendDelivery | null>(null);
+  const [isPdfPreviewOpen, setIsPdfPreviewOpen] = useState(false);
+  const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
+  const [isLoadingPdf, setIsLoadingPdf] = useState(false);
 
   const limit = 20;
 
@@ -547,6 +551,39 @@ export default function GroupDetail() {
     );
   }
 
+  const buildPdfUrl = () => {
+    const params = new URLSearchParams();
+    if (dateRange.startDate) params.append("startDate", dateRange.startDate);
+    if (dateRange.endDate) params.append("endDate", dateRange.endDate);
+    return buildApiUrl(`/api/v1/reports/groups/${groupId}/pdf${params.toString() ? `?${params.toString()}` : ""}`);
+  };
+
+  const handlePdfPreview = async () => {
+    setIsLoadingPdf(true);
+    try {
+      const response = await fetch(buildPdfUrl(), { credentials: "include" });
+      if (!response.ok) throw new Error(`Erreur ${response.status}`);
+      const blob = await response.blob();
+      // Revoke previous URL to avoid memory leaks
+      if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl);
+      const objectUrl = URL.createObjectURL(blob);
+      setPdfPreviewUrl(objectUrl);
+      setIsPdfPreviewOpen(true);
+    } catch (err) {
+      toast.error("Impossible de charger le rapport PDF");
+    } finally {
+      setIsLoadingPdf(false);
+    }
+  };
+
+  const handleClosePdfPreview = () => {
+    setIsPdfPreviewOpen(false);
+    if (pdfPreviewUrl) {
+      URL.revokeObjectURL(pdfPreviewUrl);
+      setPdfPreviewUrl(null);
+    }
+  };
+
   return (
     <div className="space-y-6 pb-8">
       {/* Header */}
@@ -569,19 +606,25 @@ export default function GroupDetail() {
               Retour aux prestataires
             </Button>
             <Button
-              variant="default"
-              onClick={() => {
-                // Generate PDF with current date range
-                const params = new URLSearchParams();
-                if (dateRange.startDate) params.append("startDate", dateRange.startDate);
-                if (dateRange.endDate) params.append("endDate", dateRange.endDate);
-                
-                const url = buildApiUrl(`/api/v1/reports/groups/${groupId}/pdf${params.toString() ? `?${params.toString()}` : ""}`);
-                window.open(url, "_blank");
-              }}
+              variant="outline"
+              onClick={handlePdfPreview}
+              disabled={isLoadingPdf}
+              className="gap-2"
             >
-              <Download className="w-4 h-4 mr-2" />
-              Télécharger rapport
+              {isLoadingPdf ? (
+                <RefreshCw className="w-4 h-4 animate-spin" />
+              ) : (
+                <FileText className="w-4 h-4" />
+              )}
+              Prévisualiser
+            </Button>
+            <Button
+              variant="default"
+              onClick={() => window.open(buildPdfUrl(), "_blank")}
+              className="gap-2"
+            >
+              <Download className="w-4 h-4" />
+              Télécharger
             </Button>
           </div>
         </div>
@@ -1116,6 +1159,42 @@ export default function GroupDetail() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* PDF Preview Dialog */}
+      <Dialog open={isPdfPreviewOpen} onOpenChange={(open) => { if (!open) handleClosePdfPreview(); }}>
+        <DialogContent className="max-w-5xl w-full h-[90vh] flex flex-col p-0">
+          <DialogHeader className="px-6 pt-6 pb-3 flex-shrink-0">
+            <div className="flex items-center justify-between">
+              <div>
+                <DialogTitle>Rapport — {group?.name}</DialogTitle>
+                <DialogDescription>
+                  {dateRange.startDate === dateRange.endDate
+                    ? dateRange.startDate
+                    : `${dateRange.startDate} — ${dateRange.endDate}`}
+                </DialogDescription>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2 mr-8"
+                onClick={() => window.open(buildPdfUrl(), "_blank")}
+              >
+                <Download className="w-4 h-4" />
+                Télécharger
+              </Button>
+            </div>
+          </DialogHeader>
+          <div className="flex-1 px-6 pb-6 min-h-0">
+            {pdfPreviewUrl ? (
+              <iframe
+                src={pdfPreviewUrl}
+                className="w-full h-full rounded-lg border"
+                title="Aperçu du rapport PDF"
+              />
+            ) : null}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

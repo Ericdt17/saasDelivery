@@ -80,9 +80,15 @@ function buildReportPdfData(deliveries, standardTariffs = {}) {
 
   const netARever = totalEncaisse - totalTarifs;
 
+  // Normalise standardTariffs keys to lowercase for case-insensitive lookup
+  const normalisedTariffs = {};
+  Object.keys(standardTariffs).forEach((k) => {
+    normalisedTariffs[k.toLowerCase()] = standardTariffs[k];
+  });
+
   Object.keys(tarifsParQuartier).forEach((tariffKey) => {
     const quartierData = tarifsParQuartier[tariffKey];
-    const standardTariff = standardTariffs[quartierData.quartier];
+    const standardTariff = normalisedTariffs[quartierData.quartier.toLowerCase()];
     if (
       standardTariff !== undefined &&
       Math.abs(quartierData.deliveryFee - standardTariff) < 0.01
