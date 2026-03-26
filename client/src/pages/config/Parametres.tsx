@@ -10,23 +10,13 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import {
   Building2,
   Upload,
   Clock,
   Download,
-  Key,
   Bell,
-  Shield,
   Save,
   Truck,
 } from "lucide-react";
@@ -46,11 +36,6 @@ const Parametres = () => {
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [logoBase64, setLogoBase64] = useState<string | null>(null);
-
-  // Password change dialog state
-  const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
 
   const {
     data: agency,
@@ -119,22 +104,6 @@ const Parametres = () => {
     },
   });
 
-  const passwordMutation = useMutation({
-    mutationFn: (password: string) => {
-      if (!agencyId) throw new Error("ID agence introuvable");
-      return updateAgency(agencyId, { password });
-    },
-    onSuccess: () => {
-      toast.success("Mot de passe modifié avec succès");
-      setIsPasswordDialogOpen(false);
-      setNewPassword("");
-      setConfirmPassword("");
-    },
-    onError: (error: Error) => {
-      toast.error(error?.message || "Erreur lors du changement de mot de passe");
-    },
-  });
-
   const handleSave = () => {
     if (!agencyId) {
       toast.error("Impossible de déterminer l'ID de l'agence. Veuillez vous reconnecter.");
@@ -150,22 +119,6 @@ const Parametres = () => {
       phone: phone.trim() || null,
       logo_base64: logoBase64 || null,
     });
-  };
-
-  const handlePasswordChange = () => {
-    if (!newPassword) {
-      toast.error("Veuillez saisir un nouveau mot de passe");
-      return;
-    }
-    if (newPassword.length < 8) {
-      toast.error("Le mot de passe doit contenir au moins 8 caractères");
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      toast.error("Les mots de passe ne correspondent pas");
-      return;
-    }
-    passwordMutation.mutate(newPassword);
   };
 
   if (!isSuperAdmin && user?.role === "agency" && !isLoadingAgency && isErrorAgency) {
@@ -323,29 +276,6 @@ const Parametres = () => {
             </CardContent>
           </Card>
 
-          {/* Security */}
-          {!isSuperAdmin && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Shield className="w-5 h-5 text-primary" />
-                  Sécurité
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <Button
-                  variant="outline"
-                  className="w-full justify-start gap-2"
-                  onClick={() => setIsPasswordDialogOpen(true)}
-                  disabled={isLoadingAgency}
-                >
-                  <Key className="w-4 h-4" />
-                  Changer le mot de passe
-                </Button>
-              </CardContent>
-            </Card>
-          )}
-
           {/* Notifications — coming soon */}
           <Card className="opacity-70">
             <CardHeader>
@@ -378,63 +308,6 @@ const Parametres = () => {
         </div>
       )}
 
-      {/* Password Change Dialog */}
-      <Dialog
-        open={isPasswordDialogOpen}
-        onOpenChange={(open) => {
-          setIsPasswordDialogOpen(open);
-          if (!open) {
-            setNewPassword("");
-            setConfirmPassword("");
-          }
-        }}
-      >
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Changer le mot de passe</DialogTitle>
-            <DialogDescription>
-              Saisissez votre nouveau mot de passe. Il doit contenir au moins 8 caractères.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div>
-              <label className="text-sm font-medium">Nouveau mot de passe</label>
-              <Input
-                type="password"
-                className="mt-1"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="••••••••"
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium">Confirmer le mot de passe</label>
-              <Input
-                type="password"
-                className="mt-1"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="••••••••"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsPasswordDialogOpen(false)}>
-              Annuler
-            </Button>
-            <Button
-              onClick={handlePasswordChange}
-              disabled={passwordMutation.isPending}
-              className="gap-2"
-            >
-              {passwordMutation.isPending ? (
-                <LoadingSpinner size="sm" variant="icon" className="gap-0" />
-              ) : null}
-              Confirmer
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };
