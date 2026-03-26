@@ -86,6 +86,7 @@ import { mapStatusToBackend, type StatutLivraison, type TypeLivraison } from "@/
 import { toast } from "sonner";
 import type { FrontendDelivery } from "@/types/delivery";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
+import { getExpeditionStats } from "@/services/expeditions";
 
 const formatCurrency = (value: number | undefined | null) => {
   // Handle NaN, undefined, null, or invalid numbers
@@ -116,6 +117,7 @@ export default function GroupDetail() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const groupId = id ? parseInt(id) : null;
+  const { isSuperAdmin } = useAuth();
 
   const [period, setPeriod] = useState<"jour" | "semaine" | "mois">("jour");
   const [dateRange, setDateRange] = useState<DateRange>(() => getDateRangeForPreset("today"));
@@ -198,6 +200,19 @@ export default function GroupDetail() {
       }
       return failureCount < 2;
     },
+    refetchOnWindowFocus: false,
+  });
+
+  const { data: expeditionStats } = useQuery({
+    queryKey: ["expeditions", "stats", "group-detail", groupId, dateRange.startDate, dateRange.endDate],
+    queryFn: () =>
+      getExpeditionStats({
+        group_id: groupId || undefined,
+        startDate: dateRange.startDate,
+        endDate: dateRange.endDate,
+      }),
+    enabled: !!groupId,
+    retry: 2,
     refetchOnWindowFocus: false,
   });
 
@@ -291,24 +306,31 @@ export default function GroupDetail() {
           echecs: dailyStats.echecs,
           enCours: dailyStats.enCours,
           pickups: dailyStats.pickups,
-          expeditions: dailyStats.expeditions,
+          expeditions: expeditionStats?.totalExpeditions || 0,
           montantEncaisse: Number(dayStats.montantEncaisse) || 0, // Brut amount (from deliveries calculation)
           montantRestant: Number(dayStats.montantRestant) || 0, // Remaining (0 for delivered)
-          chiffreAffaires: (Number(dayStats.montantEncaisse) || 0) + (Number(dayStats.montantRestant) || 0),
           totalTarifs: Number(dayStats.totalTarifs) || 0, // Sum of delivery_fee for delivered
+          chiffreAffaires: (Number(dayStats.totalTarifs) || 0) + (Number(expeditionStats?.totalFraisDeCourse) || 0),
           montantNetEncaisse: Number(dayStats.montantNetEncaisse) || 0, // Net amount to reverse (montantEncaisse - totalTarifs)
         };
       }
       // Fallback: use dayStats directly if dailyStats is not available
       return {
         ...dayStats,
+        expeditions: expeditionStats?.totalExpeditions || 0,
+        chiffreAffaires: (Number(dayStats.totalTarifs) || 0) + (Number(expeditionStats?.totalFraisDeCourse) || 0),
         montantNetEncaisse: dayStats.montantNetEncaisse || (dayStats.montantEncaisse - (dayStats.totalTarifs || 0)),
       };
     }
 
     // For non-single day (semaine/mois): use deliveries data directly
     if (deliveriesData) {
-      return calculateStatsFromDeliveries(deliveriesData.deliveries);
+      const periodStats = calculateStatsFromDeliveries(deliveriesData.deliveries);
+      return {
+        ...periodStats,
+        expeditions: expeditionStats?.totalExpeditions || 0,
+        chiffreAffaires: (Number(periodStats.totalTarifs) || 0) + (Number(expeditionStats?.totalFraisDeCourse) || 0),
+      };
     }
 
     return {
@@ -324,7 +346,7 @@ export default function GroupDetail() {
       totalTarifs: 0,
       montantNetEncaisse: 0,
     };
-  }, [isSingleDay, dailyStats, deliveriesData]);
+  }, [isSingleDay, dailyStats, deliveriesData, expeditionStats]);
 
   // Get unique quartiers
   const availableQuartiers = useMemo(() => {
@@ -649,12 +671,14 @@ export default function GroupDetail() {
                   icon={Wallet}
                   variant="success"
                 />
-                <StatCard
-                  title="Montant à collecter"
-                  value={formatCurrency(stats.montantRestant || 0)}
-                  icon={Wallet}
-                  variant="warning"
-                />
+                {isSuperAdmin ? (
+                  <StatCard
+                    title="Montant à collecter"
+                    value={formatCurrency(stats.montantRestant || 0)}
+                    icon={Wallet}
+                    variant="warning"
+                  />
+                ) : null}
                 <StatCard
                   title="Frais de livraison"
                   value={formatCurrency(stats.totalTarifs || 0)}
@@ -667,6 +691,30 @@ export default function GroupDetail() {
                   icon={HandCoins}
                   variant="success"
                 />
+              </div>
+
+              <div className="stat-card">
+                <h3 className="text-sm font-semibold mb-3">Expéditions (période)</h3>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                  <StatCard
+                    title="Total expéditions"
+                    value={expeditionStats?.totalExpeditions || 0}
+                    icon={Truck}
+                    variant="expedition"
+                  />
+                  <StatCard
+                    title="Frais de course"
+                    value={formatCurrency(expeditionStats?.totalFraisDeCourse || 0)}
+                    icon={Wallet}
+                    variant="success"
+                  />
+                  <StatCard
+                    title="Frais agence voyage"
+                    value={formatCurrency(expeditionStats?.totalFraisDeLAgenceDeVoyage || 0)}
+                    icon={Receipt}
+                    variant="warning"
+                  />
+                </div>
               </div>
 
               {/* Search and Filters */}

@@ -12,6 +12,7 @@ const agenciesRouter = require("./routes/agencies");
 const groupsRouter = require("./routes/groups");
 const tariffsRouter = require("./routes/tariffs");
 const reportsRouter = require("./routes/reports");
+const expeditionsRouter = require("./routes/expeditions");
 const errorHandler = require("./middleware/errorHandler");
 
 const app = express();
@@ -128,6 +129,7 @@ app.use("/api/v1/agencies", agenciesRouter);
 app.use("/api/v1/groups", groupsRouter);
 app.use("/api/v1/tariffs", tariffsRouter);
 app.use("/api/v1/deliveries", deliveriesRouter);
+app.use("/api/v1/expeditions", expeditionsRouter);
 app.use("/api/v1/stats", statsRouter);
 app.use("/api/v1/search", searchRouter);
 app.use("/api/v1/reports", reportsRouter);
