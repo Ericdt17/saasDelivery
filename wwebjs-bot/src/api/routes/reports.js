@@ -12,6 +12,7 @@ const {
   getDeliveries,
   getAgencyById,
   getTariffsByAgency,
+  getExpeditionStats,
   adapter,
 } = require("../../db");
 const { buildReportPdfData } = require("../../lib/reportAggregates");
@@ -113,6 +114,22 @@ router.get("/groups/:groupId/pdf", async (req, res, next) => {
       });
     } catch (error) {
       logger.error({ err: error }, "Reports API: error fetching standard tariffs");
+    }
+
+    // Fetch expedition stats for this group in the date range
+    let totalFraisExpeditions = 0;
+    let totalExpeditions = 0;
+    try {
+      const expStats = await getExpeditionStats({
+        group_id: parseInt(groupId),
+        agency_id: group.agency_id,
+        startDate: startDate || null,
+        endDate: endDate || null,
+      });
+      totalFraisExpeditions = parseFloat(expStats?.total_frais_de_course) || 0;
+      totalExpeditions = parseInt(expStats?.total_expeditions) || 0;
+    } catch (error) {
+      logger.error({ err: error }, "Reports API: error fetching expedition stats");
     }
 
     // Totals and per-quartier breakdown (see reportAggregates.js)
@@ -929,22 +946,28 @@ router.get("/groups/:groupId/pdf", async (req, res, next) => {
 
     // Summary items — fixed value column so all three numbers align vertically
     const resumeValueX = leftColumnX + 140;
-    const resteAPercevoir = totalEncaisse - totalTarifs;
+    const resteAPercevoir = totalEncaisse - totalTarifs - totalFraisExpeditions;
 
     const resumeRows = [
       { label: "Total encaissé:", value: `${formatCurrency(totalEncaisse)} FCFA` },
       { label: "Total tarifs (retirés):", value: `${formatCurrency(totalTarifs)} FCFA` },
-      { label: "Reste à percevoir:", value: `${formatCurrency(resteAPercevoir)} FCFA` },
+      ...(totalExpeditions > 0 ? [{ label: `Frais expéditions (${totalExpeditions}) :`, value: `${formatCurrency(totalFraisExpeditions)} FCFA` }] : []),
+      {
+        label: resteAPercevoir < 0 ? "Dette du groupe:" : "Reste à percevoir:",
+        value: `${formatCurrency(Math.abs(resteAPercevoir))} FCFA`,
+        isDebt: resteAPercevoir < 0,
+      },
     ];
 
-    resumeRows.forEach(({ label, value }) => {
-      doc.fontSize(9).font("Helvetica").fillColor("#4a4a4a");
+    resumeRows.forEach(({ label, value, isDebt }) => {
+      const labelColor = isDebt ? "#cc0000" : "#4a4a4a";
+      const valueColor = isDebt ? "#cc0000" : "#000000";
+      doc.fontSize(9).font("Helvetica").fillColor(labelColor);
       doc.text(label, leftColumnX, currentY, { width: 135 });
-      doc.fontSize(9).font("Helvetica-Bold").fillColor("#000000");
+      doc.fontSize(9).font("Helvetica-Bold").fillColor(valueColor);
       doc.text(value, resumeValueX, currentY, { width: 200 });
       currentY += 18;
     });
-
     doc.fillColor("#000000");
 
     // Draw footer on the last page if it has content

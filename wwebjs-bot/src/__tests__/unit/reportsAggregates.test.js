@@ -106,6 +106,18 @@ describe("buildReportPdfData", () => {
     expect(out.fixedStatusTarifs.present_ne_decroche_zone2.total).toBe(1000);
   });
 
+  it("netARever does not include expedition fees (those are deducted in the route, not here)", () => {
+    // buildReportPdfData is a pure delivery aggregator.
+    // The expedition fee deduction (resteAPercevoir) is computed by the PDF route separately.
+    const deliveries = [
+      { status: "delivered", quartier: "Akwa", delivery_fee: 1000, amount_paid: 9000, amount_due: 10000 },
+    ];
+    const out = buildReportPdfData(deliveries, {});
+    // netARever = totalEncaisse - totalTarifs = 10000 - 1000 = 9000
+    expect(out.netARever).toBe(9000);
+    // The caller (route) then subtracts expedition frais_de_course from netARever to get resteAPercevoir
+  });
+
   it("maps allLivraisonsDetails amountPaid by status rules", () => {
     const deliveries = [
       {
