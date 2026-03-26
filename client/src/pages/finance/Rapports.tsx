@@ -346,7 +346,7 @@ const Rapports = () => {
               {/* Financial Summary */}
               <div className="stat-card">
                 <h3 className="text-lg font-semibold mb-4">Résumé financier</h3>
-                <div className="grid sm:grid-cols-3 gap-4">
+                <div className={`grid gap-4 ${isSuperAdmin ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
                   <div className="p-4 rounded-xl bg-success/10 border border-success/20">
                     <p className="text-sm text-muted-foreground mb-1">
                       Chiffre d'affaires
@@ -363,14 +363,16 @@ const Rapports = () => {
                       {formatCurrency(currentData.encaisse)}
                     </p>
                   </div>
-                  <div className="p-4 rounded-xl bg-warning/10 border border-warning/20">
-                    <p className="text-sm text-muted-foreground mb-1">
-                      Montant à collecter
-                    </p>
-                    <p className="text-2xl font-bold text-warning">
-                      {formatCurrency(currentData.restant)}
-                    </p>
-                  </div>
+                  {isSuperAdmin ? (
+                    <div className="p-4 rounded-xl bg-warning/10 border border-warning/20">
+                      <p className="text-sm text-muted-foreground mb-1">
+                        Montant à collecter
+                      </p>
+                      <p className="text-2xl font-bold text-warning">
+                        {formatCurrency(currentData.restant)}
+                      </p>
+                    </div>
+                  ) : null}
                 </div>
               </div>
             </>
