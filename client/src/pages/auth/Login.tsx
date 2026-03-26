@@ -38,9 +38,9 @@ const Login = () => {
         <div className="grid min-h-[620px] grid-cols-1 gap-4 lg:grid-cols-2">
           <section className="flex items-center justify-center rounded-2xl bg-card px-6 py-8 md:px-10">
             <div className="w-full max-w-sm">
-              <h1 className="text-3xl font-bold text-foreground">Login</h1>
+              <h1 className="text-3xl font-bold text-foreground">Se connecter</h1>
               <p className="mt-1 text-sm text-muted-foreground">
-                Sign in to access your delivery operations dashboard.
+                Connectez-vous pour accéder à votre tableau de bord des opérations de livraison.
               </p>
 
               <form onSubmit={handleSubmit} className="mt-8 space-y-4">
@@ -56,7 +56,7 @@ const Login = () => {
                   <Input
                     id="email"
                     type="email"
-                    placeholder="Enter your email"
+                    placeholder="Saisir votre email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required
@@ -66,7 +66,7 @@ const Login = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="password">Password</Label>
+                  <Label htmlFor="password">Mot de passe</Label>
                   <div className="relative">
                     <Input
                       id="password"
@@ -82,7 +82,7 @@ const Login = () => {
                       type="button"
                       onClick={() => setShowPassword((prev) => !prev)}
                       className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-muted-foreground hover:text-foreground"
-                      aria-label={showPassword ? "Hide password" : "Show password"}
+                      aria-label={showPassword ? "Masquer le mot de passe" : "Afficher le mot de passe"}
                     >
                       {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
@@ -94,7 +94,7 @@ const Login = () => {
                     type="button"
                     className="text-xs text-primary hover:underline"
                   >
-                    Forgot password
+                    Mot de passe oublié
                   </button>
                 </div>
 
@@ -102,10 +102,10 @@ const Login = () => {
                   {isLoading ? (
                     <>
                       <LoadingSpinner size="sm" variant="icon" className="gap-0" />
-                      Signing in...
+                      Connexion en cours...
                     </>
                   ) : (
-                    "Sign in"
+                    "Se connecter"
                   )}
                 </Button>
 
@@ -115,7 +115,7 @@ const Login = () => {
                     className="flex h-11 w-full items-center justify-center gap-2 rounded-full border border-border bg-card text-sm text-foreground transition-colors hover:bg-accent/30"
                   >
                     <span className="font-semibold text-primary">G</span>
-                    <span>Sign in with Google</span>
+                    <span>Continuer avec Google</span>
                   </button>
 
                   <button
@@ -123,14 +123,14 @@ const Login = () => {
                     className="flex h-11 w-full items-center justify-center gap-2 rounded-full border border-border bg-card text-sm text-foreground transition-colors hover:bg-accent/30"
                   >
                     <span className="font-semibold text-primary">f</span>
-                    <span>Sign in with Facebook</span>
+                    <span>Continuer avec Facebook</span>
                   </button>
                 </div>
 
                 <p className="pt-2 text-center text-sm text-muted-foreground">
-                  Don&apos;t have an account.{" "}
+                  Vous n&apos;avez pas de compte ?{" "}
                   <button type="button" className="font-medium text-primary hover:underline">
-                    Sign up
+                    S&apos;inscrire
                   </button>
                 </p>
               </form>
@@ -139,10 +139,10 @@ const Login = () => {
 
           <section className="relative hidden overflow-hidden rounded-2xl bg-primary p-10 text-primary-foreground lg:block">
             <h2 className="max-w-md text-5xl font-bold leading-tight">
-              Great opportunities are waiting for you.
+              De belles opportunités vous attendent.
             </h2>
             <p className="mt-4 max-w-md text-base text-primary-foreground/90">
-              Manage deliveries, payments, and partners in one place with speed and confidence.
+              Gérez les livraisons, paiements et partenaires dans un seul endroit, rapidement et en toute confiance.
             </p>
 
             <div className="absolute left-10 top-56 h-28 w-1 rounded-full bg-white/50" />
