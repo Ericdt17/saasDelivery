@@ -601,31 +601,34 @@ export default function GroupDetail() {
               )}
             </p>
           </div>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => navigate("/groupes")}>
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Retour aux prestataires
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" onClick={() => navigate("/groupes")}>
+              <ArrowLeft className="w-4 h-4 mr-1 sm:mr-2" />
+              <span className="hidden sm:inline">Retour aux prestataires</span>
+              <span className="sm:hidden">Retour</span>
             </Button>
             <Button
               variant="outline"
+              size="sm"
               onClick={handlePdfPreview}
               disabled={isLoadingPdf}
-              className="gap-2"
+              className="gap-1 sm:gap-2"
             >
               {isLoadingPdf ? (
                 <RefreshCw className="w-4 h-4 animate-spin" />
               ) : (
                 <FileText className="w-4 h-4" />
               )}
-              Prévisualiser
+              <span className="hidden sm:inline">Prévisualiser</span>
             </Button>
             <Button
               variant="default"
+              size="sm"
               onClick={() => window.open(buildPdfUrl(), "_blank")}
-              className="gap-2"
+              className="gap-1 sm:gap-2"
             >
               <Download className="w-4 h-4" />
-              Télécharger
+              <span className="hidden sm:inline">Télécharger</span>
             </Button>
           </div>
         </div>

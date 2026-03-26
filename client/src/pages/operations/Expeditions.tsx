@@ -260,7 +260,7 @@ const Expeditions = () => {
       {isError ? <AppErrorExperience error={error} onRetry={() => void refetch()} /> : null}
 
       {!isLoading && (
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <StatCard title="Total expéditions" value={stats?.totalExpeditions ?? expeditions.length} icon={Truck} variant="expedition" />
           <StatCard title="Frais de course" value={formatCurrency(stats?.totalFraisDeCourse)} icon={Wallet} variant="success" />
           <StatCard title="Frais agence voyage" value={formatCurrency(stats?.totalFraisDeLAgenceDeVoyage)} icon={HandCoins} variant="warning" />
@@ -268,7 +268,7 @@ const Expeditions = () => {
       )}
 
       {isLoading && (
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {Array.from({ length: 3 }).map((_, i) => (
             <div key={i} className="stat-card">
               <Skeleton className="h-14 w-full" />
@@ -394,7 +394,7 @@ const Expeditions = () => {
           if (!open) resetForm();
         }}
       >
-        <DialogContent className="max-w-xl">
+        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingExpedition ? "Modifier l'expédition" : "Nouvelle expédition"}</DialogTitle>
             <DialogDescription>Renseignez les informations de l'expédition.</DialogDescription>
