@@ -679,16 +679,13 @@ router.get("/groups/:groupId/pdf", async (req, res, next) => {
     // Combine: fixed status first, then quartiers
     const tarifsList = [...fixedStatusList, ...quartierTarifsList];
 
-    // Calculate space needed for tarifs section: 30 (spacing) + 25 (title) + 18 (header) + (rows * 15) + 15 (total row)
-    const spaceForTarifsTitle = 30 + 25 + 18; // ~73 points (reduced)
-    const spaceForTarifsRows =
-      tarifsList.length > 0 ? tarifsList.length * 15 + 15 : 20; // rows + total or message (reduced)
-    const totalSpaceForTarifs = spaceForTarifsTitle + spaceForTarifsRows;
+    // Only require title + header + at least 2 rows before breaking.
+    // Each individual row already calls ensureSpace(15), so the rest will flow naturally.
+    const spaceForTarifsTitle = 15 + 25 + 18; // spacing + title + table header (~58pt)
+    const minTarifsRows = tarifsList.length > 0 ? Math.min(2, tarifsList.length) * 15 + 15 : 20;
+    ensureSpace(spaceForTarifsTitle + minTarifsRows);
 
-    // Check if we need a new page for tarifs section
-    ensureSpace(totalSpaceForTarifs);
-
-    currentY += 30; // Reduced from 35
+    currentY += 15;
 
     // Section 2: Tarifs par livraison - Aligné à gauche
     const section2Title = "TARIFS PAR LIVRAISON";
@@ -891,10 +888,9 @@ router.get("/groups/:groupId/pdf", async (req, res, next) => {
       currentY += 15; // Reduced from 18
     }
 
-    // Section 3: Résumé - Calculate space needed before adding
-    // Space needed: 45 (spacing) + 15 (separator line) + 28 (title + underline) +
-    //                (18 * 3 lines: Total encaissé, Total tarifs, Reste à percevoir) = ~142 points
-    const spaceForResume = 45 + 15 + 28 + 18 * 3; // ~142 points (reduced after removing "Net à reverser")
+    // Section 3: Résumé — dynamic row count (expedition fee adds a row when present)
+    const resumeLineCount = 3 + (totalExpeditions > 0 ? 1 : 0);
+    const spaceForResume = 25 + 15 + 28 + 18 * resumeLineCount;
 
     // Manual page break check for Résumé (like we did before)
     // This ensures content is immediately written on the new page if needed
@@ -914,7 +910,7 @@ router.get("/groups/:groupId/pdf", async (req, res, next) => {
     }
 
     // Now immediately draw the content
-    currentY += 45;
+    currentY += 25;
 
     // Add subtle separator line before Résumé
     doc
