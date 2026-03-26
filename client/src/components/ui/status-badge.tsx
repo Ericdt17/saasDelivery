@@ -16,9 +16,7 @@ const statutLabels: Record<StatutLivraison, string> = {
   "renvoyé": "Renvoyé",
   "client_absent": "Client absent",
   "injoignable": "Injoignable",
-  "ne_decroche_pas": "Ne décroche pas",
-  "present_ne_decroche_zone1": "CPCNDP Z1",
-  "present_ne_decroche_zone2": "CPCNDP Z2"
+  "ne_decroche_pas": "Ne décroche pas"
 };
 
 export function StatusBadge({ statut, className }: StatusBadgeProps) {

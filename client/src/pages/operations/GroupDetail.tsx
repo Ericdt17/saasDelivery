@@ -231,8 +231,6 @@ export default function GroupDetail() {
       "renvoyé": "postponed",
       "pickup": "pickup",
       "expedition": "expedition",
-      "present_ne_decroche_zone1": "present_ne_decroche_zone1",
-      "present_ne_decroche_zone2": "present_ne_decroche_zone2",
     };
     return statusMap[frontendStatus];
   };
@@ -797,8 +795,6 @@ export default function GroupDetail() {
                         <SelectItem value="expedition">Expédition</SelectItem>
                         <SelectItem value="injoignable">Injoignable</SelectItem>
                         <SelectItem value="ne_decroche_pas">Ne décroche pas</SelectItem>
-                        <SelectItem value="present_ne_decroche_zone1">CPCNDP Z1</SelectItem>
-                        <SelectItem value="present_ne_decroche_zone2">CPCNDP Z2</SelectItem>
                       </SelectContent>
                     </Select>
 
@@ -983,8 +979,6 @@ export default function GroupDetail() {
                                     <SelectItem value="expedition">Expédition</SelectItem>
                                     <SelectItem value="injoignable">Injoignable</SelectItem>
                                     <SelectItem value="ne_decroche_pas">Ne décroche pas</SelectItem>
-                                    <SelectItem value="present_ne_decroche_zone1">Chauffeur présent - Client ne décroche pas Zone 1</SelectItem>
-                                    <SelectItem value="present_ne_decroche_zone2">Chauffeur présent - Client ne décroche pas Zone 2</SelectItem>
                                   </SelectContent>
                                 </Select>
                               </div>

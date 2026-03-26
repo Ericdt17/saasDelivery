@@ -133,8 +133,6 @@ const statutFilterLabels: Record<string, string> = {
   expedition: "Expédition",
   injoignable: "Injoignable",
   ne_decroche_pas: "Ne décroche pas",
-  present_ne_decroche_zone1: "CPCNDP Z1",
-  present_ne_decroche_zone2: "CPCNDP Z2",
 };
 
 function formatRangePillLabel(start: string, end: string): string {
@@ -242,8 +240,6 @@ const mapStatusFilter = (frontendStatus: string): string | undefined => {
     "renvoyé": "postponed",
     "pickup": "pickup",
     "expedition": "expedition",
-    "present_ne_decroche_zone1": "present_ne_decroche_zone1",
-    "present_ne_decroche_zone2": "present_ne_decroche_zone2",
   };
   return statusMap[frontendStatus];
 };
@@ -586,8 +582,6 @@ const Livraisons = () => {
                         <SelectItem value="expedition">Expédition</SelectItem>
                         <SelectItem value="injoignable">Injoignable</SelectItem>
                         <SelectItem value="ne_decroche_pas">Ne décroche pas</SelectItem>
-                        <SelectItem value="present_ne_decroche_zone1">CPCNDP Z1</SelectItem>
-                        <SelectItem value="present_ne_decroche_zone2">CPCNDP Z2</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -1005,12 +999,6 @@ const Livraisons = () => {
                             <SelectItem value="expedition">Expédition</SelectItem>
                             <SelectItem value="injoignable">Injoignable</SelectItem>
                             <SelectItem value="ne_decroche_pas">Ne décroche pas</SelectItem>
-                            <SelectItem value="present_ne_decroche_zone1">
-                              Chauffeur présent - Client ne décroche pas Zone 1
-                            </SelectItem>
-                            <SelectItem value="present_ne_decroche_zone2">
-                              Chauffeur présent - Client ne décroche pas Zone 2
-                            </SelectItem>
                           </SelectContent>
                         </Select>
                       </div>

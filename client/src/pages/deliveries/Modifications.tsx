@@ -202,8 +202,8 @@ const translateStatus = (status: string): string => {
     "échec": "Annulé",  // Changé de "Échec" à "Annulé" (pour compatibilité)
     "annulé": "Annulé",
     "renvoyé": "Renvoyé",
-    "present_ne_decroche_zone1": "CPCNDP Z1",
-    "present_ne_decroche_zone2": "CPCNDP Z2",
+    "present_ne_decroche_zone1": "Ne décroche pas",
+    "present_ne_decroche_zone2": "Ne décroche pas",
   };
   return statusMap[status.toLowerCase()] || status;
 };
