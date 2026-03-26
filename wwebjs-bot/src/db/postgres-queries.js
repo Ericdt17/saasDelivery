@@ -713,7 +713,7 @@ function createPostgresQueries(pool) {
 
   async function getAgencyById(id) {
     const result = await query(
-      `SELECT id, name, email, agency_code, role, is_active, created_at, updated_at 
+      `SELECT id, name, email, agency_code, role, is_active, address, phone, logo_base64, created_at, updated_at
        FROM agencies 
        WHERE id = $1 LIMIT 1`,
       [id]

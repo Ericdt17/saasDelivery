@@ -251,7 +251,7 @@ router.get("/groups/:groupId/pdf", async (req, res, next) => {
       if (isFirstPage && agency.logo_base64) {
         try {
           const base64Data = agency.logo_base64.replace(
-            /^data:image\/\w+;base64,/,
+            /^data:image\/[^;]+;base64,/,
             ""
           );
           const logoBuffer = Buffer.from(base64Data, "base64");
