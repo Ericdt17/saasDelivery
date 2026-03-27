@@ -18,4 +18,6 @@ export const API_ENDPOINTS = {
   EXPEDITIONS_STATS: "/api/v1/expeditions/stats/summary",
   STATS_DAILY: "/api/v1/stats/daily",
   SEARCH: "/api/v1/search",
+  REMINDER_CONTACTS: "/api/v1/reminder-contacts",
+  REMINDERS: "/api/v1/reminders",
 };

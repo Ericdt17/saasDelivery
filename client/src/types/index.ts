@@ -47,6 +47,13 @@ export type {
   ExpeditionStats,
 } from './expedition';
 
+// Reminders Types
+export type {
+  ReminderStatus,
+  ReminderContact,
+  Reminder,
+} from './reminders';
+
 
 
 

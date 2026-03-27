@@ -70,12 +70,16 @@ import {
   ArrowUpDown,
   ListFilter,
   Rows3,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { LoadingSpinner } from "@/components/loading/LoadingSpinner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+
+const PAGE_SIZE = 10;
 
 type MutErr = Error & { data?: { message?: string } };
 
@@ -169,6 +173,7 @@ export default function Groups() {
   const [density, setDensity] = useState<TableDensity>(() =>
     typeof window !== "undefined" ? readStoredDensity() : "cozy"
   );
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
     try { localStorage.setItem(DENSITY_KEY, density); } catch { /* ignore */ }
@@ -308,6 +313,9 @@ export default function Groups() {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
+  // Reset to page 1 whenever filters or sort change
+  useEffect(() => { setPage(1); }, [search, statusFilter, sortField, sortOrder]);
+
   const removableFilterCount =
     (statusFilter !== "all" ? 1 : 0) +
     (search.trim() ? 1 : 0);
@@ -337,7 +345,7 @@ export default function Groups() {
           cmp = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
           break;
         case "updated_at":
-          cmp = new Date(a.updated_at).getTime() - new Date(b.updated_at).getTime();
+          cmp = new Date(a.last_delivery_at ?? 0).getTime() - new Date(b.last_delivery_at ?? 0).getTime();
           break;
       }
       return sortOrder === "ASC" ? cmp : -cmp;
@@ -345,6 +353,9 @@ export default function Groups() {
 
     return rows;
   }, [groups, search, statusFilter, sortField, sortOrder]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredAndSorted.length / PAGE_SIZE));
+  const paginated = filteredAndSorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   if (isLoading) {
     return (
@@ -620,7 +631,7 @@ export default function Groups() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredAndSorted.map((group) => (
+                  paginated.map((group) => (
                     <TableRow
                       key={group.id}
                       className={cn(
@@ -656,9 +667,11 @@ export default function Groups() {
                         })}
                       </TableCell>
                       <TableCell className="text-muted-foreground whitespace-nowrap">
-                        {new Date(group.updated_at).toLocaleDateString("fr-FR", {
-                          day: "2-digit", month: "short", year: "numeric",
-                        })}
+                        {group.last_delivery_at
+                          ? new Date(group.last_delivery_at).toLocaleDateString("fr-FR", {
+                              day: "2-digit", month: "short", year: "numeric",
+                            })
+                          : <span className="italic">Aucune livraison</span>}
                       </TableCell>
                       <TableCell className="font-mono text-xs" onClick={(e) => e.stopPropagation()}>
                         {group.whatsapp_group_id ? (
@@ -710,10 +723,33 @@ export default function Groups() {
             </Table>
           </div>
 
-          {/* Footer count */}
-          <div className="border-t border-border/60 px-4 py-2 text-xs text-muted-foreground">
-            {filteredAndSorted.length} prestataire{filteredAndSorted.length !== 1 ? "s" : ""}
-            {filteredAndSorted.length !== groups.length ? ` sur ${groups.length}` : ""}
+          {/* Footer: count + pagination */}
+          <div className="flex items-center justify-between gap-3 border-t border-border/60 px-4 py-2">
+            <span className="text-xs text-muted-foreground">
+              {filteredAndSorted.length} prestataire{filteredAndSorted.length !== 1 ? "s" : ""}
+              {filteredAndSorted.length !== groups.length ? ` sur ${groups.length}` : ""}
+            </span>
+            {totalPages > 1 && (
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="outline" size="icon" className="h-7 w-7"
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <span className="min-w-[80px] text-center text-xs tabular-nums text-muted-foreground">
+                  Page {page} / {totalPages}
+                </span>
+                <Button
+                  variant="outline" size="icon" className="h-7 w-7"
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page === totalPages}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
           </div>
         </div>
       )}

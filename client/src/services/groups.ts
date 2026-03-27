@@ -13,6 +13,7 @@ export interface Group {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+  last_delivery_at: string | null;
   agency_name?: string;
 }
 

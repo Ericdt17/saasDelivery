@@ -13,6 +13,8 @@ const groupsRouter = require("./routes/groups");
 const tariffsRouter = require("./routes/tariffs");
 const reportsRouter = require("./routes/reports");
 const expeditionsRouter = require("./routes/expeditions");
+const reminderContactsRouter = require("./routes/reminder-contacts");
+const remindersRouter = require("./routes/reminders");
 const errorHandler = require("./middleware/errorHandler");
 
 const app = express();
@@ -133,6 +135,8 @@ app.use("/api/v1/expeditions", expeditionsRouter);
 app.use("/api/v1/stats", statsRouter);
 app.use("/api/v1/search", searchRouter);
 app.use("/api/v1/reports", reportsRouter);
+app.use("/api/v1/reminder-contacts", reminderContactsRouter);
+app.use("/api/v1/reminders", remindersRouter);
 
 // Health check endpoint
 app.get("/api/v1/health", (req, res) => {

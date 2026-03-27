@@ -25,6 +25,16 @@ import { toast } from "sonner";
 import { AppErrorExperience } from "@/components/errors/AppErrorExperience";
 import { getAgencyMe, updateAgency } from "@/services/agencies";
 import { useAuth } from "@/contexts/AuthContext";
+import { getReminderContacts, createReminderContact, updateReminderContact, deleteReminderContact } from "@/services/reminder-contacts";
+import type { ReminderContact } from "@/types/reminders";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 const Parametres = () => {
   const { user, isSuperAdmin } = useAuth();
@@ -37,6 +47,11 @@ const Parametres = () => {
   const [email, setEmail] = useState("");
   const [logoBase64, setLogoBase64] = useState<string | null>(null);
 
+  const [contactsDialogOpen, setContactsDialogOpen] = useState(false);
+  const [editingContact, setEditingContact] = useState<ReminderContact | null>(null);
+  const [contactLabel, setContactLabel] = useState("");
+  const [contactPhone, setContactPhone] = useState("");
+
   const {
     data: agency,
     isLoading: isLoadingAgency,
@@ -46,6 +61,13 @@ const Parametres = () => {
   } = useQuery({
     queryKey: ["agency", "me"],
     queryFn: getAgencyMe,
+    retry: 1,
+    enabled: !isSuperAdmin && user?.role === "agency",
+  });
+
+  const { data: reminderContacts = [], isLoading: isLoadingContacts, refetch: refetchContacts } = useQuery({
+    queryKey: ["reminder-contacts"],
+    queryFn: () => getReminderContacts(),
     retry: 1,
     enabled: !isSuperAdmin && user?.role === "agency",
   });
@@ -104,6 +126,42 @@ const Parametres = () => {
     },
   });
 
+  const createContactMutation = useMutation({
+    mutationFn: (payload: { label: string; phone: string }) => createReminderContact(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["reminder-contacts"] });
+      toast.success("Numéro ajouté");
+      setContactsDialogOpen(false);
+      setEditingContact(null);
+      setContactLabel("");
+      setContactPhone("");
+    },
+    onError: (error: Error) => toast.error(error?.message || "Erreur lors de l'ajout"),
+  });
+
+  const updateContactMutation = useMutation({
+    mutationFn: ({ id, payload }: { id: number; payload: { label: string; phone: string } }) =>
+      updateReminderContact(id, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["reminder-contacts"] });
+      toast.success("Numéro mis à jour");
+      setContactsDialogOpen(false);
+      setEditingContact(null);
+      setContactLabel("");
+      setContactPhone("");
+    },
+    onError: (error: Error) => toast.error(error?.message || "Erreur lors de la mise à jour"),
+  });
+
+  const deleteContactMutation = useMutation({
+    mutationFn: (id: number) => deleteReminderContact(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["reminder-contacts"] });
+      toast.success("Numéro supprimé");
+    },
+    onError: (error: Error) => toast.error(error?.message || "Erreur lors de la suppression"),
+  });
+
   const handleSave = () => {
     if (!agencyId) {
       toast.error("Impossible de déterminer l'ID de l'agence. Veuillez vous reconnecter.");
@@ -119,6 +177,37 @@ const Parametres = () => {
       phone: phone.trim() || null,
       logo_base64: logoBase64 || null,
     });
+  };
+
+  const openCreateContact = () => {
+    setEditingContact(null);
+    setContactLabel("");
+    setContactPhone("");
+    setContactsDialogOpen(true);
+  };
+
+  const openEditContact = (c: ReminderContact) => {
+    setEditingContact(c);
+    setContactLabel(c.label || "");
+    setContactPhone(c.phone || "");
+    setContactsDialogOpen(true);
+  };
+
+  const submitContact = () => {
+    if (!contactLabel.trim()) {
+      toast.error("Le libellé est obligatoire");
+      return;
+    }
+    if (!contactPhone.trim()) {
+      toast.error("Le numéro est obligatoire");
+      return;
+    }
+    const payload = { label: contactLabel.trim(), phone: contactPhone.trim() };
+    if (editingContact) {
+      updateContactMutation.mutate({ id: editingContact.id, payload });
+    } else {
+      createContactMutation.mutate(payload);
+    }
   };
 
   if (!isSuperAdmin && user?.role === "agency" && !isLoadingAgency && isErrorAgency) {
@@ -247,6 +336,76 @@ const Parametres = () => {
               </CardDescription>
             </CardHeader>
           </Card>
+
+          {/* Numéros de rappel (agency only) */}
+          {!isSuperAdmin && user?.role === "agency" ? (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Bell className="w-5 h-5 text-primary" />
+                  Numéros de rappel
+                </CardTitle>
+                <CardDescription>
+                  Ajoutez des numéros dédiés qui pourront recevoir des rappels automatiques.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm text-muted-foreground">
+                    {isLoadingContacts
+                      ? "Chargement..."
+                      : `${reminderContacts.length} numéro(s) enregistré(s)`}
+                  </p>
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" onClick={() => void refetchContacts()} disabled={isLoadingContacts}>
+                      Actualiser
+                    </Button>
+                    <Button size="sm" onClick={openCreateContact}>
+                      Ajouter
+                    </Button>
+                  </div>
+                </div>
+
+                {reminderContacts.length === 0 && !isLoadingContacts ? (
+                  <div className="rounded-lg border border-border bg-muted/20 p-4 text-sm text-muted-foreground">
+                    Aucun numéro pour le moment. Cliquez sur “Ajouter”.
+                  </div>
+                ) : null}
+
+                {reminderContacts.length > 0 ? (
+                  <div className="space-y-2">
+                    {reminderContacts.map((c) => (
+                      <div
+                        key={c.id}
+                        className="flex flex-col gap-2 rounded-lg border border-border bg-card p-3 sm:flex-row sm:items-center sm:justify-between"
+                      >
+                        <div className="min-w-0">
+                          <p className="font-medium truncate">{c.label}</p>
+                          <p className="text-sm text-muted-foreground truncate">{c.phone}</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge variant={c.is_active ? "secondary" : "outline"}>
+                            {c.is_active ? "Actif" : "Inactif"}
+                          </Badge>
+                          <Button variant="outline" size="sm" onClick={() => openEditContact(c)}>
+                            Modifier
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => deleteContactMutation.mutate(c.id)}
+                            disabled={deleteContactMutation.isPending}
+                          >
+                            Supprimer
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </CardContent>
+            </Card>
+          ) : null}
         </div>
 
         {/* Sidebar */}
@@ -307,6 +466,52 @@ const Parametres = () => {
           </Button>
         </div>
       )}
+
+      {/* Add/Edit Reminder Contact Dialog */}
+      <Dialog open={contactsDialogOpen} onOpenChange={setContactsDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{editingContact ? "Modifier un numéro" : "Ajouter un numéro"}</DialogTitle>
+            <DialogDescription>
+              Ce numéro pourra recevoir des rappels programmés.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm font-medium">Libellé</label>
+              <Input
+                value={contactLabel}
+                onChange={(e) => setContactLabel(e.target.value)}
+                placeholder="Ex: Chef d'équipe"
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Téléphone</label>
+              <Input
+                value={contactPhone}
+                onChange={(e) => setContactPhone(e.target.value)}
+                placeholder="+237690000000"
+                className="mt-1"
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                Format recommandé: E.164 (ex: +2376...). Les espaces seront ignorés côté serveur.
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setContactsDialogOpen(false)}>
+              Annuler
+            </Button>
+            <Button
+              onClick={submitContact}
+              disabled={createContactMutation.isPending || updateContactMutation.isPending}
+            >
+              {editingContact ? "Enregistrer" : "Ajouter"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
     </div>
   );
