@@ -837,9 +837,10 @@ function createPostgresQueries(pool) {
 
   async function getGroupById(id) {
     const result = await query(
-      `SELECT g.id, g.agency_id, g.whatsapp_group_id, g.name, g.is_active, 
+      `SELECT g.id, g.agency_id, g.whatsapp_group_id, g.name, g.is_active,
               g.created_at, g.updated_at,
-              a.name as agency_name
+              a.name as agency_name,
+              (SELECT MAX(d.created_at) FROM deliveries d WHERE d.group_id = g.id) as last_delivery_at
        FROM groups g
        LEFT JOIN agencies a ON g.agency_id = a.id
        WHERE g.id = $1 LIMIT 1`,
@@ -851,9 +852,10 @@ function createPostgresQueries(pool) {
 
   async function getGroupsByAgency(agency_id) {
     return await query(
-      `SELECT g.id, g.agency_id, g.whatsapp_group_id, g.name, g.is_active, 
+      `SELECT g.id, g.agency_id, g.whatsapp_group_id, g.name, g.is_active,
               g.created_at, g.updated_at,
-              a.name as agency_name
+              a.name as agency_name,
+              (SELECT MAX(d.created_at) FROM deliveries d WHERE d.group_id = g.id) as last_delivery_at
        FROM groups g
        LEFT JOIN agencies a ON g.agency_id = a.id
        WHERE g.agency_id = $1
@@ -864,9 +866,10 @@ function createPostgresQueries(pool) {
 
   async function getAllGroups() {
     return await query(
-      `SELECT g.id, g.agency_id, g.whatsapp_group_id, g.name, g.is_active, 
+      `SELECT g.id, g.agency_id, g.whatsapp_group_id, g.name, g.is_active,
               g.created_at, g.updated_at,
-              a.name as agency_name
+              a.name as agency_name,
+              (SELECT MAX(d.created_at) FROM deliveries d WHERE d.group_id = g.id) as last_delivery_at
        FROM groups g
        LEFT JOIN agencies a ON g.agency_id = a.id
        ORDER BY g.created_at DESC`

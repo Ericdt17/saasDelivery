@@ -337,7 +337,7 @@ export default function Groups() {
           cmp = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
           break;
         case "updated_at":
-          cmp = new Date(a.updated_at).getTime() - new Date(b.updated_at).getTime();
+          cmp = new Date(a.last_delivery_at ?? 0).getTime() - new Date(b.last_delivery_at ?? 0).getTime();
           break;
       }
       return sortOrder === "ASC" ? cmp : -cmp;
@@ -656,9 +656,11 @@ export default function Groups() {
                         })}
                       </TableCell>
                       <TableCell className="text-muted-foreground whitespace-nowrap">
-                        {new Date(group.updated_at).toLocaleDateString("fr-FR", {
-                          day: "2-digit", month: "short", year: "numeric",
-                        })}
+                        {group.last_delivery_at
+                          ? new Date(group.last_delivery_at).toLocaleDateString("fr-FR", {
+                              day: "2-digit", month: "short", year: "numeric",
+                            })
+                          : <span className="italic">Aucune livraison</span>}
                       </TableCell>
                       <TableCell className="font-mono text-xs" onClick={(e) => e.stopPropagation()}>
                         {group.whatsapp_group_id ? (
