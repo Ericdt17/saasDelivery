@@ -12,7 +12,10 @@ const mockDeleteAgencyReminderContact = jest.fn();
 const mockCreateReminder = jest.fn();
 const mockGetReminders = jest.fn();
 const mockGetReminderById = jest.fn();
+const mockGetReminderTargets = jest.fn();
 const mockCancelReminder = jest.fn();
+const mockRetryReminderFailed = jest.fn();
+const mockGetGroupsByAgency = jest.fn();
 
 jest.mock("../../db", () => ({
   adapter: { query: jest.fn(), type: "sqlite" },
@@ -28,7 +31,10 @@ jest.mock("../../db", () => ({
   createReminder: mockCreateReminder,
   getReminders: mockGetReminders,
   getReminderById: mockGetReminderById,
+  getReminderTargets: mockGetReminderTargets,
   cancelReminder: mockCancelReminder,
+  retryReminderFailed: mockRetryReminderFailed,
+  getGroupsByAgency: mockGetGroupsByAgency,
 
   // stubs required by mounted routes
   getAllDeliveries: jest.fn(),
@@ -130,28 +136,38 @@ describe("Reminders", () => {
   });
 
   it("POST /api/v1/reminders validates contact belongs to agency", async () => {
-    mockGetAgencyReminderContactById.mockResolvedValueOnce({ id: 1, agency_id: 2 });
+    mockGetAgencyReminderContacts.mockResolvedValueOnce([]);
 
     const res = await request(app)
       .post("/api/v1/reminders")
       .set("Authorization", `Bearer ${superToken}`)
-      .send({ agency_id: 1, contact_id: 1, message: "Hi", send_at: new Date().toISOString() });
+      .send({ agency_id: 1, contact_ids: [1], audience_mode: "contacts", message: "Hi", send_at: new Date().toISOString() });
 
     expect(res.status).toBe(400);
   });
 
   it("POST /api/v1/reminders schedules reminder", async () => {
-    mockGetAgencyReminderContactById.mockResolvedValueOnce({ id: 2, agency_id: 1 });
+    mockGetAgencyReminderContacts.mockResolvedValueOnce([{ id: 2, agency_id: 1, phone: "+237690000111" }]);
     mockCreateReminder.mockResolvedValueOnce(55);
     mockGetReminderById.mockResolvedValueOnce({ id: 55, agency_id: 1, status: "scheduled" });
 
     const res = await request(app)
       .post("/api/v1/reminders")
       .set("Authorization", `Bearer ${superToken}`)
-      .send({ agency_id: 1, contact_id: 2, message: "Hi", send_at: new Date().toISOString() });
+      .send({ agency_id: 1, contact_ids: [2], audience_mode: "contacts", message: "Hi", send_at: new Date().toISOString() });
 
     expect(res.status).toBe(201);
     expect(mockCreateReminder).toHaveBeenCalled();
+  });
+
+  it("POST /api/v1/reminders/:id/retry-failed calls retry action", async () => {
+    mockGetReminderById.mockResolvedValueOnce({ id: 55, status: "running" });
+    mockRetryReminderFailed.mockResolvedValueOnce({ changes: 1 });
+    const res = await request(app)
+      .post("/api/v1/reminders/55/retry-failed")
+      .set("Authorization", `Bearer ${superToken}`);
+    expect(res.status).toBe(200);
+    expect(mockRetryReminderFailed).toHaveBeenCalledWith(55);
   });
 });
 

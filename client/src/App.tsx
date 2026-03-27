@@ -21,6 +21,7 @@ import Rapports from "./pages/finance/Rapports";
 import Tarifs from "./pages/config/Tarifs";
 import Parametres from "./pages/config/Parametres";
 import Agencies from "./pages/admin/Agencies";
+import Reminders from "./pages/admin/Reminders";
 import NotFound from "./pages/NotFound";
 import ServerError from "./pages/ServerError";
 import ErrorNetworkPreview from "./pages/dev/ErrorNetworkPreview";
@@ -96,6 +97,14 @@ const App = () => (
               element={
                 <ProtectedRoute requireSuperAdmin>
                   <Agencies />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/rappels"
+              element={
+                <ProtectedRoute requireSuperAdmin>
+                  <Reminders />
                 </ProtectedRoute>
               }
             />

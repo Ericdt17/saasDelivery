@@ -34,6 +34,7 @@ const TEST_PHONE_PREFIX  = 'TEST9';
 
 async function cleanUp() {
   // Delete in FK-safe order
+  await queries.query(`DELETE FROM reminder_targets WHERE reminder_id IN (SELECT id FROM reminders WHERE message LIKE $1)`, [`JEST_REMINDER_%`]);
   await queries.query(`DELETE FROM reminders WHERE message LIKE $1`,  [`JEST_REMINDER_%`]);
   await queries.query(`DELETE FROM agency_reminder_contacts WHERE label LIKE $1`,  [`JEST_REMINDER_%`]);
   await queries.query(`DELETE FROM deliveries WHERE phone LIKE $1`,  [`${TEST_PHONE_PREFIX}%`]);
@@ -209,8 +210,12 @@ describeWithDb('PostgreSQL — real-database integration', () => {
         message: 'JEST_REMINDER_Test message',
         send_at: sendAt,
         timezone: 'UTC',
+        audience_mode: 'contacts',
+        send_interval_min_sec: 60,
+        send_interval_max_sec: 120,
         status: 'scheduled',
         created_by_user_id: null,
+        targets: [{ target_type: 'contact', target_value: '237690999999' }],
       });
       expect(typeof reminderId).toBe('number');
       expect(reminderId).toBeGreaterThan(0);

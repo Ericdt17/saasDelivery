@@ -903,22 +903,62 @@ function createPostgresQueries(pool) {
     return await updateAgencyReminderContact(id, { is_active: false });
   }
 
-  async function createReminder({
+  async function createReminderCampaign({
     agency_id,
-    contact_id,
+    contact_id = null,
     message,
     send_at,
-    timezone = "UTC",
+    timezone = "Africa/Douala",
+    audience_mode = "contacts",
+    send_interval_min_sec = 60,
+    send_interval_max_sec = 120,
+    window_start = null,
+    window_end = null,
     status = "scheduled",
     created_by_user_id = null,
+    targets = [],
   }) {
-    const result = await query(
-      `INSERT INTO reminders (agency_id, contact_id, message, send_at, timezone, status, created_by_user_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       RETURNING id`,
-      [agency_id, contact_id, message, send_at, timezone, status, created_by_user_id]
+    const reminder = await query(
+      `INSERT INTO reminders (
+        agency_id, contact_id, message, send_at, timezone, status, created_by_user_id,
+        audience_mode, send_interval_min_sec, send_interval_max_sec, window_start, window_end,
+        total_targets, sent_count, failed_count, skipped_count
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 0, 0, 0)
+      RETURNING id`,
+      [
+        agency_id,
+        contact_id,
+        message,
+        send_at,
+        timezone,
+        status,
+        created_by_user_id,
+        audience_mode,
+        send_interval_min_sec,
+        send_interval_max_sec,
+        window_start,
+        window_end,
+        targets.length,
+      ]
     );
-    return result.id || result[0]?.id;
+
+    const reminderId = reminder.id || reminder[0]?.id;
+    if (targets.length > 0) {
+      const values = [];
+      const params = [];
+      let idx = 1;
+      for (const target of targets) {
+        values.push(`($${idx++}, $${idx++}, $${idx++}, 'queued')`);
+        params.push(reminderId, target.target_type, target.target_value);
+      }
+      await query(
+        `INSERT INTO reminder_targets (reminder_id, target_type, target_value, status)
+         VALUES ${values.join(", ")}`,
+        params
+      );
+    }
+    return reminderId;
   }
 
   async function getReminders({
@@ -955,7 +995,16 @@ function createPostgresQueries(pool) {
         r.message,
         r.send_at,
         r.timezone,
+        r.audience_mode,
+        r.send_interval_min_sec,
+        r.send_interval_max_sec,
+        r.window_start,
+        r.window_end,
         r.status,
+        r.total_targets,
+        r.sent_count,
+        r.failed_count,
+        r.skipped_count,
         r.sent_at,
         r.last_error,
         r.created_by_user_id,
@@ -972,7 +1021,10 @@ function createPostgresQueries(pool) {
 
   async function getReminderById(id) {
     const result = await query(
-      `SELECT id, agency_id, contact_id, message, send_at, timezone, status, sent_at, last_error, created_by_user_id, created_at, updated_at
+      `SELECT id, agency_id, contact_id, message, send_at, timezone,
+              audience_mode, send_interval_min_sec, send_interval_max_sec, window_start, window_end,
+              status, total_targets, sent_count, failed_count, skipped_count,
+              sent_at, last_error, created_by_user_id, created_at, updated_at
        FROM reminders
        WHERE id = $1
        LIMIT 1`,
@@ -981,20 +1033,164 @@ function createPostgresQueries(pool) {
     return result || null;
   }
 
+  async function getReminderTargets(reminder_id) {
+    return query(
+      `SELECT id, reminder_id, target_type, target_value, status, attempts, last_error, sent_at, created_at, updated_at
+       FROM reminder_targets
+       WHERE reminder_id = $1
+       ORDER BY id ASC`,
+      [reminder_id]
+    );
+  }
+
   async function cancelReminder(id) {
     const result = await query(
       `UPDATE reminders
        SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP
-       WHERE id = $1 AND status = 'scheduled'`,
+       WHERE id = $1 AND status IN ('scheduled', 'running')`,
+      [id]
+    );
+    if ((result.changes || 0) > 0) {
+      await query(
+        `UPDATE reminder_targets
+         SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP
+         WHERE reminder_id = $1 AND status = 'queued'`,
+        [id]
+      );
+    }
+    return { changes: result.changes || 0 };
+  }
+
+  async function deleteReminder(id) {
+    const result = await query(
+      `DELETE FROM reminders WHERE id = $1`,
       [id]
     );
     return { changes: result.changes || 0 };
   }
 
+  async function retryReminderFailed(id) {
+    await query(
+      `UPDATE reminder_targets
+       SET status = 'queued', updated_at = CURRENT_TIMESTAMP
+       WHERE reminder_id = $1 AND status IN ('failed', 'skipped')`,
+      [id]
+    );
+    const countersRow = await query(
+      `SELECT
+         COUNT(*) FILTER (WHERE status = 'queued') AS queued_count,
+         COUNT(*) FILTER (WHERE status = 'sent') AS sent_count,
+         COUNT(*) FILTER (WHERE status = 'failed') AS failed_count,
+         COUNT(*) FILTER (WHERE status = 'skipped') AS skipped_count
+       FROM reminder_targets
+       WHERE reminder_id = $1
+       LIMIT 1`,
+      [id]
+    );
+    const counters = Array.isArray(countersRow) ? countersRow[0] || {} : (countersRow || {});
+    await query(
+      `UPDATE reminders
+       SET status = CASE WHEN $2::int > 0 THEN 'running' ELSE status END,
+           sent_count = $3, failed_count = $4, skipped_count = $5, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $1`,
+      [id, Number(counters.queued_count || 0), Number(counters.sent_count || 0), Number(counters.failed_count || 0), Number(counters.skipped_count || 0)]
+    );
+    return { changes: 1 };
+  }
+
+  async function pollQueuedReminderTargets({ limit = 25 } = {}) {
+    return query(
+      `SELECT
+        rt.id AS target_id,
+        rt.reminder_id,
+        rt.target_type,
+        rt.target_value,
+        rt.attempts,
+        r.message,
+        r.timezone,
+        r.window_start,
+        r.window_end,
+        r.send_interval_min_sec,
+        r.send_interval_max_sec,
+        r.status AS reminder_status
+       FROM reminder_targets rt
+       JOIN reminders r ON r.id = rt.reminder_id
+       WHERE rt.status = 'queued'
+         AND r.status IN ('scheduled', 'running')
+         AND r.send_at <= CURRENT_TIMESTAMP
+       ORDER BY r.send_at ASC, rt.id ASC
+       LIMIT $1`,
+      [limit]
+    );
+  }
+
+  async function markReminderTargetProcessing(reminder_id) {
+    await query(
+      `UPDATE reminders
+       SET status = 'running', updated_at = CURRENT_TIMESTAMP
+       WHERE id = $1 AND status = 'scheduled'`,
+      [reminder_id]
+    );
+  }
+
+  async function updateReminderTargetStatus(target_id, status, last_error = null) {
+    const isSent = status === "sent";
+    await query(
+      `UPDATE reminder_targets
+       SET status = $2::varchar, attempts = attempts + 1, last_error = $3,
+           sent_at = CASE WHEN $2::varchar = 'sent' THEN CURRENT_TIMESTAMP ELSE sent_at END,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $1`,
+      [target_id, status, last_error]
+    );
+
+    const reminderRef = await query(
+      `SELECT reminder_id FROM reminder_targets WHERE id = $1 LIMIT 1`,
+      [target_id]
+    );
+    const reminderId = reminderRef?.reminder_id;
+    if (!reminderId) return { changes: 0 };
+
+    const countersRow = await query(
+      `SELECT
+         COUNT(*) FILTER (WHERE status = 'queued') AS queued_count,
+         COUNT(*) FILTER (WHERE status = 'sent') AS sent_count,
+         COUNT(*) FILTER (WHERE status = 'failed') AS failed_count,
+         COUNT(*) FILTER (WHERE status = 'skipped') AS skipped_count
+       FROM reminder_targets
+       WHERE reminder_id = $1
+       LIMIT 1`,
+      [reminderId]
+    );
+    const counters = Array.isArray(countersRow) ? countersRow[0] || {} : (countersRow || {});
+
+    const queued = Number(counters.queued_count || 0);
+    const sent = Number(counters.sent_count || 0);
+    const failed = Number(counters.failed_count || 0);
+    const skipped = Number(counters.skipped_count || 0);
+    const done = queued === 0;
+    const nextStatus = done
+      ? (failed > 0 && sent === 0 ? "failed" : "completed")
+      : "running";
+    await query(
+      `UPDATE reminders
+       SET status = $2::varchar,
+           sent_count = $3,
+           failed_count = $4,
+           skipped_count = $5,
+           sent_at = CASE WHEN $2::varchar = 'completed' THEN CURRENT_TIMESTAMP ELSE sent_at END,
+           last_error = CASE WHEN $6 THEN NULL ELSE $7 END,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $1`,
+      [reminderId, nextStatus, sent, failed, skipped, isSent, last_error]
+    );
+    return { changes: 1 };
+  }
+
   async function markReminderSent(id) {
     const result = await query(
       `UPDATE reminders
-       SET status = 'sent', sent_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP, last_error = NULL
+       SET status = 'completed', sent_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP, last_error = NULL
        WHERE id = $1 AND status = 'scheduled'`,
       [id]
     );
@@ -1023,12 +1219,27 @@ function createPostgresQueries(pool) {
         r.timezone
        FROM reminders r
        JOIN agency_reminder_contacts c ON c.id = r.contact_id
-       WHERE r.status = 'scheduled'
+       WHERE r.status IN ('scheduled', 'running')
          AND r.send_at <= CURRENT_TIMESTAMP
          AND c.is_active = true
        ORDER BY r.send_at ASC
        LIMIT $1`,
       [limit]
+    );
+  }
+
+  async function setReminderTotals(reminder_id, totals = {}) {
+    return query(
+      `UPDATE reminders
+       SET total_targets = $2, sent_count = $3, failed_count = $4, skipped_count = $5, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $1`,
+      [
+        reminder_id,
+        Number(totals.total_targets || 0),
+        Number(totals.sent_count || 0),
+        Number(totals.failed_count || 0),
+        Number(totals.skipped_count || 0),
+      ]
     );
   }
 
@@ -1251,13 +1462,21 @@ function createPostgresQueries(pool) {
     getAgencyReminderContactById,
     updateAgencyReminderContact,
     deleteAgencyReminderContact,
-    createReminder,
+    createReminder: createReminderCampaign,
+    createReminderCampaign,
     getReminders,
     getReminderById,
+    getReminderTargets,
     cancelReminder,
+    deleteReminder,
+    retryReminderFailed,
+    pollQueuedReminderTargets,
+    markReminderTargetProcessing,
+    updateReminderTargetStatus,
     markReminderSent,
     markReminderFailed,
     getDueReminders,
+    setReminderTotals,
     // Group queries
     createGroup,
     getGroupById,

@@ -17,6 +17,7 @@ import {
   BadgeDollarSign,
   Tags,
   Building2,
+  Bell,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -43,6 +44,7 @@ const allNavItems: NavItem[] = [
   { title: "Paiements", href: "/paiements", icon: BadgeDollarSign },
   { title: "Tarifs", href: "/tarifs", icon: Tags },
   { title: "Agences", href: "/agences", icon: Building2, requireSuperAdmin: true },
+  { title: "Rappels", href: "/rappels", icon: Bell, requireSuperAdmin: true },
   { title: "Rapports", href: "/rapports", icon: FileText },
   { title: "Paramètres", href: "/parametres", icon: Settings },
 ];
