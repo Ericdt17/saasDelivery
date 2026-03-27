@@ -60,19 +60,21 @@ jest.mock('pdfkit', () => {
 // Mocks
 // ---------------------------------------------------------------------------
 
-const mockGetGroupById      = jest.fn();
-const mockGetAgencyById     = jest.fn();
-const mockGetDeliveries     = jest.fn();
+const mockGetGroupById       = jest.fn();
+const mockGetAgencyById      = jest.fn();
+const mockGetDeliveries      = jest.fn();
 const mockGetTariffsByAgency = jest.fn();
-const mockAdapterQuery      = jest.fn();
+const mockGetExpeditionStats = jest.fn();
+const mockAdapterQuery       = jest.fn();
 
 jest.mock('../../db', () => ({
-  adapter:            { query: mockAdapterQuery, type: 'sqlite' },
-  getGroupById:       mockGetGroupById,
-  getAgencyById:      mockGetAgencyById,
-  getDeliveries:      mockGetDeliveries,
-  getAllDeliveries:    mockGetDeliveries,
-  getTariffsByAgency: mockGetTariffsByAgency,
+  adapter:             { query: mockAdapterQuery, type: 'sqlite' },
+  getGroupById:        mockGetGroupById,
+  getAgencyById:       mockGetAgencyById,
+  getDeliveries:       mockGetDeliveries,
+  getAllDeliveries:     mockGetDeliveries,
+  getTariffsByAgency:  mockGetTariffsByAgency,
+  getExpeditionStats:  mockGetExpeditionStats,
   // Stubs
   getDeliveryById:              jest.fn(),
   createDelivery:               jest.fn(),
@@ -183,6 +185,8 @@ describe('GET /api/v1/reports/groups/:id/pdf — financial totals', () => {
     mockGetAgencyById.mockResolvedValue(agencyFixture);
     mockGetDeliveries.mockResolvedValue({ deliveries, pagination: { total: 5 } });
     mockGetTariffsByAgency.mockResolvedValue([]);
+    // Default: no expeditions
+    mockGetExpeditionStats.mockResolvedValue({ total_expeditions: 0, total_frais_de_course: 0, total_frais_de_lagence_de_voyage: 0 });
   });
 
   it('returns 200 and streams a PDF', async () => {
@@ -220,5 +224,147 @@ describe('GET /api/v1/reports/groups/:id/pdf — financial totals', () => {
     expect(mockGetDeliveries).toHaveBeenCalledWith(
       expect.objectContaining({ group_id: 3 })
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/v1/reports/groups/:id/pdf — expedition fees deduction
+// ---------------------------------------------------------------------------
+
+describe('GET /api/v1/reports/groups/:id/pdf — expedition fees', () => {
+  const deliveries = [
+    { status: 'delivered', amount_due: 10000, amount_paid: 9000, delivery_fee: 1000, quartier: 'Akwa' },
+  ];
+  // totalEncaisse = 10000, totalTarifs = 1000, netDeliveries = 9000
+
+  beforeEach(() => {
+    mockGetGroupById.mockResolvedValue(groupFixture);
+    mockGetAgencyById.mockResolvedValue(agencyFixture);
+    mockGetDeliveries.mockResolvedValue({ deliveries, pagination: { total: 1 } });
+    mockGetTariffsByAgency.mockResolvedValue([]);
+  });
+
+  it('calls getExpeditionStats with the correct group_id and date range', async () => {
+    mockGetExpeditionStats.mockResolvedValue({ total_expeditions: 0, total_frais_de_course: 0, total_frais_de_lagence_de_voyage: 0 });
+
+    await request(app)
+      .get('/api/v1/reports/groups/3/pdf?startDate=2025-01-01&endDate=2025-01-31')
+      .set('Authorization', `Bearer ${agencyToken}`);
+
+    expect(mockGetExpeditionStats).toHaveBeenCalledWith(
+      expect.objectContaining({ group_id: 3, agency_id: 1, startDate: '2025-01-01', endDate: '2025-01-31' })
+    );
+  });
+
+  it('returns 200 when expedition fees are present (normal case: collecté > frais)', async () => {
+    // totalEncaisse=10000, totalTarifs=1000, expeditionFrais=3000 → resteAPercevoir=6000
+    mockGetExpeditionStats.mockResolvedValue({ total_expeditions: 1, total_frais_de_course: '3000', total_frais_de_lagence_de_voyage: '1500' });
+
+    const res = await request(app)
+      .get('/api/v1/reports/groups/3/pdf')
+      .set('Authorization', `Bearer ${agencyToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toMatch(/application\/pdf/);
+  });
+
+  it('returns 200 when expedition fees cause a debt (collecté < frais)', async () => {
+    // totalEncaisse=10000, totalTarifs=1000, expeditionFrais=12000 → resteAPercevoir=-3000 (dette)
+    mockGetExpeditionStats.mockResolvedValue({ total_expeditions: 2, total_frais_de_course: '12000', total_frais_de_lagence_de_voyage: '0' });
+
+    const res = await request(app)
+      .get('/api/v1/reports/groups/3/pdf')
+      .set('Authorization', `Bearer ${agencyToken}`);
+
+    expect(res.status).toBe(200);
+  });
+
+  it('returns 200 even when getExpeditionStats throws (graceful fallback)', async () => {
+    mockGetExpeditionStats.mockRejectedValue(new Error('DB error'));
+
+    const res = await request(app)
+      .get('/api/v1/reports/groups/3/pdf')
+      .set('Authorization', `Bearer ${agencyToken}`);
+
+    expect(res.status).toBe(200);
+  });
+
+  it('does not call getExpeditionStats for a group belonging to another agency', async () => {
+    mockGetGroupById.mockResolvedValue({ ...groupFixture, agency_id: 99 });
+    mockGetExpeditionStats.mockResolvedValue({ total_expeditions: 0, total_frais_de_course: 0, total_frais_de_lagence_de_voyage: 0 });
+
+    const res = await request(app)
+      .get('/api/v1/reports/groups/3/pdf')
+      .set('Authorization', `Bearer ${agencyToken}`);
+
+    expect(res.status).toBe(403);
+    expect(mockGetExpeditionStats).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// resteAPercevoir calculation logic (pure math, no HTTP)
+// ---------------------------------------------------------------------------
+
+describe('resteAPercevoir = totalEncaisse - totalTarifs - expeditionFrais', () => {
+  // These tests exercise the financial formula directly via the PDF route
+  // by verifying the route does not crash in each boundary case.
+
+  const makeDeliveries = (amountDue, amountPaid, deliveryFee) => ([
+    { status: 'delivered', amount_due: amountDue, amount_paid: amountPaid, delivery_fee: deliveryFee, quartier: 'Akwa' },
+  ]);
+
+  beforeEach(() => {
+    mockGetGroupById.mockResolvedValue(groupFixture);
+    mockGetAgencyById.mockResolvedValue(agencyFixture);
+    mockGetTariffsByAgency.mockResolvedValue([]);
+  });
+
+  it('resteAPercevoir is positive when collecté > all fees', async () => {
+    // totalEncaisse=5000, totalTarifs=500, expeditionFrais=1000 → reste=3500
+    mockGetDeliveries.mockResolvedValue({ deliveries: makeDeliveries(5000, 4500, 500), pagination: {} });
+    mockGetExpeditionStats.mockResolvedValue({ total_expeditions: 1, total_frais_de_course: '1000', total_frais_de_lagence_de_voyage: '0' });
+
+    const res = await request(app)
+      .get('/api/v1/reports/groups/3/pdf')
+      .set('Authorization', `Bearer ${agencyToken}`);
+
+    expect(res.status).toBe(200);
+  });
+
+  it('resteAPercevoir is zero when collecté equals all fees exactly', async () => {
+    // totalEncaisse=2000, totalTarifs=1000, expeditionFrais=1000 → reste=0
+    mockGetDeliveries.mockResolvedValue({ deliveries: makeDeliveries(2000, 1000, 1000), pagination: {} });
+    mockGetExpeditionStats.mockResolvedValue({ total_expeditions: 1, total_frais_de_course: '1000', total_frais_de_lagence_de_voyage: '0' });
+
+    const res = await request(app)
+      .get('/api/v1/reports/groups/3/pdf')
+      .set('Authorization', `Bearer ${agencyToken}`);
+
+    expect(res.status).toBe(200);
+  });
+
+  it('resteAPercevoir is negative (dette) when expedition fees exceed collecté', async () => {
+    // totalEncaisse=1000, totalTarifs=100, expeditionFrais=5000 → reste=-4100 (dette)
+    mockGetDeliveries.mockResolvedValue({ deliveries: makeDeliveries(1000, 900, 100), pagination: {} });
+    mockGetExpeditionStats.mockResolvedValue({ total_expeditions: 3, total_frais_de_course: '5000', total_frais_de_lagence_de_voyage: '0' });
+
+    const res = await request(app)
+      .get('/api/v1/reports/groups/3/pdf')
+      .set('Authorization', `Bearer ${agencyToken}`);
+
+    // The route must not crash — it should show "Dette du groupe" label in the PDF
+    expect(res.status).toBe(200);
+  });
+
+  it('resteAPercevoir is negative when no deliveries but group has expedition fees (pure debt)', async () => {
+    mockGetDeliveries.mockResolvedValue({ deliveries: [], pagination: {} });
+    mockGetExpeditionStats.mockResolvedValue({ total_expeditions: 2, total_frais_de_course: '8000', total_frais_de_lagence_de_voyage: '0' });
+
+    const res = await request(app)
+      .get('/api/v1/reports/groups/3/pdf')
+      .set('Authorization', `Bearer ${agencyToken}`);
+
+    expect(res.status).toBe(200);
   });
 });

@@ -825,7 +825,7 @@ const Livraisons = () => {
             </ToggleGroupItem>
           </ToggleGroup>
         </div>
-        <div>
+        <div className="overflow-x-auto">
           <Table
             className={cn(
               density === "compact" &&
@@ -984,7 +984,7 @@ const Livraisons = () => {
                           }}
                           disabled={statusUpdateMutation.isPending}
                         >
-                          <SelectTrigger className="h-8 w-[140px] border-none shadow-none hover:bg-muted/50 p-1">
+                          <SelectTrigger className="h-10 w-[140px] border-none shadow-none hover:bg-muted/50 p-1">
                             <SelectValue>
                               <StatusBadge statut={livraison.statut} />
                             </SelectValue>

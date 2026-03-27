@@ -245,13 +245,13 @@ const Expeditions = () => {
   };
 
   return (
-    <div className="space-y-6 pb-8">
+    <div className="space-y-6 pb-8 min-w-0">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold">Expéditions</h1>
           <p className="text-muted-foreground">Gestion des expéditions inter-ville (liées au groupe)</p>
         </div>
-        <Button className="gap-2" onClick={openCreateModal}>
+        <Button className="gap-2 w-full sm:w-auto" onClick={openCreateModal}>
           <Plus className="w-4 h-4" />
           Nouvelle expédition
         </Button>
@@ -260,7 +260,7 @@ const Expeditions = () => {
       {isError ? <AppErrorExperience error={error} onRetry={() => void refetch()} /> : null}
 
       {!isLoading && (
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <StatCard title="Total expéditions" value={stats?.totalExpeditions ?? expeditions.length} icon={Truck} variant="expedition" />
           <StatCard title="Frais de course" value={formatCurrency(stats?.totalFraisDeCourse)} icon={Wallet} variant="success" />
           <StatCard title="Frais agence voyage" value={formatCurrency(stats?.totalFraisDeLAgenceDeVoyage)} icon={HandCoins} variant="warning" />
@@ -268,7 +268,7 @@ const Expeditions = () => {
       )}
 
       {isLoading && (
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {Array.from({ length: 3 }).map((_, i) => (
             <div key={i} className="stat-card">
               <Skeleton className="h-14 w-full" />
@@ -290,7 +290,7 @@ const Expeditions = () => {
           </div>
           <div className="flex flex-wrap gap-3">
             <Select value={groupFilter} onValueChange={setGroupFilter}>
-              <SelectTrigger className="w-[180px]">
+              <SelectTrigger className="w-full sm:w-[180px]">
                 <SelectValue placeholder="Groupe" />
               </SelectTrigger>
               <SelectContent>
@@ -304,7 +304,7 @@ const Expeditions = () => {
             </Select>
 
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-[180px]">
+              <SelectTrigger className="w-full sm:w-[180px]">
                 <SelectValue placeholder="Statut" />
               </SelectTrigger>
               <SelectContent>
@@ -394,7 +394,7 @@ const Expeditions = () => {
           if (!open) resetForm();
         }}
       >
-        <DialogContent className="max-w-xl">
+        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingExpedition ? "Modifier l'expédition" : "Nouvelle expédition"}</DialogTitle>
             <DialogDescription>Renseignez les informations de l'expédition.</DialogDescription>

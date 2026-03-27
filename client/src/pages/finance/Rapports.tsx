@@ -105,7 +105,7 @@ const Rapports = () => {
         restant: stats.montantRestant,
         totalTarifs: stats.totalTarifs || 0,
         chiffreAffaires: (stats.totalTarifs || 0) + (expeditionStats?.totalFraisDeCourse || 0),
-        montantNetEncaisse: stats.montantNetEncaisse || 0, // Montant NET (à reverser)
+        montantNetEncaisse: (stats.montantNetEncaisse || 0) - (expeditionStats?.totalFraisDeCourse || 0), // Montant NET (à reverser, frais expéditions déduits)
       };
     }
     
@@ -268,10 +268,10 @@ const Rapports = () => {
                   variant="info"
                 />
                 <StatCard
-                  title="Partenaire"
-                  value={formatCurrency(currentData.montantNetEncaisse || 0)}
+                  title={(currentData.montantNetEncaisse || 0) < 0 ? "Dette groupe" : "Partenaire"}
+                  value={formatCurrency(Math.abs(currentData.montantNetEncaisse || 0))}
                   icon={HandCoins}
-                  variant="success"
+                  variant={(currentData.montantNetEncaisse || 0) < 0 ? "destructive" : "success"}
                 />
               </div>
 

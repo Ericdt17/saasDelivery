@@ -313,25 +313,28 @@ export default function GroupDetail() {
           montantRestant: Number(dayStats.montantRestant) || 0, // Remaining (0 for delivered)
           totalTarifs: Number(dayStats.totalTarifs) || 0, // Sum of delivery_fee for delivered
           chiffreAffaires: (Number(dayStats.totalTarifs) || 0) + (Number(expeditionStats?.totalFraisDeCourse) || 0),
-          montantNetEncaisse: Number(dayStats.montantNetEncaisse) || 0, // Net amount to reverse (montantEncaisse - totalTarifs)
+          montantNetEncaisse: (Number(dayStats.montantNetEncaisse) || 0) - (Number(expeditionStats?.totalFraisDeCourse) || 0), // Net amount to reverse (montantEncaisse - totalTarifs - frais expéditions)
         };
       }
       // Fallback: use dayStats directly if dailyStats is not available
+      const expeditionFrais = Number(expeditionStats?.totalFraisDeCourse) || 0;
       return {
         ...dayStats,
         expeditions: expeditionStats?.totalExpeditions || 0,
-        chiffreAffaires: (Number(dayStats.totalTarifs) || 0) + (Number(expeditionStats?.totalFraisDeCourse) || 0),
-        montantNetEncaisse: dayStats.montantNetEncaisse || (dayStats.montantEncaisse - (dayStats.totalTarifs || 0)),
+        chiffreAffaires: (Number(dayStats.totalTarifs) || 0) + expeditionFrais,
+        montantNetEncaisse: (dayStats.montantNetEncaisse || (dayStats.montantEncaisse - (dayStats.totalTarifs || 0))) - expeditionFrais,
       };
     }
 
     // For non-single day (semaine/mois): use deliveries data directly
     if (deliveriesData) {
       const periodStats = calculateStatsFromDeliveries(deliveriesData.deliveries);
+      const expeditionFrais = Number(expeditionStats?.totalFraisDeCourse) || 0;
       return {
         ...periodStats,
         expeditions: expeditionStats?.totalExpeditions || 0,
-        chiffreAffaires: (Number(periodStats.totalTarifs) || 0) + (Number(expeditionStats?.totalFraisDeCourse) || 0),
+        chiffreAffaires: (Number(periodStats.totalTarifs) || 0) + expeditionFrais,
+        montantNetEncaisse: (periodStats.montantNetEncaisse || 0) - expeditionFrais,
       };
     }
 
@@ -598,31 +601,34 @@ export default function GroupDetail() {
               )}
             </p>
           </div>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => navigate("/groupes")}>
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Retour aux prestataires
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" onClick={() => navigate("/groupes")}>
+              <ArrowLeft className="w-4 h-4 mr-1 sm:mr-2" />
+              <span className="hidden sm:inline">Retour aux prestataires</span>
+              <span className="sm:hidden">Retour</span>
             </Button>
             <Button
               variant="outline"
+              size="sm"
               onClick={handlePdfPreview}
               disabled={isLoadingPdf}
-              className="gap-2"
+              className="gap-1 sm:gap-2"
             >
               {isLoadingPdf ? (
                 <RefreshCw className="w-4 h-4 animate-spin" />
               ) : (
                 <FileText className="w-4 h-4" />
               )}
-              Prévisualiser
+              <span className="hidden sm:inline">Prévisualiser</span>
             </Button>
             <Button
               variant="default"
+              size="sm"
               onClick={() => window.open(buildPdfUrl(), "_blank")}
-              className="gap-2"
+              className="gap-1 sm:gap-2"
             >
               <Download className="w-4 h-4" />
-              Télécharger
+              <span className="hidden sm:inline">Télécharger</span>
             </Button>
           </div>
         </div>
@@ -727,10 +733,10 @@ export default function GroupDetail() {
                   variant="info"
                 />
                 <StatCard
-                  title="Partenaire"
-                  value={formatCurrency(stats.montantNetEncaisse || 0)}
+                  title={(stats.montantNetEncaisse || 0) < 0 ? "Dette groupe" : "Partenaire"}
+                  value={formatCurrency(Math.abs(stats.montantNetEncaisse || 0))}
                   icon={HandCoins}
-                  variant="success"
+                  variant={(stats.montantNetEncaisse || 0) < 0 ? "destructive" : "success"}
                 />
               </div>
 
