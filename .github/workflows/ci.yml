@@ -117,7 +117,7 @@ jobs:
       - name: Verify core tables exist
         working-directory: wwebjs-bot
         run: |
-          node -e "const { Client } = require('pg'); (async () => { const client = new Client({ connectionString: process.env.DATABASE_URL }); await client.connect(); const { rows } = await client.query(\"SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('schema_migrations','agencies','groups','deliveries')\"); const found = rows.map(r => r.table_name); const required = ['schema_migrations','agencies','groups','deliveries']; const missing = required.filter(t => !found.includes(t)); if (missing.length) { throw new Error('Missing tables: ' + missing.join(', ')); } console.log('Core tables present:', found.sort().join(', ')); await client.end(); })().catch((err) => { console.error(err); process.exit(1); });"
+          node -e "const { Client } = require('pg'); (async () => { const client = new Client({ connectionString: process.env.DATABASE_URL }); await client.connect(); const { rows } = await client.query(\"SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('schema_migrations','agencies','groups','deliveries','agency_reminder_contacts','reminders')\"); const found = rows.map(r => r.table_name); const required = ['schema_migrations','agencies','groups','deliveries','agency_reminder_contacts','reminders']; const missing = required.filter(t => !found.includes(t)); if (missing.length) { throw new Error('Missing tables: ' + missing.join(', ')); } console.log('Core tables present:', found.sort().join(', ')); await client.end(); })().catch((err) => { console.error(err); process.exit(1); });"
 
       - name: Start API server
         working-directory: wwebjs-bot

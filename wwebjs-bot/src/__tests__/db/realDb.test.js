@@ -34,6 +34,8 @@ const TEST_PHONE_PREFIX  = 'TEST9';
 
 async function cleanUp() {
   // Delete in FK-safe order
+  await queries.query(`DELETE FROM reminders WHERE message LIKE $1`,  [`JEST_REMINDER_%`]);
+  await queries.query(`DELETE FROM agency_reminder_contacts WHERE label LIKE $1`,  [`JEST_REMINDER_%`]);
   await queries.query(`DELETE FROM deliveries WHERE phone LIKE $1`,  [`${TEST_PHONE_PREFIX}%`]);
   await queries.query(`DELETE FROM tariffs WHERE quartier LIKE $1`,   [`JEST_%`]);
   await queries.query(
@@ -172,6 +174,55 @@ describeWithDb('PostgreSQL — real-database integration', () => {
       expect(updated.status).toBe('delivered');
       expect(Number(updated.delivery_fee)).toBe(1500);
       expect(Number(updated.amount_paid)).toBe(13500);
+    });
+  });
+
+  // ── Reminders (contacts + scheduled reminders) ────────────────────────────
+
+  describe('Reminders queries', () => {
+    let contactId;
+    let reminderId;
+
+    it('createAgencyReminderContact creates a contact for the agency', async () => {
+      contactId = await queries.createAgencyReminderContact({
+        agency_id: agencyId,
+        label: 'JEST_REMINDER_Chef',
+        phone: '+237690999999',
+        is_active: true,
+      });
+      expect(typeof contactId).toBe('number');
+      expect(contactId).toBeGreaterThan(0);
+    });
+
+    it('getAgencyReminderContacts returns the contact', async () => {
+      const contacts = await queries.getAgencyReminderContacts({ agency_id: agencyId, includeInactive: true });
+      const found = contacts.find(c => c.id === contactId);
+      expect(found).toBeTruthy();
+      expect(found.label).toBe('JEST_REMINDER_Chef');
+    });
+
+    it('createReminder schedules a reminder', async () => {
+      const sendAt = new Date(Date.now() + 60_000).toISOString();
+      reminderId = await queries.createReminder({
+        agency_id: agencyId,
+        contact_id: contactId,
+        message: 'JEST_REMINDER_Test message',
+        send_at: sendAt,
+        timezone: 'UTC',
+        status: 'scheduled',
+        created_by_user_id: null,
+      });
+      expect(typeof reminderId).toBe('number');
+      expect(reminderId).toBeGreaterThan(0);
+    });
+
+    it('getDueReminders returns reminders when send_at <= now', async () => {
+      // Force send_at to the past
+      await queries.query(`UPDATE reminders SET send_at = CURRENT_TIMESTAMP - INTERVAL '1 minute' WHERE id = $1`, [reminderId]);
+      const due = await queries.getDueReminders({ limit: 10 });
+      const found = due.find(r => r.id === reminderId);
+      expect(found).toBeTruthy();
+      expect(found.message).toBe('JEST_REMINDER_Test message');
     });
   });
 

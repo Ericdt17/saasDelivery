@@ -14,6 +14,7 @@ const {
   addHistory,
   getTariffByAgencyAndQuartier,
 } = require("./db");
+const { createRemindersWorker } = require("./reminders/worker");
 const { generateDailyReport } = require("./daily-report");
 const { getGroup, getAgencyIdForGroup } = require("./utils/group-manager");
 const {
@@ -175,6 +176,7 @@ client.on("qr", async (qr) => {
 });
 
 // When client is ready
+let remindersWorker = null;
 client.on("ready", () => {
   const startupDuration = ((Date.now() - startupStartTime) / 1000).toFixed(1);
   console.log("\n" + "=".repeat(60));
@@ -199,6 +201,17 @@ client.on("ready", () => {
 
   // Setup daily report scheduler
   setupDailyReportScheduler();
+
+  // Start reminders worker (scheduled WhatsApp reminders)
+  if (!remindersWorker) {
+    remindersWorker = createRemindersWorker({
+      client,
+      pollIntervalMs: Number(process.env.REMINDERS_POLL_MS) || 60000,
+      batchSize: Number(process.env.REMINDERS_BATCH_SIZE) || 50,
+      logger: console,
+    });
+    remindersWorker.start();
+  }
 });
 
 // Additional check: Sometimes ready event doesn't fire, check state manually
@@ -239,6 +252,17 @@ client.on("authenticated", async () => {
         if (typeof setupDailyReportScheduler === "function") {
           console.log("📅 Setting up daily report scheduler...");
           setupDailyReportScheduler();
+        }
+
+        // Start reminders worker if ready event didn't fire
+        if (!remindersWorker) {
+          remindersWorker = createRemindersWorker({
+            client,
+            pollIntervalMs: Number(process.env.REMINDERS_POLL_MS) || 60000,
+            batchSize: Number(process.env.REMINDERS_BATCH_SIZE) || 50,
+            logger: console,
+          });
+          remindersWorker.start();
         }
 
         console.log(

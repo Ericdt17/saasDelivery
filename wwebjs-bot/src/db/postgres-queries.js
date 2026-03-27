@@ -818,6 +818,221 @@ function createPostgresQueries(pool) {
   }
 
   // ============================================
+  // Reminders (Agency Reminder Contacts + Reminders)
+  // ============================================
+
+  async function createAgencyReminderContact({ agency_id, label, phone, is_active = true }) {
+    const result = await query(
+      `INSERT INTO agency_reminder_contacts (agency_id, label, phone, is_active)
+       VALUES ($1, $2, $3, $4)
+       RETURNING id`,
+      [agency_id, label, phone, is_active]
+    );
+    return result.id || result[0]?.id;
+  }
+
+  async function getAgencyReminderContacts({ agency_id, includeInactive = false } = {}) {
+    const conditions = [];
+    const params = [];
+    let paramIndex = 1;
+    const addParam = (v) => {
+      params.push(v);
+      return `$${paramIndex++}`;
+    };
+
+    if (agency_id !== null && agency_id !== undefined) {
+      conditions.push(`agency_id = ${addParam(agency_id)}`);
+    }
+    if (!includeInactive) {
+      conditions.push(`is_active = true`);
+    }
+
+    const whereClause = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+    return query(
+      `SELECT id, agency_id, label, phone, is_active, created_at, updated_at
+       FROM agency_reminder_contacts
+       ${whereClause}
+       ORDER BY created_at DESC`,
+      params
+    );
+  }
+
+  async function getAgencyReminderContactById(id) {
+    const result = await query(
+      `SELECT id, agency_id, label, phone, is_active, created_at, updated_at
+       FROM agency_reminder_contacts
+       WHERE id = $1
+       LIMIT 1`,
+      [id]
+    );
+    return result || null;
+  }
+
+  async function updateAgencyReminderContact(id, { label, phone, is_active } = {}) {
+    const updates = [];
+    const params = [];
+    let paramIndex = 1;
+
+    if (label !== undefined) {
+      updates.push(`label = $${paramIndex++}`);
+      params.push(label);
+    }
+    if (phone !== undefined) {
+      updates.push(`phone = $${paramIndex++}`);
+      params.push(phone);
+    }
+    if (is_active !== undefined) {
+      updates.push(`is_active = $${paramIndex++}`);
+      params.push(is_active);
+    }
+
+    if (updates.length === 0) {
+      return { changes: 0 };
+    }
+
+    updates.push(`updated_at = CURRENT_TIMESTAMP`);
+    params.push(id);
+
+    const sql = `UPDATE agency_reminder_contacts SET ${updates.join(", ")} WHERE id = $${paramIndex}`;
+    const result = await query(sql, params);
+    return { changes: result.changes || 0 };
+  }
+
+  async function deleteAgencyReminderContact(id) {
+    // Soft delete
+    return await updateAgencyReminderContact(id, { is_active: false });
+  }
+
+  async function createReminder({
+    agency_id,
+    contact_id,
+    message,
+    send_at,
+    timezone = "UTC",
+    status = "scheduled",
+    created_by_user_id = null,
+  }) {
+    const result = await query(
+      `INSERT INTO reminders (agency_id, contact_id, message, send_at, timezone, status, created_by_user_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING id`,
+      [agency_id, contact_id, message, send_at, timezone, status, created_by_user_id]
+    );
+    return result.id || result[0]?.id;
+  }
+
+  async function getReminders({
+    agency_id,
+    status,
+    contact_id,
+    startDate,
+    endDate,
+    limit = 200,
+    offset = 0,
+  } = {}) {
+    const conditions = [];
+    const params = [];
+    let paramIndex = 1;
+    const addParam = (v) => {
+      params.push(v);
+      return `$${paramIndex++}`;
+    };
+
+    if (agency_id !== null && agency_id !== undefined) conditions.push(`r.agency_id = ${addParam(agency_id)}`);
+    if (status) conditions.push(`r.status = ${addParam(status)}`);
+    if (contact_id) conditions.push(`r.contact_id = ${addParam(contact_id)}`);
+    if (startDate) conditions.push(`r.send_at::date >= ${addParam(startDate)}::date`);
+    if (endDate) conditions.push(`r.send_at::date <= ${addParam(endDate)}::date`);
+
+    const whereClause = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+    return query(
+      `SELECT
+        r.id,
+        r.agency_id,
+        r.contact_id,
+        c.label as contact_label,
+        c.phone as contact_phone,
+        r.message,
+        r.send_at,
+        r.timezone,
+        r.status,
+        r.sent_at,
+        r.last_error,
+        r.created_by_user_id,
+        r.created_at,
+        r.updated_at
+       FROM reminders r
+       LEFT JOIN agency_reminder_contacts c ON c.id = r.contact_id
+       ${whereClause}
+       ORDER BY r.send_at DESC
+       LIMIT ${addParam(limit)} OFFSET ${addParam(offset)}`,
+      params
+    );
+  }
+
+  async function getReminderById(id) {
+    const result = await query(
+      `SELECT id, agency_id, contact_id, message, send_at, timezone, status, sent_at, last_error, created_by_user_id, created_at, updated_at
+       FROM reminders
+       WHERE id = $1
+       LIMIT 1`,
+      [id]
+    );
+    return result || null;
+  }
+
+  async function cancelReminder(id) {
+    const result = await query(
+      `UPDATE reminders
+       SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP
+       WHERE id = $1 AND status = 'scheduled'`,
+      [id]
+    );
+    return { changes: result.changes || 0 };
+  }
+
+  async function markReminderSent(id) {
+    const result = await query(
+      `UPDATE reminders
+       SET status = 'sent', sent_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP, last_error = NULL
+       WHERE id = $1 AND status = 'scheduled'`,
+      [id]
+    );
+    return { changes: result.changes || 0 };
+  }
+
+  async function markReminderFailed(id, last_error) {
+    const result = await query(
+      `UPDATE reminders
+       SET status = 'failed', updated_at = CURRENT_TIMESTAMP, last_error = $2
+       WHERE id = $1 AND status = 'scheduled'`,
+      [id, String(last_error || "")].slice(0, 2)
+    );
+    return { changes: result.changes || 0 };
+  }
+
+  async function getDueReminders({ limit = 50 } = {}) {
+    return query(
+      `SELECT
+        r.id,
+        r.agency_id,
+        r.contact_id,
+        c.phone as contact_phone,
+        r.message,
+        r.send_at,
+        r.timezone
+       FROM reminders r
+       JOIN agency_reminder_contacts c ON c.id = r.contact_id
+       WHERE r.status = 'scheduled'
+         AND r.send_at <= CURRENT_TIMESTAMP
+         AND c.is_active = true
+       ORDER BY r.send_at ASC
+       LIMIT $1`,
+      [limit]
+    );
+  }
+
+  // ============================================
   // Group Queries
   // ============================================
 
@@ -1030,6 +1245,19 @@ function createPostgresQueries(pool) {
     getAllAgencies,
     updateAgency,
     deleteAgency,
+    // Reminders
+    createAgencyReminderContact,
+    getAgencyReminderContacts,
+    getAgencyReminderContactById,
+    updateAgencyReminderContact,
+    deleteAgencyReminderContact,
+    createReminder,
+    getReminders,
+    getReminderById,
+    cancelReminder,
+    markReminderSent,
+    markReminderFailed,
+    getDueReminders,
     // Group queries
     createGroup,
     getGroupById,
