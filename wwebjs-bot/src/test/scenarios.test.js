@@ -221,6 +221,39 @@ if (delivery1) {
 console.log("");
 
 // ============================================================================
+// SCENARIO 2b: "livreur" messages must NOT be detected as delivered
+// Regression: includes("livre") was matching "livreur" as a substring
+// ============================================================================
+
+console.log("📋 Test Scenario 2b: 'livreur' messages not mistaken for 'livré'");
+console.log("-".repeat(70));
+
+const livreurMessages = [
+  "le livreur est en chemin",
+  "le livreur dit que le client ne decroche pas",
+  "Le livreur est arrivé",
+  "livreur en route",
+  "Le livreur appelle",
+];
+livreurMessages.forEach((msg) => {
+  assertNull(parseStatusUpdate(msg), `Should NOT parse as status update: "${msg}"`);
+  assert(!isStatusUpdate(msg), `isStatusUpdate should be false: "${msg}"`);
+});
+
+// Valid "livré" forms must still be detected
+[
+  ["Livré 612345678", "payment"],
+  ["livre 655555555", "payment"],
+  ["Livrée 655555555", "payment"],
+].forEach(([msg, expectedType]) => {
+  const r = parseStatusUpdate(msg);
+  assertNotNull(r, `Should parse: "${msg}"`);
+  assertEqual(r.type, expectedType, `"${msg}" should be type "${expectedType}"`);
+});
+
+console.log("");
+
+// ============================================================================
 // SCENARIO 3: Create Delivery → Mark as Failed
 // ============================================================================
 

@@ -99,8 +99,8 @@ function parseStatusUpdate(text, isReply = false) {
   const lowerText = text.toLowerCase().trim();
 
   // 1. PAYMENT - "Livré", "Livre", "Livrée" (now treated as payment)
-  // Check for "livré", "livre", or "livrée" anywhere in the message
-  if (lowerText.includes("livré") || lowerText.includes("livre") || lowerText.match(/\blivr[ée]?\b/i)) {
+  // Use word-boundary regex to avoid matching "livreur" which contains "livre" as substring
+  if (lowerText.includes("livré") || lowerText.match(/\blivr[ée]e?\b/i)) {
     const phone = extractPhoneFromStatus(text);
     const amount = extractAmountFromStatus(text);
     return {
