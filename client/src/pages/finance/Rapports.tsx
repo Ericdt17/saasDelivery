@@ -31,6 +31,7 @@ import { getDeliveries } from "@/services/deliveries";
 import { getExpeditionStats } from "@/services/expeditions";
 import { toast } from "sonner";
 import { type DateRange, getDateRangeForPreset } from "@/lib/date-utils";
+import { useDateRefresh } from "@/hooks/useDateRefresh";
 import { calculateStatsFromDeliveries } from "@/lib/stats-utils";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { buildApiUrl } from "@/lib/api-config";
@@ -44,6 +45,7 @@ const formatCurrency = (value: number | undefined | null) => {
 const Rapports = () => {
   const { user, isSuperAdmin } = useAuth();
   const [dateRange, setDateRange] = useState<DateRange>(() => getDateRangeForPreset("today"));
+  useDateRefresh(setDateRange);
 
   // Check if it's a single day (for chart display)
   const isSingleDay = dateRange.startDate === dateRange.endDate;
