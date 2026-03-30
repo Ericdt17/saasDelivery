@@ -34,6 +34,7 @@ import { DeliveryForm } from "@/components/deliveries/DeliveryForm";
 import type { FrontendDelivery } from "@/types/delivery";
 import { toast } from "sonner";
 import { getDateRangeForPreset, type DateRange } from "@/lib/date-utils";
+import { useDateRefresh } from "@/hooks/useDateRefresh";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { StatCard } from "@/components/ui/stat-card";
 
@@ -269,6 +270,7 @@ const Modifications = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [dateRange, setDateRange] = useState<DateRange>(() => getDateRangeForPreset("today"));
+  useDateRefresh(setDateRange);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);

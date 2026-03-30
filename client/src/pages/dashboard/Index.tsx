@@ -34,6 +34,7 @@ import { getDeliveries } from "@/services/deliveries";
 import { getExpeditionStats } from "@/services/expeditions";
 import { toast } from "sonner";
 import { getDateRangeLocal, getDateRangeForPreset, type DateRange } from "@/lib/date-utils";
+import { useDateRefresh } from "@/hooks/useDateRefresh";
 import { calculateStatsFromDeliveries } from "@/lib/stats-utils";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 
@@ -49,6 +50,7 @@ const Index = () => {
   const navigate = useNavigate();
   const [period, setPeriod] = useState<"jour" | "semaine" | "mois">("jour");
   const [dateRange, setDateRange] = useState<DateRange>(() => getDateRangeForPreset("today"));
+  useDateRefresh(setDateRange);
 
   // Fetch agencies for super admin to show selected agency name
   const { data: agencies = [] } = useQuery({

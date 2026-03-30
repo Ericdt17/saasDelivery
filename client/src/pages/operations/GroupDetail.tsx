@@ -83,7 +83,8 @@ import { searchDeliveries } from "@/services/search";
 import { DeliveryForm } from "@/components/deliveries/DeliveryForm";
 import { calculateStatsFromDeliveries } from "@/lib/stats-utils";
 import { getDateRangeLocal, getDateRangeForPreset, type DateRange } from "@/lib/date-utils";
-import { mapStatusToBackend, type StatutLivraison, type TypeLivraison } from "@/lib/data-transform";
+import { useDateRefresh } from "@/hooks/useDateRefresh";
+import { mapStatusToBackend, type StatutLivraison } from "@/lib/data-transform";
 import { toast } from "sonner";
 import type { FrontendDelivery } from "@/types/delivery";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
@@ -105,12 +106,6 @@ const formatDate = (dateString: string) => {
   });
 };
 
-const typeLabels: Record<TypeLivraison, string> = {
-  livraison: "Livraison",
-  pickup: "Pickup",
-  expedition: "Expédition",
-};
-
 type ApiErr = Error & { data?: { message?: string }; statusCode?: number; status?: number };
 
 export default function GroupDetail() {
@@ -122,6 +117,7 @@ export default function GroupDetail() {
 
   const [period, setPeriod] = useState<"jour" | "semaine" | "mois">("jour");
   const [dateRange, setDateRange] = useState<DateRange>(() => getDateRangeForPreset("today"));
+  useDateRefresh(setDateRange);
   const [search, setSearch] = useState("");
   const [statutFilter, setStatutFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");
@@ -136,6 +132,7 @@ export default function GroupDetail() {
   const [isLoadingPdf, setIsLoadingPdf] = useState(false);
 
   const limit = 20;
+  const feeShortcuts = [500, 1000, 1500, 2000, 2500, 3000];
 
   // Fetch group info avec meilleure gestion d'erreur
   const {
@@ -488,6 +485,61 @@ export default function GroupDetail() {
     },
     onError: (error: ApiErr) => {
       toast.error(error?.data?.message || error?.message || "Erreur lors de la mise à jour du statut");
+    },
+  });
+
+  // Fee update mutation (quick update from table)
+  const feeUpdateMutation = useMutation({
+    mutationFn: async ({ id, fee }: { id: number; fee: number }) => {
+      return updateDelivery(id, {
+        delivery_fee: fee,
+      });
+    },
+    onSuccess: async (updatedDelivery) => {
+      if (!updatedDelivery || !updatedDelivery.id) {
+        console.error("Invalid updatedDelivery:", updatedDelivery);
+        queryClient.invalidateQueries({ queryKey: ["deliveries", "group-table"] });
+        await refetchTableDeliveries();
+        toast.error("Erreur lors de la mise à jour des frais de livraison");
+        return;
+      }
+
+      // Mettre à jour UNIQUEMENT la query "group-table" avec la clé exacte
+      queryClient.setQueryData(
+        ["deliveries", "group-table", apiParams],
+        (old: { deliveries: FrontendDelivery[]; pagination: unknown } | undefined) => {
+          if (!old || !old.deliveries) return old;
+          return {
+            ...old,
+            deliveries: old.deliveries.map((d: FrontendDelivery) =>
+              d.id === updatedDelivery.id ? updatedDelivery : d
+            ),
+          };
+        }
+      );
+
+      // Invalider les autres queries pour refresh des stats (mais pas group-table)
+      queryClient.invalidateQueries({ queryKey: ["deliveries", "group"] });
+      queryClient.invalidateQueries({ queryKey: ["deliveries", "dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["deliveries", "reports"] });
+      queryClient.invalidateQueries({ queryKey: ["dailyStats"] });
+
+      // Refetch les autres queries (mais pas group-table car on l'a déjà mise à jour)
+      try {
+        await Promise.all([
+          refetchDeliveries(),
+          isSingleDay ? refetchDailyStats() : Promise.resolve(),
+        ]);
+        toast.success("Frais de livraison mis à jour");
+      } catch (refetchError) {
+        console.error("Error refetching after fee update:", refetchError);
+        toast.success("Frais de livraison mis à jour");
+      }
+    },
+    onError: (error: ApiErr) => {
+      toast.error(
+        error?.data?.message || error?.message || "Erreur lors de la mise à jour des frais"
+      );
     },
   });
 
@@ -868,7 +920,7 @@ export default function GroupDetail() {
                           Reste
                         </TableHead>
                         <TableHead className="font-semibold">Statut</TableHead>
-                        <TableHead className="font-semibold hidden lg:table-cell">Type</TableHead>
+                        <TableHead className="font-semibold">Frais livr.</TableHead>
                         <TableHead className="font-semibold text-right">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -894,9 +946,9 @@ export default function GroupDetail() {
                             <TableCell>
                               <Skeleton className="h-6 w-20" />
                             </TableCell>
-                            <TableCell className="hidden lg:table-cell">
-                              <Skeleton className="h-4 w-16" />
-                            </TableCell>
+                          <TableCell>
+                            <Skeleton className="h-8 w-28" />
+                          </TableCell>
                             <TableCell className="text-right">
                               <Skeleton className="h-8 w-8 ml-auto" />
                             </TableCell>
@@ -989,10 +1041,40 @@ export default function GroupDetail() {
                                 </Select>
                               </div>
                             </TableCell>
-                            <TableCell className="hidden lg:table-cell">
-                              <span className="text-sm text-muted-foreground">
-                                {typeLabels[livraison.type]}
-                              </span>
+                            <TableCell>
+                              <div
+                                className="flex flex-wrap items-center gap-1"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                {feeShortcuts.map((fee) => (
+                                  <Button
+                                    key={fee}
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-7 px-2 py-0 text-xs"
+                                    disabled={feeUpdateMutation.isPending}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      feeUpdateMutation.mutate({ id: livraison.id, fee });
+                                    }}
+                                  >
+                                    {fee} F
+                                  </Button>
+                                ))}
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-7 px-2 py-0 text-xs"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleEdit(livraison);
+                                  }}
+                                >
+                                  Personnaliser
+                                </Button>
+                              </div>
                             </TableCell>
                             <TableCell>
                               <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>

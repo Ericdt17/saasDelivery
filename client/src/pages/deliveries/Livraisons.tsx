@@ -80,6 +80,7 @@ import { searchDeliveries } from "@/services/search";
 import { getGroups } from "@/services/groups";
 import { toast } from "sonner";
 import { getDateRangeForPreset, type DateRange } from "@/lib/date-utils";
+import { useDateRefresh } from "@/hooks/useDateRefresh";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { DeliveryForm } from "@/components/deliveries/DeliveryForm";
 import { LoadingSpinner } from "@/components/loading/LoadingSpinner";
@@ -250,6 +251,7 @@ const Livraisons = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [dateRange, setDateRange] = useState<DateRange>(() => getDateRangeForPreset("today"));
+  useDateRefresh(setDateRange);
   const [search, setSearch] = useState("");
   const [statutFilter, setStatutFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");
