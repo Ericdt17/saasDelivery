@@ -130,6 +130,8 @@ export default function GroupDetail() {
   const [isPdfPreviewOpen, setIsPdfPreviewOpen] = useState(false);
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
   const [isLoadingPdf, setIsLoadingPdf] = useState(false);
+  const [isFeeConfirmOpen, setIsFeeConfirmOpen] = useState(false);
+  const [pendingFee, setPendingFee] = useState<{ delivery: FrontendDelivery; fee: number } | null>(null);
 
   const limit = 20;
   const feeShortcuts = [500, 1000, 1500, 2000, 2500, 3000];
@@ -1056,7 +1058,8 @@ export default function GroupDetail() {
                                     disabled={feeUpdateMutation.isPending}
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      feeUpdateMutation.mutate({ id: livraison.id, fee });
+                                      setPendingFee({ delivery: livraison, fee });
+                                      setIsFeeConfirmOpen(true);
                                     }}
                                   >
                                     {fee} F
@@ -1237,6 +1240,31 @@ export default function GroupDetail() {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               Supprimer
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Fee Confirmation Dialog */}
+      <AlertDialog open={isFeeConfirmOpen} onOpenChange={setIsFeeConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmer les frais de livraison</AlertDialogTitle>
+            <AlertDialogDescription>
+              Appliquer <strong>{pendingFee?.fee} F</strong> comme frais de livraison pour{" "}
+              <strong>{pendingFee?.delivery.customer_name || pendingFee?.delivery.telephone}</strong> ?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (pendingFee) {
+                  feeUpdateMutation.mutate({ id: pendingFee.delivery.id, fee: pendingFee.fee });
+                }
+              }}
+            >
+              Confirmer
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
