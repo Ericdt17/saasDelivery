@@ -47,23 +47,22 @@ export function calculateStatsFromDeliveries(
       return sum + fee;
     }, 0);
 
-  // Calculate montantEncaisse (brut amount):
-  // - For "delivered" and "pickup": amount_paid + delivery_fee (brut amount collected)
-  // - For "injoignable", "ne_decroche_pas", "annulé", "renvoyé": 0 (no delivery made, no amount to collect or reverse)
+  // Calculate montantEncaisse (brut amount collected from customer):
+  // - For "delivered" and "pickup": amount_due (total collected, regardless of how amount_paid/delivery_fee are stored)
+  // - For "injoignable", "ne_decroche_pas", "annulé", "renvoyé": 0 (no delivery made)
   // - For others: amount_paid only
+  //
+  // NOTE: We use amount_due (montant_total) instead of amount_paid + delivery_fee to avoid
+  // double-counting when delivery_fee is set manually after creation (in that case amount_paid
+  // is not recalculated by the backend and would still equal amount_due).
   const encaisse = deliveries.reduce((sum, d) => {
-    const amountPaid = Number(d.montant_encaisse) || 0;
-    const deliveryFee = Number(d.frais_livraison) || 0;
-    
     if (d.statut === "livré" || d.statut === "pickup") {
-      // For delivered and pickup: brut = amount_paid + delivery_fee
-      return sum + amountPaid + deliveryFee;
+      // Total collected from customer = amount_due
+      return sum + (Number(d.montant_total) || 0);
     } else if (d.statut === "annulé" || d.statut === "renvoyé" || d.statut === "injoignable" || d.statut === "ne_decroche_pas") {
-      // For cancelled/returned/injoignable/ne_decroche_pas: no delivery made, no amount collected or to reverse
       return sum + 0;
     } else {
-      // For others: amount_paid only
-      return sum + amountPaid;
+      return sum + (Number(d.montant_encaisse) || 0);
     }
   }, 0);
 
@@ -84,18 +83,18 @@ export function calculateStatsFromDeliveries(
     }
   }, 0);
 
-  // Calculate montantNetEncaisse (amount to reverse to group)
-  // "delivered" and "pickup" deliveries contribute to this amount
-  // = sum(amount_paid) for "delivered" and "pickup" deliveries
-  // This represents the net amount after deducting delivery fees
+  // Calculate montantNetEncaisse (amount to reverse to group = partenaire)
+  // = amount_due - delivery_fee for "delivered" and "pickup" deliveries
+  //
+  // NOTE: We use amount_due - delivery_fee instead of amount_paid because amount_paid
+  // may equal amount_due when delivery_fee was set manually (backend doesn't recalculate
+  // amount_paid on fee-only updates).
   const montantNetEncaisse = deliveries.reduce((sum, d) => {
     if (d.statut === "livré" || d.statut === "pickup") {
-      // Delivered and pickup deliveries contribute to amount to reverse
-      // Net amount = amount_paid (after tariff deduction)
-      const amountPaid = Number(d.montant_encaisse) || 0;
-      return sum + amountPaid;
+      const amountDue = Number(d.montant_total) || 0;
+      const deliveryFee = Number(d.frais_livraison) || 0;
+      return sum + (amountDue - deliveryFee);
     } else {
-      // Other statuses (en_cours, échec, etc.) don't contribute
       return sum + 0;
     }
   }, 0);
