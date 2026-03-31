@@ -38,6 +38,9 @@ function createConnection() {
   return new Pool({
     connectionString,
     ...(useSsl ? { ssl: { rejectUnauthorized: false } } : {}),
+    connectionTimeoutMillis: 10000,
+    idleTimeoutMillis: 30000,
+    max: 1, // migration only needs one connection
   });
 }
 
@@ -127,8 +130,38 @@ async function runMigrations() {
   }
 }
 
+const RETRYABLE_ERRORS = [
+  "Connection terminated unexpectedly",
+  "connect ECONNREFUSED",
+  "connect ETIMEDOUT",
+  "ENOTFOUND",
+  "getaddrinfo",
+];
+
+function isRetryableError(err) {
+  const msg = err.message || String(err);
+  return RETRYABLE_ERRORS.some((s) => msg.includes(s));
+}
+
+async function runMigrationsWithRetry(maxAttempts = 5, delayMs = 3000) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      await runMigrations();
+      return;
+    } catch (err) {
+      if (attempt < maxAttempts && isRetryableError(err)) {
+        log(`  Connection failed (attempt ${attempt}/${maxAttempts}): ${err.message}`, "yellow");
+        log(`  Retrying in ${delayMs / 1000}s…`, "yellow");
+        await new Promise((r) => setTimeout(r, delayMs));
+      } else {
+        throw err;
+      }
+    }
+  }
+}
+
 if (require.main === module) {
-  runMigrations().catch((error) => {
+  runMigrationsWithRetry().catch((error) => {
     console.error(error.stack || error.message);
     process.exit(1);
   });
