@@ -469,25 +469,28 @@ function parseDeliveryMessage(text) {
  * Prioritizes Option 3 format (4-line structured)
  */
 function isDeliveryMessage(text) {
-  // Check if it's a status update first
-  const statusKeywords = [
-    "livré",
-    "livre",
-    "échec",
-    "echec",
-    "collecté",
-    "collecte",
-    "modifier",
-    "change",
-    "vient chercher",
-    "pickup",
-    "ramassage",
-  ];
-
   const lowerText = text.toLowerCase();
-  const isStatusUpdate = statusKeywords.some((keyword) =>
-    lowerText.includes(keyword)
-  );
+
+  // Check if it's a status update first.
+  // Rules must be tight: false positives here silently drop real deliveries.
+  //   - "livré"/"livrée" uses word-boundary to avoid matching product names
+  //     like "livre" (book/pound) — same logic as statusParser.js.
+  //   - "change"/"modifier" only count when at the start of the message;
+  //     mid-message they are almost always item descriptions ("1 change de
+  //     vêtements", "modifier la taille", etc.).
+  //   - Plain "livre" is removed: it's covered by the word-boundary livré
+  //     check above and is extremely common as a product noun.
+  const isStatusUpdate =
+    /\blivr[ée]e?\b/i.test(lowerText) ||
+    lowerText.includes("échec") ||
+    lowerText.includes("echec") ||
+    lowerText.includes("collecté") ||
+    lowerText.includes("collecte") ||
+    /^modifier|^modif/i.test(lowerText.trimStart()) ||
+    /^change\b/i.test(lowerText.trimStart()) ||
+    lowerText.includes("vient chercher") ||
+    lowerText.includes("pickup") ||
+    lowerText.includes("ramassage");
 
   if (isStatusUpdate) {
     return false;

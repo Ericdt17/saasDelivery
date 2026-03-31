@@ -107,4 +107,22 @@ describe('isDeliveryMessage', () => {
     const msg = '@223355697397803 vous m\'avez parlez de combien ?\n3 appels\n500fr\n697397803';
     expect(isDeliveryMessage(msg)).toBe(false);
   });
+
+  it('returns true for a delivery whose items contain the word "livre" (book/pound)', () => {
+    // Regression: "livre" was in the status keyword list causing deliveries
+    // with product names like "2 livres" or "1 livre de café" to be silently dropped.
+    const msg = '612345678\n2 livres de café\n8000\nBonapriso';
+    expect(isDeliveryMessage(msg)).toBe(true);
+  });
+
+  it('returns true for a delivery whose items contain "change" mid-message', () => {
+    // Regression: bare "change" keyword check blocked product descriptions like
+    // "1 change de vêtements".  Only "change" at the START of a message is a status.
+    const msg = '691234567\n1 change de vêtements\n12000\nAkwa';
+    expect(isDeliveryMessage(msg)).toBe(true);
+  });
+
+  it('returns false for a status message that starts with "change"', () => {
+    expect(isDeliveryMessage('change numéro 691234567')).toBe(false);
+  });
 });

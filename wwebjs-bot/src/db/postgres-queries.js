@@ -1,4 +1,16 @@
 const config = require("../config");
+const logger = require("../logger");
+
+const RETRYABLE_ERRORS = [
+  "Connection terminated unexpectedly",
+  "Connection terminated due to connection timeout",
+  "connection timeout",
+  "ECONNRESET",
+  "EPIPE",
+];
+
+const isRetryable = (err) =>
+  RETRYABLE_ERRORS.some((msg) => err?.message?.includes(msg));
 
 function createPostgresQueries(pool) {
   const TIME_ZONE = config.TIME_ZONE || "UTC";
@@ -26,33 +38,51 @@ function createPostgresQueries(pool) {
     return converted;
   };
 
-  const query = async (sql, params = []) => {
+  const query = async (sql, params = [], { retries = 1 } = {}) => {
     const convertedSql = normalizeDateFunctions(sql);
     const { sql: finalSql, params: finalParams } = convertPlaceholders(
       convertedSql,
       params
     );
-    const result = await pool.query(finalSql, finalParams);
 
-    if (finalSql.trim().toUpperCase().startsWith("SELECT")) {
-      if (finalSql.toUpperCase().includes("LIMIT 1")) {
-        return result.rows[0] || null;
+    let lastErr;
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        const result = await pool.query(finalSql, finalParams);
+
+        if (finalSql.trim().toUpperCase().startsWith("SELECT")) {
+          if (finalSql.toUpperCase().includes("LIMIT 1")) {
+            return result.rows[0] || null;
+          }
+          return result.rows;
+        }
+
+        if (result.rows && result.rows.length && result.rows[0].id) {
+          return {
+            id: result.rows[0].id,
+            lastInsertRowid: result.rows[0].id,
+            changes: result.rowCount || 0,
+          };
+        }
+
+        return {
+          lastInsertRowid: null,
+          changes: result.rowCount || 0,
+        };
+      } catch (err) {
+        lastErr = err;
+        if (attempt < retries && isRetryable(err)) {
+          logger.warn(
+            { err, attempt, sql: finalSql.slice(0, 120) },
+            "Transient DB connection error — retrying"
+          );
+          await new Promise((r) => setTimeout(r, 100 * (attempt + 1)));
+          continue;
+        }
+        throw err;
       }
-      return result.rows;
     }
-
-    if (result.rows && result.rows.length && result.rows[0].id) {
-      return {
-        id: result.rows[0].id,
-        lastInsertRowid: result.rows[0].id,
-        changes: result.rowCount || 0,
-      };
-    }
-
-    return {
-      lastInsertRowid: null,
-      changes: result.rowCount || 0,
-    };
+    throw lastErr;
   };
 
   async function saveHistory({ delivery_id, action, details, actor = "bot" }) {
