@@ -42,6 +42,7 @@ DB_TYPE=postgres
 DATABASE_URL=postgresql://user:pass@host:5432/db
 API_PORT=3001
 JWT_SECRET=$(openssl rand -base64 32)
+AUTH_HEADER_FALLBACK=true   # Required for mobile vendor app (Bearer token auth)
 ```
 
 ### Step 4: Update PM2 Config (2 min)

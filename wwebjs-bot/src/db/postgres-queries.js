@@ -699,22 +699,25 @@ function createPostgresQueries(pool) {
     role = "agency",
     is_active = true,
     agency_code = null,
+    group_id = null,
+    parent_agency_id = null,
   }) {
     // Normalize agency_code: trim and uppercase if provided
     const normalizedCode = agency_code ? agency_code.trim().toUpperCase() : null;
-    
+
     const result = await query(
-      `INSERT INTO agencies (name, email, password_hash, role, is_active, agency_code) 
-       VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
-      [name, email, password_hash, role, is_active, normalizedCode]
+      `INSERT INTO agencies (name, email, password_hash, role, is_active, agency_code, group_id, parent_agency_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+      [name, email, password_hash, role, is_active, normalizedCode, group_id, parent_agency_id]
     );
     return result.id || result[0]?.id;
   }
 
   async function getAgencyById(id) {
     const result = await query(
-      `SELECT id, name, email, agency_code, role, is_active, address, phone, logo_base64, created_at, updated_at
-       FROM agencies 
+      `SELECT id, name, email, agency_code, role, is_active, address, phone, logo_base64,
+              group_id, parent_agency_id, created_at, updated_at
+       FROM agencies
        WHERE id = $1 LIMIT 1`,
       [id]
     );
@@ -766,7 +769,7 @@ function createPostgresQueries(pool) {
 
   async function updateAgency(
     id,
-    { name, email, password_hash, role, is_active, agency_code }
+    { name, email, password_hash, role, is_active, agency_code, group_id, parent_agency_id }
   ) {
     const updates = [];
     const params = [];
@@ -799,6 +802,14 @@ function createPostgresQueries(pool) {
       updates.push(`agency_code = $${paramIndex++}`);
       params.push(normalizedCode);
     }
+    if (group_id !== undefined) {
+      updates.push(`group_id = $${paramIndex++}`);
+      params.push(group_id !== null ? parseInt(group_id) : null);
+    }
+    if (parent_agency_id !== undefined) {
+      updates.push(`parent_agency_id = $${paramIndex++}`);
+      params.push(parent_agency_id !== null ? parseInt(parent_agency_id) : null);
+    }
 
     if (updates.length === 0) {
       return { changes: 0 };
@@ -810,6 +821,19 @@ function createPostgresQueries(pool) {
     const sql = `UPDATE agencies SET ${updates.join(", ")} WHERE id = $${paramIndex}`;
     const result = await query(sql, params);
     return { changes: result.changes || 0 };
+  }
+
+  async function getVendorsByAgency(agency_id) {
+    return await query(
+      `SELECT a.id, a.name, a.email, a.role, a.is_active,
+              a.group_id, a.parent_agency_id, a.created_at, a.updated_at,
+              g.name AS group_name
+       FROM agencies a
+       LEFT JOIN groups g ON g.id = a.group_id
+       WHERE a.role = 'vendor' AND a.parent_agency_id = $1
+       ORDER BY a.created_at DESC`,
+      [agency_id]
+    );
   }
 
   async function deleteAgency(id) {
@@ -1456,6 +1480,7 @@ function createPostgresQueries(pool) {
     getAllAgencies,
     updateAgency,
     deleteAgency,
+    getVendorsByAgency,
     // Reminders
     createAgencyReminderContact,
     getAgencyReminderContacts,

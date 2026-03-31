@@ -87,6 +87,7 @@ const api = {
   getAllAgencies: queries.getAllAgencies,
   updateAgency: queries.updateAgency,
   deleteAgency: queries.deleteAgency,
+  getVendorsByAgency: queries.getVendorsByAgency,
   // Reminders (contacts + scheduled reminders)
   createAgencyReminderContact: queries.createAgencyReminderContact,
   getAgencyReminderContacts: queries.getAgencyReminderContacts,

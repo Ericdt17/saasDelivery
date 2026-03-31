@@ -25,14 +25,14 @@ function authenticateToken(req, res, next) {
     // First, try to get token from HTTP-only cookie (preferred method)
     token = extractTokenFromCookie(req.cookies, 'auth_token');
 
-    // If no cookie token, optionally fall back to Authorization header (transition/backward compatibility)
-    // Disabled by default in production.
+    // If no cookie token, optionally fall back to Authorization header.
+    // Opt-in via AUTH_HEADER_FALLBACK=true. Works in all environments so
+    // that mobile clients (Expo/React Native) can use Bearer token auth
+    // in production without relying on cookies.
     if (!token) {
-      const isProduction = process.env.NODE_ENV === "production";
       const allowHeaderFallback =
-        !isProduction &&
-        (process.env.AUTH_HEADER_FALLBACK === "true" ||
-          process.env.AUTH_HEADER_FALLBACK === "1");
+        process.env.AUTH_HEADER_FALLBACK === "true" ||
+        process.env.AUTH_HEADER_FALLBACK === "1";
 
       if (allowHeaderFallback) {
         const authHeader = req.headers.authorization;
@@ -68,6 +68,7 @@ function authenticateToken(req, res, next) {
       agencyId: decoded.agencyId,
       email: decoded.email,
       role: decoded.role,
+      groupId: decoded.groupId ?? null,
     };
 
     next();
@@ -122,10 +123,26 @@ function requireAgencyAdmin(req, res, next) {
   return authorizeRole(["agency", "super_admin"])(req, res, next);
 }
 
+/**
+ * Middleware to check if user is a vendor
+ */
+function requireVendor(req, res, next) {
+  return authorizeRole(["vendor"])(req, res, next);
+}
+
+/**
+ * Middleware to check if user is agency admin, super admin, or vendor
+ */
+function requireAgencyAdminOrVendor(req, res, next) {
+  return authorizeRole(["agency", "super_admin", "vendor"])(req, res, next);
+}
+
 module.exports = {
   authenticateToken,
   authorizeRole,
   requireSuperAdmin,
   requireAgencyAdmin,
+  requireVendor,
+  requireAgencyAdminOrVendor,
 };
 
