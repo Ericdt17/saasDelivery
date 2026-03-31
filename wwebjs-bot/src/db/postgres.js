@@ -32,8 +32,8 @@ function createPostgresPool() {
     // Release idle connections after 5s — Render's infra kills idle TCP
     // connections around 5-8s, so we evict before they become stale in pool.
     idleTimeoutMillis: 5000,
-    // Fail fast so query-level retry can start a fresh connection sooner.
-    connectionTimeoutMillis: 5000,
+    // Allow enough time for SSL handshake over VPS→remote network path.
+    connectionTimeoutMillis: 8000,
     // TCP keepalive prevents cloud DBs from terminating idle connections
     // mid-pool, which causes "Connection terminated unexpectedly" errors.
     keepAlive: true,

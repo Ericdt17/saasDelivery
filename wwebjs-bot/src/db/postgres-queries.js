@@ -38,7 +38,7 @@ function createPostgresQueries(pool) {
     return converted;
   };
 
-  const query = async (sql, params = [], { retries = 1 } = {}) => {
+  const query = async (sql, params = [], { retries = 3 } = {}) => {
     const convertedSql = normalizeDateFunctions(sql);
     const { sql: finalSql, params: finalParams } = convertPlaceholders(
       convertedSql,
@@ -76,7 +76,7 @@ function createPostgresQueries(pool) {
             { err, attempt, sql: finalSql.slice(0, 120) },
             "Transient DB connection error — retrying"
           );
-          await new Promise((r) => setTimeout(r, 100 * (attempt + 1)));
+          await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
           continue;
         }
         throw err;
