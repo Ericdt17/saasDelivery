@@ -48,6 +48,7 @@ function generateToken(payload) {
         agencyId: payload.agencyId,
         email: payload.email,
         role: payload.role,
+        groupId: payload.groupId ?? null,
       },
       JWT_SECRET,
       {

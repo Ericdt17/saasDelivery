@@ -64,7 +64,10 @@ function getCookieOptions(req) {
   return {
     httpOnly: true,
     secure: isHTTPS,
-    sameSite: "strict",
+    // SameSite=None (requires Secure) allows cross-subdomain requests
+    // (e.g. app.livsight.com → api.livsight.com). SameSite=Lax is used
+    // in dev (non-HTTPS) where cross-site isn't a concern.
+    sameSite: isHTTPS ? "none" : "lax",
     maxAge: 24 * 60 * 60 * 1000, // 24 hours
     path: "/",
   };
@@ -95,7 +98,7 @@ async function handleLogin(req, res, next) {
     const normalizedEmail = validatedEmail;
 
     const agency = await adapter.query(
-      `SELECT id, name, email, password_hash, role, is_active FROM agencies WHERE email = $1 LIMIT 1`,
+      `SELECT id, name, email, password_hash, role, is_active, group_id, parent_agency_id FROM agencies WHERE email = $1 LIMIT 1`,
       [normalizedEmail]
     );
 
@@ -133,9 +136,12 @@ async function handleLogin(req, res, next) {
     const token = generateToken({
       id: agency.id,
       userId: agency.id,
-      agencyId: agency.role === "super_admin" ? null : agency.id,
+      agencyId: agency.role === "super_admin" ? null
+              : agency.role === "vendor"      ? agency.parent_agency_id
+              : agency.id,
       email: agency.email,
       role: agency.role,
+      groupId: agency.group_id ?? null,
     });
 
     // Set HTTP-only cookie with JWT token
@@ -143,17 +149,22 @@ async function handleLogin(req, res, next) {
 
     res.cookie("auth_token", token, cookieOptions);
 
-    // Return success response (exclude password_hash)
-    // The token variable is ONLY used for res.cookie() above
+    // Also return token in response body for mobile clients (Expo/React Native)
+    // that cannot reliably access HTTP-only cookies and must use
+    // Authorization: Bearer <token> instead.
     res.json({
       success: true,
       data: {
+        token,
         user: {
           id: agency.id,
           name: agency.name,
           email: agency.email,
           role: agency.role,
-          agencyId: agency.role === "super_admin" ? null : agency.id,
+          agencyId: agency.role === "super_admin" ? null
+                  : agency.role === "vendor"      ? agency.parent_agency_id
+                  : agency.id,
+          groupId: agency.group_id ?? null,
         },
       },
     });
@@ -273,7 +284,7 @@ router.post("/signout", authenticateToken, handleLogout);
 router.get("/me", authenticateToken, async (req, res, next) => {
   try {
     const agency = await adapter.query(
-      `SELECT id, name, email, role, is_active FROM agencies WHERE id = $1 LIMIT 1`,
+      `SELECT id, name, email, role, is_active, group_id, parent_agency_id FROM agencies WHERE id = $1 LIMIT 1`,
       [req.user.userId]
     );
 
@@ -301,7 +312,10 @@ router.get("/me", authenticateToken, async (req, res, next) => {
           name: agency.name,
           email: agency.email,
           role: agency.role,
-          agencyId: agency.role === "super_admin" ? null : agency.id,
+          agencyId: agency.role === "super_admin" ? null
+                  : agency.role === "vendor"      ? agency.parent_agency_id
+                  : agency.id,
+          groupId: agency.group_id ?? null,
         },
       },
     });

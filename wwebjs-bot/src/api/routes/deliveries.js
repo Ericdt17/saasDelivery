@@ -61,13 +61,18 @@ router.get('/', async (req, res, next) => {
     let agency_id = null;
     if (req.user && req.user.role !== 'super_admin') {
       // Use agencyId from token, or fallback to userId if agencyId is not set
-      agency_id = req.user.agencyId !== null && req.user.agencyId !== undefined 
-        ? req.user.agencyId 
+      agency_id = req.user.agencyId !== null && req.user.agencyId !== undefined
+        ? req.user.agencyId
         : req.user.userId;
     } else if (req.user && req.user.role === 'super_admin' && queryAgencyId) {
       // Super admin can filter by agency_id if provided in query
       agency_id = parseInt(queryAgencyId);
     }
+
+    // Vendors are locked to their own group — ignore any group_id from query params
+    const effectiveGroupId = req.user?.role === 'vendor'
+      ? req.user.groupId
+      : (group_id ? parseInt(group_id) : null);
 
     const result = await getAllDeliveries({
       page: parseInt(page),
@@ -80,7 +85,7 @@ router.get('/', async (req, res, next) => {
       sortBy,
       sortOrder,
       agency_id,
-      group_id: group_id ? parseInt(group_id) : null,
+      group_id: effectiveGroupId,
     });
 
     res.json({
@@ -95,6 +100,15 @@ router.get('/', async (req, res, next) => {
 
 // POST /api/v1/deliveries/bulk - Create multiple deliveries at once (must come before POST /)
 router.post('/bulk', async (req, res, next) => {
+  // Vendors cannot use bulk import
+  if (req.user?.role === 'vendor') {
+    return res.status(403).json({
+      success: false,
+      error: 'Forbidden',
+      message: 'Vendors cannot use bulk delivery creation',
+    });
+  }
+
   try {
     const { deliveries } = req.body;
 
@@ -202,7 +216,7 @@ router.get('/:id', async (req, res, next) => {
   try {
     const { id } = req.params;
     const result = await getDeliveryById(parseInt(id));
-    
+
     // Handle array response from queries (PostgreSQL can return array)
     const delivery = Array.isArray(result) ? result[0] : result;
 
@@ -210,6 +224,15 @@ router.get('/:id', async (req, res, next) => {
       return res.status(404).json({
         success: false,
         error: 'Delivery not found',
+      });
+    }
+
+    // Vendors can only access deliveries belonging to their group
+    if (req.user?.role === 'vendor' && delivery.group_id !== req.user.groupId) {
+      return res.status(403).json({
+        success: false,
+        error: 'Forbidden',
+        message: 'Access denied to this delivery',
       });
     }
 
@@ -246,13 +269,27 @@ router.post('/', async (req, res, next) => {
       notes,
       carrier,
       delivery_fee,
-      group_id,
+      group_id: bodyGroupId,
     } = parsed.data;
 
     // Get agency_id from authenticated user
-    const agencyId = req.user?.agencyId !== null && req.user?.agencyId !== undefined 
-      ? req.user.agencyId 
+    const agencyId = req.user?.agencyId !== null && req.user?.agencyId !== undefined
+      ? req.user.agencyId
       : req.user?.userId;
+
+    // Vendors must have both agencyId and groupId in their token
+    if (req.user?.role === 'vendor') {
+      if (!req.user.agencyId || !req.user.groupId) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid vendor token',
+          message: 'Vendor account is not linked to an agency and group',
+        });
+      }
+    }
+
+    // For vendors, always use their token's group_id (ignore body)
+    const group_id = req.user?.role === 'vendor' ? req.user.groupId : bodyGroupId;
 
     // Parse and prepare delivery data
     const parsedAmountDue = parseFloat(amount_due);
@@ -354,6 +391,15 @@ router.post('/', async (req, res, next) => {
 
 // PUT /api/v1/deliveries/:id - Update delivery
 router.put('/:id', async (req, res, next) => {
+  // Vendors cannot modify deliveries
+  if (req.user?.role === 'vendor') {
+    return res.status(403).json({
+      success: false,
+      error: 'Forbidden',
+      message: 'Vendors cannot modify deliveries',
+    });
+  }
+
   try {
     const { id } = req.params;
     const updates = req.body;
@@ -864,6 +910,15 @@ router.put('/:id', async (req, res, next) => {
 
 // DELETE /api/v1/deliveries/:id - Delete delivery
 router.delete('/:id', async (req, res, next) => {
+  // Vendors cannot delete deliveries
+  if (req.user?.role === 'vendor') {
+    return res.status(403).json({
+      success: false,
+      error: 'Forbidden',
+      message: 'Vendors cannot delete deliveries',
+    });
+  }
+
   try {
     const { id } = req.params;
 

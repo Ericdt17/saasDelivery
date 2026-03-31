@@ -58,6 +58,7 @@ describe("authenticateToken", () => {
       agencyId: 2,
       email: "a@b.com",
       role: "agency",
+      groupId: null,
     });
     expect(next).toHaveBeenCalled();
   });
