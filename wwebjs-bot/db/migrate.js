@@ -131,7 +131,7 @@ async function runMigrations() {
 }
 
 const RETRYABLE_ERRORS = [
-  "Connection terminated unexpectedly",
+  "Connection terminated", // covers "unexpectedly" and "due to connection timeout"
   "connect ECONNREFUSED",
   "connect ETIMEDOUT",
   "ENOTFOUND",
