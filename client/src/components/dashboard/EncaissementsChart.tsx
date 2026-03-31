@@ -116,81 +116,27 @@ export function EncaissementsChart() {
   const dateRange = useMemo(() => getLast7DaysRange(), []);
   const { selectedAgencyId } = useAgency();
 
-  // Fetch ALL recent deliveries (last 30 days) without date filter, then filter client-side
-  // This is more reliable than server-side date filtering
   const { data: deliveriesData, isLoading } = useQuery({
-    queryKey: ["deliveries", "weekly-encaissements", selectedAgencyId],
+    queryKey: ["deliveries", "weekly-encaissements", selectedAgencyId, dateRange.startDate, dateRange.endDate],
     queryFn: () =>
       getDeliveries({
         page: 1,
-        limit: 1000,
+        limit: 200,
+        startDate: dateRange.startDate,
+        endDate: dateRange.endDate,
         sortBy: "created_at",
         sortOrder: "DESC",
         agency_id: selectedAgencyId || undefined,
       }),
+    staleTime: 5 * 60 * 1000,
     retry: 2,
     refetchOnWindowFocus: false,
   });
 
   const chartData = useMemo(() => {
-    if (!deliveriesData?.deliveries || deliveriesData.deliveries.length === 0) {
-      // Return empty data structure if no deliveries
-      return [
-        { jour: "Lun", encaisse: 0, restant: 0 },
-        { jour: "Mar", encaisse: 0, restant: 0 },
-        { jour: "Mer", encaisse: 0, restant: 0 },
-        { jour: "Jeu", encaisse: 0, restant: 0 },
-        { jour: "Ven", encaisse: 0, restant: 0 },
-        { jour: "Sam", encaisse: 0, restant: 0 },
-        { jour: "Dim", encaisse: 0, restant: 0 },
-      ];
-    }
-
-    // Filter deliveries to last 7 days client-side
-    // Use date string comparison (YYYY-MM-DD) to avoid timezone issues
-    const last7DaysDeliveries = deliveriesData.deliveries.filter((delivery) => {
-      if (!delivery.date_creation) return false;
-
-      let deliveryDate: Date;
-      if (typeof delivery.date_creation === "string") {
-        deliveryDate = new Date(delivery.date_creation);
-      } else {
-        deliveryDate = delivery.date_creation;
-      }
-
-      if (isNaN(deliveryDate.getTime())) return false;
-
-      // Get date string in YYYY-MM-DD format for comparison
-      const deliveryDateStr = formatDateLocal(deliveryDate);
-      const startDateStr = dateRange.startDate;
-      const endDateStr = dateRange.endDate;
-
-      return deliveryDateStr >= startDateStr && deliveryDateStr <= endDateStr;
-    });
-
-    // If no deliveries in last 7 days, try last 30 days
-    let deliveriesToUse = last7DaysDeliveries;
-    if (last7DaysDeliveries.length === 0) {
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-      const thirtyDaysAgoStr = formatDateLocal(thirtyDaysAgo);
-
-      deliveriesToUse = deliveriesData.deliveries.filter((delivery) => {
-        if (!delivery.date_creation) return false;
-        let deliveryDate: Date;
-        if (typeof delivery.date_creation === "string") {
-          deliveryDate = new Date(delivery.date_creation);
-        } else {
-          deliveryDate = delivery.date_creation;
-        }
-        if (isNaN(deliveryDate.getTime())) return false;
-        const deliveryDateStr = formatDateLocal(deliveryDate);
-        return deliveryDateStr >= thirtyDaysAgoStr;
-      });
-    }
-
-    return calculateWeeklyEncaissements(deliveriesToUse);
-  }, [deliveriesData, dateRange]);
+    const deliveries = deliveriesData?.deliveries ?? [];
+    return calculateWeeklyEncaissements(deliveries);
+  }, [deliveriesData]);
 
   if (isLoading) {
     return (
