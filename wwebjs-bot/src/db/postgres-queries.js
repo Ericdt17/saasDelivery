@@ -414,15 +414,13 @@ function createPostgresQueries(pool) {
       limit
     )} OFFSET ${addParam(offset)}`;
 
-    const countResult = await query(
-      countSql,
-      params.slice(0, params.length - 2)
-    );
+    const [countResult, deliveries] = await Promise.all([
+      query(countSql, params.slice(0, params.length - 2)),
+      query(dataSql, params),
+    ]);
     const total = Array.isArray(countResult)
       ? countResult[0]?.total || 0
       : countResult?.total || 0;
-
-    const deliveries = await query(dataSql, params);
 
     return {
       deliveries: Array.isArray(deliveries)
@@ -594,9 +592,6 @@ function createPostgresQueries(pool) {
       LEFT JOIN groups g ON g.id = e.group_id
       ${whereClause}
     `;
-    const totalResult = await query(countSql, params);
-    const total = Number(Array.isArray(totalResult) ? totalResult[0]?.total : totalResult?.total) || 0;
-
     const dataSql = `
       SELECT e.*, g.name as group_name
       FROM expeditions e
@@ -606,7 +601,11 @@ function createPostgresQueries(pool) {
       LIMIT ${addParam(Number(limit))}
       OFFSET ${addParam(offset)}
     `;
-    const rows = await query(dataSql, params);
+    const [totalResult, rows] = await Promise.all([
+      query(countSql, params.slice(0, params.length - 2)),
+      query(dataSql, params),
+    ]);
+    const total = Number(Array.isArray(totalResult) ? totalResult[0]?.total : totalResult?.total) || 0;
 
     return {
       expeditions: Array.isArray(rows) ? rows : [rows].filter(Boolean),
