@@ -28,9 +28,15 @@ function createPostgresPool() {
   const pool = new Pool({
     connectionString,
     ...(useSsl ? { ssl: { rejectUnauthorized: false } } : {}),
-    max: 20,
-    idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 5000, // Reduced from 10000 to 5000ms (5 seconds)
+    max: 10,
+    // Release idle connections after 10s — shorter than Neon's server-side
+    // idle timeout so the pool discards them before the server kills them.
+    idleTimeoutMillis: 10000,
+    connectionTimeoutMillis: 10000,
+    // TCP keepalive prevents Neon/cloud DBs from terminating idle connections
+    // mid-pool, which causes "Connection terminated unexpectedly" errors.
+    keepAlive: true,
+    keepAliveInitialDelayMillis: 10000,
   });
 
   // Without this handler, an error on an idle pool client (e.g. server-side
