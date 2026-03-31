@@ -28,9 +28,10 @@ function createPostgresPool() {
   const pool = new Pool({
     connectionString,
     ...(useSsl ? { ssl: { rejectUnauthorized: false } } : {}),
+    min: 2,  // Keep 2 warm connections — reconnects happen in background, not in request path
     max: 10,
     // Release idle connections after 5s — Render's infra kills idle TCP
-    // connections around 5-8s, so we evict before they become stale in pool.
+    // connections around 5-8s, so pool evicts and immediately replaces them (min keeps count up).
     idleTimeoutMillis: 5000,
     // Allow enough time for SSL handshake over VPS→remote network path.
     connectionTimeoutMillis: 8000,
