@@ -383,12 +383,14 @@ function createPostgresQueries(pool) {
     }
 
     if (date) {
-      conditions.push(`(${tzExpr})::date = ${addParam(date)}::date`);
+      conditions.push(
+        `created_at >= ${addParam(date)}::date AT TIME ZONE '${TIME_ZONE}' AND created_at < (${addParam(date)}::date + INTERVAL '1 day') AT TIME ZONE '${TIME_ZONE}'`
+      );
     }
 
     if (startDate && endDate) {
       conditions.push(
-        `(${tzExpr})::date >= ${addParam(startDate)}::date AND (${tzExpr})::date <= ${addParam(endDate)}::date`
+        `created_at >= ${addParam(startDate)}::date AT TIME ZONE '${TIME_ZONE}' AND created_at < (${addParam(endDate)}::date + INTERVAL '1 day') AT TIME ZONE '${TIME_ZONE}'`
       );
     }
 
@@ -449,9 +451,13 @@ function createPostgresQueries(pool) {
 
     // Date condition
     if (date) {
-      conditions.push(`(${tzExpr})::date = ${addParam(date)}::date`);
+      conditions.push(
+        `created_at >= ${addParam(date)}::date AT TIME ZONE '${TIME_ZONE}' AND created_at < (${addParam(date)}::date + INTERVAL '1 day') AT TIME ZONE '${TIME_ZONE}'`
+      );
     } else {
-      conditions.push(`(${tzExpr})::date = CURRENT_DATE`);
+      conditions.push(
+        `created_at >= CURRENT_DATE AT TIME ZONE '${TIME_ZONE}' AND created_at < (CURRENT_DATE + INTERVAL '1 day') AT TIME ZONE '${TIME_ZONE}'`
+      );
     }
 
     // Agency filter
@@ -564,11 +570,14 @@ function createPostgresQueries(pool) {
       return `$${paramIndex++}`;
     };
 
-    if (startDate) {
-      conditions.push(`e.created_at::date >= ${addParam(startDate)}::date`);
-    }
-    if (endDate) {
-      conditions.push(`e.created_at::date <= ${addParam(endDate)}::date`);
+    if (startDate && endDate) {
+      conditions.push(
+        `e.created_at >= ${addParam(startDate)}::date AT TIME ZONE '${TIME_ZONE}' AND e.created_at < (${addParam(endDate)}::date + INTERVAL '1 day') AT TIME ZONE '${TIME_ZONE}'`
+      );
+    } else if (startDate) {
+      conditions.push(`e.created_at >= ${addParam(startDate)}::date AT TIME ZONE '${TIME_ZONE}'`);
+    } else if (endDate) {
+      conditions.push(`e.created_at < (${addParam(endDate)}::date + INTERVAL '1 day') AT TIME ZONE '${TIME_ZONE}'`);
     }
     if (status) {
       conditions.push(`e.status = ${addParam(status)}`);
