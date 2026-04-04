@@ -5,7 +5,7 @@
 This repository implements a multi-agency delivery management system with:
 
 - A WhatsApp bot (using `whatsapp-web.js`) that listens to group messages, parses delivery/orders, and records updates to the database.
-- A backend REST API (Express) exposing authenticated endpoints used by the frontend UI.
+- A backend REST API (Express) exposing authenticated endpoints used by the frontend UI and by a **vendor mobile app** under `/api/v1/vendor` (separate from agency dashboard routes).
 - A React + TypeScript frontend that provides dashboards, CRUD screens, reporting/export, and analytics.
 - A dual database strategy:
   - SQLite for local development
@@ -19,6 +19,7 @@ Top-level:
 - `client/` — React frontend (Vite + shadcn/ui + Tailwind + React Query)
 - `wwebjs-bot/` — WhatsApp bot + API server + DB layer (Node/Express + SQL adapters)
 - Root docs:
+  - `API.md` — HTTP API reference (includes `/api/v1/vendor` and push tokens)
   - `PRODUCTION_DEPLOYMENT_CHECKLIST.md`
   - `PRODUCTION_TROUBLESHOOTING.md`
   - `DOMAIN_AND_DEPLOYMENT_SETUP.md`
@@ -44,6 +45,7 @@ Key entrypoints:
    - view a delivery’s history
    - manage agencies, groups, tariffs
    - see stats and export PDFs for group reports
+7. **Vendor mobile clients** (JWT `role: vendor`) call `/api/v1/vendor/*` to create deliveries scoped to their linked `groupId`/`agencyId`, manage stock items, register Expo push tokens, and read their profile — without using the WhatsApp bot.
 
 ### Data flow diagram (conceptual)
 
@@ -82,10 +84,11 @@ Backend middleware: `wwebjs-bot/src/api/middleware/auth.js`
 Key points:
 
 - Middleware reads token from cookies first.
-- A legacy/fallback “Authorization header” strategy exists but is effectively disabled for production unless enabled via env.
+- When `AUTH_HEADER_FALLBACK=true` (or `1`), the same JWT may be sent as `Authorization: Bearer <token>` — required for typical **mobile / Expo** clients that do not use HTTP-only cookies.
 - Role-based authorization happens via token payload:
   - `super_admin`
   - `agency` (agency admin)
+  - `vendor` (linked to a parent agency and a `groupId`; used only for `/api/v1/vendor/*` routes)
 
 ### CORS (frontend -> API)
 
@@ -102,14 +105,18 @@ API CORS is configured in `wwebjs-bot/src/api/server.js`:
 Base migrations define these tables:
 
 - `agencies`
-  - owner accounts for login
+  - owner accounts for login (agencies, super admins, and **vendors** — vendors use `role = 'vendor'` with `parent_agency_id` and `group_id` set)
   - fields include `name`, `email`, `password_hash`, `role`, `is_active`, and `agency_code` (added later)
 - `groups`
   - WhatsApp groups linked to an agency
   - fields include `agency_id`, `whatsapp_group_id` (unique), `name`, `is_active`
 - `deliveries`
   - delivery records
-  - fields include `phone`, `items`, `amount_due`, `amount_paid`, `status`, `quartier`, `notes`, `carrier`, `group_id`, `agency_id`, `whatsapp_message_id`, `delivery_fee`
+  - fields include `phone`, `items`, `amount_due`, `amount_paid`, `status`, `quartier`, `notes`, `carrier`, `group_id`, `agency_id`, `whatsapp_message_id`, `delivery_fee`, and optional **`created_by_user_id`** (vendor `agencies.id` when the row was created via `POST /api/v1/vendor/deliveries`; used for Expo push targeting)
+- `stock_items`
+  - vendor inventory rows scoped by `group_id` (name, subtitle, quantity)
+- `vendor_push_tokens`
+  - Expo push tokens per vendor user (`vendor_user_id` → `agencies.id`), unique `expo_push_token`, `platform` (`ios` / `android`)
 - `delivery_history`
   - audit trail of changes to deliveries
   - fields include `delivery_id`, `action`, `details`, `actor`, and optional `agency_id`
@@ -281,9 +288,13 @@ Routes are registered from:
 - `wwebjs-bot/src/api/routes/groups.js`
 - `wwebjs-bot/src/api/routes/tariffs.js`
 - `wwebjs-bot/src/api/routes/deliveries.js`
+- `wwebjs-bot/src/api/routes/expeditions.js`
 - `wwebjs-bot/src/api/routes/stats.js`
 - `wwebjs-bot/src/api/routes/search.js`
 - `wwebjs-bot/src/api/routes/reports.js`
+- `wwebjs-bot/src/api/routes/reminder-contacts.js` / `reminders.js` (if enabled in your deployment)
+- `wwebjs-bot/src/api/routes/vendors.js` — **agency admin** CRUD for vendor *accounts* (`/api/v1/vendors`)
+- `wwebjs-bot/src/api/routes/vendor.js` — **vendor JWT** mobile namespace (`/api/v1/vendor`)
 
 ### Unauthenticated endpoints
 
@@ -292,9 +303,11 @@ Routes are registered from:
 - `POST /api/v1/auth/signin`
 - `POST /api/v1/auth/signup`
 
-### Cookie-authenticated endpoints
+### Cookie-authenticated endpoints (and vendor Bearer)
 
-Most routes require `authenticateToken` (HTTP-only cookie `auth_token`).
+Most dashboard routes require `authenticateToken` with the HTTP-only cookie `auth_token`.
+
+Vendor mobile routes (`/api/v1/vendor/*`) use the same `authenticateToken` middleware but typically supply the JWT via **`Authorization: Bearer <token>`** when `AUTH_HEADER_FALLBACK` is enabled.
 
 The backend also exposes a schema/migration status endpoint:
 
@@ -429,17 +442,51 @@ Response:
 - `PUT /api/v1/deliveries/:id`
   - accepts partial updates; the backend applies tariff adjustments for certain status transitions
   - also saves changes to `delivery_history` for each modified field
+  - **vendor role** receives `403` (vendors must not change delivery status from the app; agencies do that from the dashboard)
+  - when **`status` changes** and the delivery has **`created_by_user_id`** (vendor-created row), the server sends a **non-blocking Expo push** to that vendor’s registered token(s) (implementation: `wwebjs-bot/src/lib/expoPush.js`; optional env `EXPO_ACCESS_TOKEN`)
 
 #### Delete delivery
 
 - `DELETE /api/v1/deliveries/:id`
   - super_admin can delete any delivery
   - agency can delete only deliveries where `deliveries.agency_id` matches token agency
+  - **vendor role** receives `403`
 
 #### Delivery history
 
 - `GET /api/v1/deliveries/:id/history`
   - returns history entries
+
+### Vendor API (mobile app)
+
+File: `wwebjs-bot/src/api/routes/vendor.js`  
+Mounted at: **`/api/v1/vendor`**
+
+This namespace is **additive**: it does not replace `/api/v1/deliveries` or `/api/v1/vendors`. It exists so production dashboard and bot flows keep using existing routes while the mobile app uses a dedicated surface.
+
+- **Auth**: `authenticateToken` + `requireVendor` (JWT must have `role: vendor` with `groupId` / `agencyId` in the payload).
+- **Scoping**: list/create operations are restricted server-side to the vendor’s **`group_id`** and **`agency_id`** from the token (same pattern as other vendor features).
+
+Endpoints (summary):
+
+| Method | Path | Purpose |
+|--------|------|--------|
+| GET | `/api/v1/vendor/me` | Current vendor profile (`agencies` row) |
+| GET | `/api/v1/vendor/deliveries` | List deliveries for vendor’s group/agency (same query params style as `GET /deliveries`) |
+| POST | `/api/v1/vendor/deliveries` | Create delivery; sets **`created_by_user_id`** to the vendor for push notifications |
+| GET | `/api/v1/vendor/stock-items` | List stock items for vendor’s `group_id` |
+| POST | `/api/v1/vendor/stock-items` | Create stock item |
+| PATCH | `/api/v1/vendor/stock-items/:id` | Update quantity via **`delta`** or absolute **`quantity`** |
+| DELETE | `/api/v1/vendor/stock-items/:id` | Remove stock item |
+| POST | `/api/v1/vendor/push-tokens` | Register/update Expo push token `{ expoPushToken, platform: "ios"\|"android" }` |
+| DELETE | `/api/v1/vendor/push-tokens` | Remove one token (`{ expoPushToken }`) or all tokens for the user (empty body) |
+
+**Admin vs vendor routes:**
+
+- **`/api/v1/vendors`** (`vendors.js`): agency admins manage vendor *user accounts* (create/update/list).
+- **`/api/v1/vendor`** (`vendor.js`): a logged-in *vendor* calls these endpoints from the app.
+
+Full request/response shapes and examples: root **`API.md`**.
 
 ### Stats API
 
@@ -596,6 +643,13 @@ If `VITE_API_BASE_URL` is empty, Vite can use proxy configuration (see `client/v
 For production on Vercel, set:
 
 - `VITE_API_BASE_URL=https://api.<your-domain>`
+
+Optional **PostHog** (product analytics; disabled if the key is unset):
+
+- `VITE_PUBLIC_POSTHOG_KEY` — project API key from PostHog
+- `VITE_PUBLIC_POSTHOG_HOST` — ingest host (defaults to `https://eu.i.posthog.com` if omitted; use `https://us.i.posthog.com` for US cloud)
+
+See `client/.env.example`. Initialization and SPA pageviews live in `client/src/lib/posthog.ts`, `client/src/components/analytics/PostHogPageview.tsx`, and auth identify/reset in `client/src/contexts/AuthContext.tsx`.
 
 ## Deployment & Operations
 

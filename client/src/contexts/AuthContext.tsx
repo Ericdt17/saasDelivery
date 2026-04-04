@@ -7,6 +7,7 @@ import {
   getUser,
   type UserInfo,
 } from "@/services/auth";
+import { posthog } from "@/lib/posthog";
 
 interface AuthContextType {
   user: UserInfo | null;
@@ -100,6 +101,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     initAuth();
   }, []);
+
+  useEffect(() => {
+    if (!import.meta.env.VITE_PUBLIC_POSTHOG_KEY) return;
+    if (isLoading) return;
+    if (user) {
+      posthog.identify(String(user.id), {
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        agency_id: user.agencyId ?? undefined,
+      });
+    } else {
+      posthog.reset();
+    }
+  }, [user, isLoading]);
 
   const login = async (email: string, password: string): Promise<boolean> => {
     try {

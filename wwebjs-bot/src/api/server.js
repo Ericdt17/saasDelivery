@@ -16,6 +16,7 @@ const expeditionsRouter = require("./routes/expeditions");
 const reminderContactsRouter = require("./routes/reminder-contacts");
 const remindersRouter = require("./routes/reminders");
 const vendorsRouter = require("./routes/vendors");
+const vendorRouter = require("./routes/vendor");
 const errorHandler = require("./middleware/errorHandler");
 
 const app = express();
@@ -139,6 +140,7 @@ app.use("/api/v1/reports", reportsRouter);
 app.use("/api/v1/reminder-contacts", reminderContactsRouter);
 app.use("/api/v1/reminders", remindersRouter);
 app.use("/api/v1/vendors", vendorsRouter);
+app.use("/api/v1/vendor", vendorRouter);
 
 // Health check endpoint
 app.get("/api/v1/health", (req, res) => {
