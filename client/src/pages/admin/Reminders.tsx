@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { getAgencies, type Agency } from "@/services/agencies";
+import { getGroups } from "@/services/groups";
 import { getReminderContacts } from "@/services/reminder-contacts";
 import { createReminder, cancelReminder, deleteReminder, getReminderById, getReminders, retryFailedReminder } from "@/services/reminders";
 import type { Reminder, ReminderContact, ReminderStatus, ReminderAudienceMode } from "@/types/reminders";
@@ -113,6 +114,24 @@ export default function RemindersPage() {
     return map;
   }, [contacts]);
 
+  const { data: allGroups = [] } = useQuery({
+    queryKey: ["groups", "admin-broadcast-count"],
+    queryFn: getGroups,
+    enabled: isSuperAdmin,
+    staleTime: 60_000,
+  });
+
+  const broadcastEligibleCount = useMemo(
+    () =>
+      allGroups.filter(
+        (g) =>
+          g.is_active &&
+          g.whatsapp_group_id != null &&
+          String(g.whatsapp_group_id).trim() !== ""
+      ).length,
+    [allGroups]
+  );
+
   const {
     data: reminders = [],
     isLoading: isLoadingReminders,
@@ -142,13 +161,16 @@ export default function RemindersPage() {
   }, [isErrorReminders, remindersError]);
 
   const selectedCount = useMemo(() => {
+    if (audienceMode === "all_groups") return broadcastEligibleCount;
     if (audienceMode === "contacts") return contactId === "none" ? 0 : 1;
     if (audienceMode === "groups") return groupIds.split(",").map((s) => s.trim()).filter(Boolean).length;
     return quickNumbers.split(/[\n,]/).map((s) => s.trim()).filter(Boolean).length;
-  }, [audienceMode, contactId, groupIds, quickNumbers]);
+  }, [audienceMode, contactId, groupIds, quickNumbers, broadcastEligibleCount]);
+
+  const formNeedsAgency = audienceMode !== "all_groups";
 
   const canSchedule =
-    agencyId !== "all" &&
+    (!formNeedsAgency || agencyId !== "all") &&
     selectedCount > 0 &&
     message.trim().length > 0 &&
     sendAtLocal.trim().length > 0;
@@ -157,7 +179,8 @@ export default function RemindersPage() {
     mutationFn: async () => {
       const sendAtIso = new Date(sendAtLocal).toISOString();
       return createReminder({
-        agency_id: Number(agencyId),
+        agency_id:
+          audienceMode === "all_groups" ? null : Number(agencyId),
         contact_id: audienceMode === "contacts" && contactId !== "none" ? Number(contactId) : undefined,
         contact_ids: audienceMode === "contacts" && contactId !== "none" ? [Number(contactId)] : undefined,
         group_ids: audienceMode === "groups"
@@ -183,6 +206,7 @@ export default function RemindersPage() {
       setQuickNumbers("");
       setGroupIds("");
       queryClient.invalidateQueries({ queryKey: ["reminders"] });
+      queryClient.invalidateQueries({ queryKey: ["groups", "admin-broadcast-count"] });
     },
     onError: (error: Error) => {
       toast.error("Impossible de programmer le rappel", {
@@ -236,6 +260,9 @@ export default function RemindersPage() {
       if (!rawPhone) {
         throw new Error("Aucun numéro valide à retester pour ce rappel.");
       }
+      if (r.agency_id == null) {
+        throw new Error("Retest non disponible pour une diffusion globale.");
+      }
       // Immediate retry campaign for one quick number target.
       return createReminder({
         agency_id: Number(r.agency_id),
@@ -267,9 +294,23 @@ export default function RemindersPage() {
       const sendAt = new Date(Date.now() + minutes * 60_000).toISOString();
       const audience = reminder.audience_mode || "contacts";
 
+      if (audience === "all_groups") {
+        return createReminder({
+          agency_id: null,
+          audience_mode: "all_groups",
+          message: reminder.message,
+          send_at: sendAt,
+          timezone: reminder.timezone || defaultTimezone,
+          send_interval_min_sec: reminder.send_interval_min_sec ?? 60,
+          send_interval_max_sec: reminder.send_interval_max_sec ?? 120,
+          window_start: reminder.window_start || undefined,
+          window_end: reminder.window_end || undefined,
+        });
+      }
+
       // Re-schedule from existing reminder data. Contacts mode uses contact_id;
       // fallback to quick_numbers when contact_phone is available.
-      if (audience === "contacts" && reminder.contact_id) {
+      if (audience === "contacts" && reminder.contact_id && reminder.agency_id != null) {
         return createReminder({
           agency_id: reminder.agency_id,
           audience_mode: "contacts",
@@ -298,6 +339,10 @@ export default function RemindersPage() {
         throw new Error("Aucune cible reprogrammable (contacts/numéros) pour ce rappel.");
       }
 
+      if (reminder.agency_id == null) {
+        throw new Error("Reprogrammation impossible : agence manquante pour ce rappel.");
+      }
+
       return createReminder({
         agency_id: reminder.agency_id,
         audience_mode: "quick_numbers",
@@ -323,15 +368,28 @@ export default function RemindersPage() {
   });
 
   const renderContactLabel = (r: Reminder) => {
+    if (r.audience_mode === "all_groups") return "Diffusion — tous les groupes";
     if (r.contact_label) return r.contact_label;
-    const c = contactsById.get(r.contact_id);
-    return c?.label || `Contact #${r.contact_id}`;
+    const cid = r.contact_id;
+    if (cid != null) {
+      const c = contactsById.get(cid);
+      return c?.label || `Contact #${cid}`;
+    }
+    return "—";
   };
 
   const renderContactPhone = (r: Reminder) => {
+    if (r.audience_mode === "all_groups") {
+      const n = r.total_targets ?? 0;
+      return `${n} groupe${n === 1 ? "" : "s"}`;
+    }
     if (r.contact_phone) return r.contact_phone;
-    const c = contactsById.get(r.contact_id);
-    return c?.phone || "";
+    const cid = r.contact_id;
+    if (cid != null) {
+      const c = contactsById.get(cid);
+      return c?.phone || "";
+    }
+    return "";
   };
 
   return (
@@ -339,7 +397,7 @@ export default function RemindersPage() {
       <div className="flex flex-col gap-2">
         <h1 className="text-2xl md:text-3xl font-bold">Rappels</h1>
         <p className="text-muted-foreground">
-          Programmez des rappels WhatsApp vers les numéros dédiés enregistrés par les agences.
+          Programmez des rappels WhatsApp (contacts, groupes d&apos;une agence, ou diffusion vers tous les groupes actifs enregistrés).
         </p>
       </div>
 
@@ -353,7 +411,11 @@ export default function RemindersPage() {
           <div className="grid gap-3">
             <div>
               <p className="text-sm font-medium">Agence</p>
-              <Select value={agencyId} onValueChange={(v) => { setAgencyId(v); setContactId("none"); }}>
+              <Select
+                value={agencyId}
+                onValueChange={(v) => { setAgencyId(v); setContactId("none"); }}
+                disabled={audienceMode === "all_groups"}
+              >
                 <SelectTrigger className="mt-1">
                   <SelectValue placeholder="Sélectionner une agence" />
                 </SelectTrigger>
@@ -366,14 +428,20 @@ export default function RemindersPage() {
                   ))}
                 </SelectContent>
               </Select>
+              {audienceMode === "all_groups" ? (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Non requis : la diffusion cible tous les groupes actifs (ID WhatsApp renseigné).
+                </p>
+              ) : null}
             </div>
 
             <div>
               <p className="text-sm font-medium">Audience</p>
-              <div className="mt-1 grid grid-cols-3 gap-2">
-                <Button variant={audienceMode === "contacts" ? "default" : "outline"} onClick={() => setAudienceMode("contacts")}>Contacts</Button>
-                <Button variant={audienceMode === "groups" ? "default" : "outline"} onClick={() => setAudienceMode("groups")}>Groupes</Button>
-                <Button variant={audienceMode === "quick_numbers" ? "default" : "outline"} onClick={() => setAudienceMode("quick_numbers")}>Audience rapide</Button>
+              <div className="mt-1 flex flex-wrap gap-2">
+                <Button type="button" variant={audienceMode === "contacts" ? "default" : "outline"} onClick={() => setAudienceMode("contacts")}>Contacts</Button>
+                <Button type="button" variant={audienceMode === "groups" ? "default" : "outline"} onClick={() => setAudienceMode("groups")}>Groupes</Button>
+                <Button type="button" variant={audienceMode === "quick_numbers" ? "default" : "outline"} onClick={() => setAudienceMode("quick_numbers")}>Audience rapide</Button>
+                <Button type="button" variant={audienceMode === "all_groups" ? "default" : "outline"} onClick={() => setAudienceMode("all_groups")}>Tous les groupes</Button>
               </div>
               {agencyId !== "all" && contacts.length === 0 && !isLoadingContacts ? (
                 <p className="mt-1 text-xs text-muted-foreground">
@@ -423,7 +491,7 @@ export default function RemindersPage() {
                   className="mt-1"
                   value={sendAtLocal}
                   onChange={(e) => setSendAtLocal(e.target.value)}
-                  disabled={agencyId === "all"}
+                  disabled={formNeedsAgency && agencyId === "all"}
                 />
               </div>
               <div>
@@ -469,7 +537,7 @@ export default function RemindersPage() {
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
                 placeholder="Ex: Rappel: réunion à 08:00 au bureau."
-                disabled={agencyId === "all"}
+                disabled={formNeedsAgency && agencyId === "all"}
               />
             </div>
             <div className="rounded border bg-muted/20 p-2 text-xs text-muted-foreground">

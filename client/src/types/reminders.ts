@@ -1,5 +1,5 @@
 export type ReminderStatus = "scheduled" | "running" | "completed" | "cancelled" | "failed";
-export type ReminderAudienceMode = "contacts" | "groups" | "quick_numbers";
+export type ReminderAudienceMode = "contacts" | "groups" | "quick_numbers" | "all_groups";
 export type ReminderTargetStatus = "queued" | "sent" | "failed" | "skipped" | "cancelled";
 
 export interface ReminderTarget {
@@ -25,7 +25,7 @@ export interface ReminderContact {
 
 export interface Reminder {
   id: number;
-  agency_id: number;
+  agency_id: number | null;
   contact_id?: number | null;
   contact_label?: string | null;
   contact_phone?: string | null;
