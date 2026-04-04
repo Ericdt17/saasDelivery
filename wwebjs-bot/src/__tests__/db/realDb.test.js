@@ -251,7 +251,7 @@ describeWithDb('PostgreSQL — real-database integration', () => {
       for (const row of rows) {
         await queries.query(
           `INSERT INTO deliveries (phone, items, amount_due, amount_paid, delivery_fee, status, agency_id, created_at)
-           VALUES ($1, 'jest items', $2, $3, $4, $5, $6, $7::date)`,
+           VALUES ($1, 'jest items', $2, $3, $4, $5, $6, ($7::date + INTERVAL '12 hours') AT TIME ZONE 'UTC')`,
           [row.phone, row.amount_due, row.amount_paid, row.delivery_fee, row.status, agencyId, TEST_DATE]
         );
       }

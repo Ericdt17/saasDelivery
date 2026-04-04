@@ -18,5 +18,8 @@ module.exports = {
   
   // Message sending configuration
   SEND_CONFIRMATIONS: process.env.SEND_CONFIRMATIONS || "false", // Send confirmation messages to group when delivery created/updated
+
+  // Timezone for date filtering (must match the business timezone — Cameroon = UTC+1)
+  TIME_ZONE: process.env.TIME_ZONE || "Africa/Douala",
 };
 
