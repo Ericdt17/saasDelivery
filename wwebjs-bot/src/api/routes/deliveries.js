@@ -11,7 +11,9 @@ const {
   getTariffByAgencyAndQuartier,
   saveHistory,
   deleteDelivery,
+  getExpoPushTokensForVendorUserIds,
 } = require('../../db');
+const { notifyVendorDeliveryStatusChange } = require('../../lib/expoPush');
 const {
   computeTariffPending,
   computeAmountPaidAfterFee,
@@ -844,6 +846,26 @@ router.put('/:id', async (req, res, next) => {
         success: false,
         error: 'Delivery not found after update',
       });
+    }
+
+    if (
+      oldValues.status !== updatedDelivery.status &&
+      updatedDelivery.created_by_user_id
+    ) {
+      void getExpoPushTokensForVendorUserIds([updatedDelivery.created_by_user_id])
+        .then((tokens) => {
+          if (tokens.length) {
+            notifyVendorDeliveryStatusChange({
+              tokens,
+              deliveryId: parseInt(id, 10),
+              newStatus: updatedDelivery.status,
+              customerName: updatedDelivery.customer_name,
+            });
+          }
+        })
+        .catch((err) =>
+          logger.error({ err }, 'Vendor push token lookup failed')
+        );
     }
     
     // Log final values for verification (important for group report calculations)

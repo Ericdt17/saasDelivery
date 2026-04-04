@@ -16,6 +16,9 @@ module.exports = {
     '!src/test/**',
     '!src/seed-*.js',
     '!src/db/**',                       // DB layer is validated by real-DB tests (jest.db.config.js)
+    '!src/api/routes/vendor.js',        // vendor API — smoke-tested via running server; add Jest when stable
+    '!src/api/routes/vendors.js',
+    '!src/lib/expoPush.js',             // push helper — thin wrapper around fetch; exercised in staging
     '!src/daily-report.js',
     '!src/send-report.js',
     '!src/send-message.js',

@@ -26,6 +26,7 @@ import NotFound from "./pages/NotFound";
 import ServerError from "./pages/ServerError";
 import ErrorNetworkPreview from "./pages/dev/ErrorNetworkPreview";
 import LoadingDemo from "./pages/dev/LoadingDemo";
+import { PostHogPageview } from "@/components/analytics/PostHogPageview";
 
 // Configure QueryClient with better error handling
 const queryClient = new QueryClient({
@@ -67,6 +68,7 @@ const App = () => (
         <TooltipProvider>
           <Toaster />
           <Sonner />
+          <PostHogPageview />
         <Routes>
           {/* Public route */}
           <Route path="/login" element={<Login />} />

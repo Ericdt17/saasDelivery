@@ -1,12 +1,15 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { getAgencies, type Agency } from "@/services/agencies";
+import { getGroups } from "@/services/groups";
 import { getReminderContacts } from "@/services/reminder-contacts";
 import { createReminder, cancelReminder, deleteReminder, getReminderById, getReminders, retryFailedReminder } from "@/services/reminders";
 import type { Reminder, ReminderContact, ReminderStatus, ReminderAudienceMode } from "@/types/reminders";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -71,7 +74,8 @@ export default function RemindersPage() {
 
   const [agencyId, setAgencyId] = useState<string>("all");
   const [contactId, setContactId] = useState<string>("none");
-  const [groupIds, setGroupIds] = useState<string>("");
+  /** Numeric DB ids for audience_mode "groups" */
+  const [selectedGroupIds, setSelectedGroupIds] = useState<number[]>([]);
   const [quickNumbers, setQuickNumbers] = useState("");
   const [audienceMode, setAudienceMode] = useState<ReminderAudienceMode>("contacts");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -113,6 +117,36 @@ export default function RemindersPage() {
     return map;
   }, [contacts]);
 
+  const { data: allGroups = [] } = useQuery({
+    queryKey: ["groups", "admin-broadcast-count"],
+    queryFn: getGroups,
+    enabled: isSuperAdmin,
+    staleTime: 60_000,
+  });
+
+  const broadcastEligibleCount = useMemo(
+    () =>
+      allGroups.filter(
+        (g) =>
+          g.is_active &&
+          g.whatsapp_group_id != null &&
+          String(g.whatsapp_group_id).trim() !== ""
+      ).length,
+    [allGroups]
+  );
+
+  const agencyGroupsSelectable = useMemo(() => {
+    if (agencyId === "all") return [];
+    const aid = Number(agencyId);
+    return allGroups.filter(
+      (g) =>
+        g.agency_id === aid &&
+        g.is_active &&
+        g.whatsapp_group_id != null &&
+        String(g.whatsapp_group_id).trim() !== ""
+    );
+  }, [allGroups, agencyId]);
+
   const {
     data: reminders = [],
     isLoading: isLoadingReminders,
@@ -141,14 +175,36 @@ export default function RemindersPage() {
     }
   }, [isErrorReminders, remindersError]);
 
+  useEffect(() => {
+    setSelectedGroupIds([]);
+  }, [agencyId]);
+
+  const toggleGroupSelected = useCallback((id: number, checked: boolean) => {
+    setSelectedGroupIds((prev) => {
+      if (checked) return prev.includes(id) ? prev : [...prev, id];
+      return prev.filter((x) => x !== id);
+    });
+  }, []);
+
+  const selectAllAgencyGroups = useCallback(() => {
+    setSelectedGroupIds(agencyGroupsSelectable.map((g) => g.id));
+  }, [agencyGroupsSelectable]);
+
+  const clearGroupSelection = useCallback(() => {
+    setSelectedGroupIds([]);
+  }, []);
+
   const selectedCount = useMemo(() => {
+    if (audienceMode === "all_groups") return broadcastEligibleCount;
     if (audienceMode === "contacts") return contactId === "none" ? 0 : 1;
-    if (audienceMode === "groups") return groupIds.split(",").map((s) => s.trim()).filter(Boolean).length;
+    if (audienceMode === "groups") return selectedGroupIds.length;
     return quickNumbers.split(/[\n,]/).map((s) => s.trim()).filter(Boolean).length;
-  }, [audienceMode, contactId, groupIds, quickNumbers]);
+  }, [audienceMode, contactId, selectedGroupIds, quickNumbers, broadcastEligibleCount]);
+
+  const formNeedsAgency = audienceMode !== "all_groups";
 
   const canSchedule =
-    agencyId !== "all" &&
+    (!formNeedsAgency || agencyId !== "all") &&
     selectedCount > 0 &&
     message.trim().length > 0 &&
     sendAtLocal.trim().length > 0;
@@ -157,12 +213,11 @@ export default function RemindersPage() {
     mutationFn: async () => {
       const sendAtIso = new Date(sendAtLocal).toISOString();
       return createReminder({
-        agency_id: Number(agencyId),
+        agency_id:
+          audienceMode === "all_groups" ? null : Number(agencyId),
         contact_id: audienceMode === "contacts" && contactId !== "none" ? Number(contactId) : undefined,
         contact_ids: audienceMode === "contacts" && contactId !== "none" ? [Number(contactId)] : undefined,
-        group_ids: audienceMode === "groups"
-          ? groupIds.split(",").map((v) => Number(v.trim())).filter((n) => Number.isFinite(n))
-          : undefined,
+        group_ids: audienceMode === "groups" ? selectedGroupIds : undefined,
         quick_numbers: audienceMode === "quick_numbers"
           ? quickNumbers.split(/[\n,]/).map((v) => v.trim()).filter(Boolean)
           : undefined,
@@ -181,8 +236,9 @@ export default function RemindersPage() {
       setMessage("");
       setSendAtLocal("");
       setQuickNumbers("");
-      setGroupIds("");
+      setSelectedGroupIds([]);
       queryClient.invalidateQueries({ queryKey: ["reminders"] });
+      queryClient.invalidateQueries({ queryKey: ["groups", "admin-broadcast-count"] });
     },
     onError: (error: Error) => {
       toast.error("Impossible de programmer le rappel", {
@@ -236,6 +292,9 @@ export default function RemindersPage() {
       if (!rawPhone) {
         throw new Error("Aucun numéro valide à retester pour ce rappel.");
       }
+      if (r.agency_id == null) {
+        throw new Error("Retest non disponible pour une diffusion globale.");
+      }
       // Immediate retry campaign for one quick number target.
       return createReminder({
         agency_id: Number(r.agency_id),
@@ -267,9 +326,23 @@ export default function RemindersPage() {
       const sendAt = new Date(Date.now() + minutes * 60_000).toISOString();
       const audience = reminder.audience_mode || "contacts";
 
+      if (audience === "all_groups") {
+        return createReminder({
+          agency_id: null,
+          audience_mode: "all_groups",
+          message: reminder.message,
+          send_at: sendAt,
+          timezone: reminder.timezone || defaultTimezone,
+          send_interval_min_sec: reminder.send_interval_min_sec ?? 60,
+          send_interval_max_sec: reminder.send_interval_max_sec ?? 120,
+          window_start: reminder.window_start || undefined,
+          window_end: reminder.window_end || undefined,
+        });
+      }
+
       // Re-schedule from existing reminder data. Contacts mode uses contact_id;
       // fallback to quick_numbers when contact_phone is available.
-      if (audience === "contacts" && reminder.contact_id) {
+      if (audience === "contacts" && reminder.contact_id && reminder.agency_id != null) {
         return createReminder({
           agency_id: reminder.agency_id,
           audience_mode: "contacts",
@@ -298,6 +371,10 @@ export default function RemindersPage() {
         throw new Error("Aucune cible reprogrammable (contacts/numéros) pour ce rappel.");
       }
 
+      if (reminder.agency_id == null) {
+        throw new Error("Reprogrammation impossible : agence manquante pour ce rappel.");
+      }
+
       return createReminder({
         agency_id: reminder.agency_id,
         audience_mode: "quick_numbers",
@@ -323,15 +400,28 @@ export default function RemindersPage() {
   });
 
   const renderContactLabel = (r: Reminder) => {
+    if (r.audience_mode === "all_groups") return "Diffusion — tous les groupes";
     if (r.contact_label) return r.contact_label;
-    const c = contactsById.get(r.contact_id);
-    return c?.label || `Contact #${r.contact_id}`;
+    const cid = r.contact_id;
+    if (cid != null) {
+      const c = contactsById.get(cid);
+      return c?.label || `Contact #${cid}`;
+    }
+    return "—";
   };
 
   const renderContactPhone = (r: Reminder) => {
+    if (r.audience_mode === "all_groups") {
+      const n = r.total_targets ?? 0;
+      return `${n} groupe${n === 1 ? "" : "s"}`;
+    }
     if (r.contact_phone) return r.contact_phone;
-    const c = contactsById.get(r.contact_id);
-    return c?.phone || "";
+    const cid = r.contact_id;
+    if (cid != null) {
+      const c = contactsById.get(cid);
+      return c?.phone || "";
+    }
+    return "";
   };
 
   return (
@@ -339,7 +429,7 @@ export default function RemindersPage() {
       <div className="flex flex-col gap-2">
         <h1 className="text-2xl md:text-3xl font-bold">Rappels</h1>
         <p className="text-muted-foreground">
-          Programmez des rappels WhatsApp vers les numéros dédiés enregistrés par les agences.
+          Programmez des rappels WhatsApp (contacts, groupes d&apos;une agence, ou diffusion vers tous les groupes actifs enregistrés).
         </p>
       </div>
 
@@ -353,7 +443,14 @@ export default function RemindersPage() {
           <div className="grid gap-3">
             <div>
               <p className="text-sm font-medium">Agence</p>
-              <Select value={agencyId} onValueChange={(v) => { setAgencyId(v); setContactId("none"); }}>
+              <Select
+                value={agencyId}
+                onValueChange={(v) => {
+                  setAgencyId(v);
+                  setContactId("none");
+                }}
+                disabled={audienceMode === "all_groups"}
+              >
                 <SelectTrigger className="mt-1">
                   <SelectValue placeholder="Sélectionner une agence" />
                 </SelectTrigger>
@@ -366,14 +463,20 @@ export default function RemindersPage() {
                   ))}
                 </SelectContent>
               </Select>
+              {audienceMode === "all_groups" ? (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Non requis : la diffusion cible tous les groupes actifs (ID WhatsApp renseigné).
+                </p>
+              ) : null}
             </div>
 
             <div>
               <p className="text-sm font-medium">Audience</p>
-              <div className="mt-1 grid grid-cols-3 gap-2">
-                <Button variant={audienceMode === "contacts" ? "default" : "outline"} onClick={() => setAudienceMode("contacts")}>Contacts</Button>
-                <Button variant={audienceMode === "groups" ? "default" : "outline"} onClick={() => setAudienceMode("groups")}>Groupes</Button>
-                <Button variant={audienceMode === "quick_numbers" ? "default" : "outline"} onClick={() => setAudienceMode("quick_numbers")}>Audience rapide</Button>
+              <div className="mt-1 flex flex-wrap gap-2">
+                <Button type="button" variant={audienceMode === "contacts" ? "default" : "outline"} onClick={() => setAudienceMode("contacts")}>Contacts</Button>
+                <Button type="button" variant={audienceMode === "groups" ? "default" : "outline"} onClick={() => setAudienceMode("groups")}>Groupes</Button>
+                <Button type="button" variant={audienceMode === "quick_numbers" ? "default" : "outline"} onClick={() => setAudienceMode("quick_numbers")}>Audience rapide</Button>
+                <Button type="button" variant={audienceMode === "all_groups" ? "default" : "outline"} onClick={() => setAudienceMode("all_groups")}>Tous les groupes</Button>
               </div>
               {agencyId !== "all" && contacts.length === 0 && !isLoadingContacts ? (
                 <p className="mt-1 text-xs text-muted-foreground">
@@ -402,9 +505,73 @@ export default function RemindersPage() {
             ) : null}
 
             {audienceMode === "groups" ? (
-              <div>
-                <p className="text-sm font-medium">IDs des groupes (séparés par virgule)</p>
-                <Input className="mt-1" value={groupIds} onChange={(e) => setGroupIds(e.target.value)} placeholder="ex: 12,15,19" />
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm font-medium">Groupes prestataires (WhatsApp)</p>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={agencyId === "all" || agencyGroupsSelectable.length === 0}
+                      onClick={selectAllAgencyGroups}
+                    >
+                      Tout sélectionner
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      disabled={selectedGroupIds.length === 0}
+                      onClick={clearGroupSelection}
+                    >
+                      Tout désélectionner
+                    </Button>
+                  </div>
+                </div>
+                {agencyId === "all" ? (
+                  <p className="text-sm text-muted-foreground">
+                    Choisissez d&apos;abord une agence pour afficher ses groupes enregistrés.
+                  </p>
+                ) : agencyGroupsSelectable.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    Aucun groupe actif avec ID WhatsApp pour cette agence. Ajoutez-en dans Opérations / Groupes.
+                  </p>
+                ) : (
+                  <div className="max-h-56 overflow-y-auto rounded-md border border-border bg-muted/10 p-2 space-y-2">
+                    {agencyGroupsSelectable.map((g) => {
+                      const checked = selectedGroupIds.includes(g.id);
+                      return (
+                        <div
+                          key={g.id}
+                          className="flex items-start gap-3 rounded-sm px-2 py-1.5 hover:bg-muted/40"
+                        >
+                          <Checkbox
+                            id={`reminder-group-${g.id}`}
+                            checked={checked}
+                            onCheckedChange={(v) => toggleGroupSelected(g.id, v === true)}
+                            className="mt-0.5"
+                          />
+                          <Label
+                            htmlFor={`reminder-group-${g.id}`}
+                            className="cursor-pointer text-sm font-normal leading-snug"
+                          >
+                            <span className="font-medium">{g.name || `Groupe #${g.id}`}</span>
+                            {g.whatsapp_group_id ? (
+                              <span className="block text-xs text-muted-foreground font-mono truncate max-w-[280px] sm:max-w-md">
+                                {g.whatsapp_group_id}
+                              </span>
+                            ) : null}
+                          </Label>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  {selectedGroupIds.length} groupe{selectedGroupIds.length === 1 ? "" : "s"} sélectionné
+                  {selectedGroupIds.length === 0 ? " — cochez au moins un groupe ou utilisez « Tout sélectionner »." : "."}
+                </p>
               </div>
             ) : null}
 
@@ -423,7 +590,7 @@ export default function RemindersPage() {
                   className="mt-1"
                   value={sendAtLocal}
                   onChange={(e) => setSendAtLocal(e.target.value)}
-                  disabled={agencyId === "all"}
+                  disabled={formNeedsAgency && agencyId === "all"}
                 />
               </div>
               <div>
@@ -469,7 +636,7 @@ export default function RemindersPage() {
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
                 placeholder="Ex: Rappel: réunion à 08:00 au bureau."
-                disabled={agencyId === "all"}
+                disabled={formNeedsAgency && agencyId === "all"}
               />
             </div>
             <div className="rounded border bg-muted/20 p-2 text-xs text-muted-foreground">

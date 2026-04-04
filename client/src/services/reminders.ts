@@ -13,7 +13,7 @@ export interface GetRemindersParams {
 }
 
 export interface CreateReminderRequest {
-  agency_id: number;
+  agency_id?: number | null;
   contact_id?: number;
   contact_ids?: number[];
   group_ids?: number[];

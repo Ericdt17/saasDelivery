@@ -17,6 +17,7 @@ const mockCancelReminder = jest.fn();
 const mockDeleteReminder = jest.fn();
 const mockRetryReminderFailed = jest.fn();
 const mockGetGroupsByAgency = jest.fn();
+const mockGetAllActiveGroupsForBroadcast = jest.fn();
 
 jest.mock("../../db", () => ({
   adapter: { query: jest.fn(), type: "sqlite" },
@@ -37,6 +38,7 @@ jest.mock("../../db", () => ({
   deleteReminder: mockDeleteReminder,
   retryReminderFailed: mockRetryReminderFailed,
   getGroupsByAgency: mockGetGroupsByAgency,
+  getAllActiveGroupsForBroadcast: mockGetAllActiveGroupsForBroadcast,
 
   // stubs required by mounted routes
   getAllDeliveries: jest.fn(),
@@ -56,7 +58,6 @@ jest.mock("../../db", () => ({
   deleteAgency: jest.fn(),
   findAgencyByCode: jest.fn(),
   getAllGroups: jest.fn(),
-  getGroupsByAgency: mockGetGroupsByAgency,
   getGroupById: jest.fn(),
   createGroup: jest.fn(),
   updateGroup: jest.fn(),
@@ -159,6 +160,14 @@ describe("Reminders", () => {
     mockGetReminderById.mockResolvedValueOnce({ id: 77, agency_id: 999 });
     const res = await request(app)
       .get("/api/v1/reminders/77")
+      .set("Authorization", `Bearer ${agencyToken}`);
+    expect(res.status).toBe(403);
+  });
+
+  it("GET /api/v1/reminders/:id blocks agency user from global broadcast reminder", async () => {
+    mockGetReminderById.mockResolvedValueOnce({ id: 88, agency_id: null, audience_mode: "all_groups" });
+    const res = await request(app)
+      .get("/api/v1/reminders/88")
       .set("Authorization", `Bearer ${agencyToken}`);
     expect(res.status).toBe(403);
   });
@@ -282,6 +291,59 @@ describe("Reminders", () => {
       audience_mode: "groups",
       targets: [{ target_type: "group", target_value: "group-10@g.us" }],
     }));
+  });
+
+  it("POST /api/v1/reminders with all_groups builds targets without agency_id", async () => {
+    mockGetAllActiveGroupsForBroadcast.mockResolvedValueOnce([
+      { id: 1, whatsapp_group_id: "a@g.us" },
+      { id: 2, whatsapp_group_id: "b@g.us" },
+    ]);
+    mockCreateReminder.mockResolvedValueOnce(77);
+    mockGetReminderById.mockResolvedValueOnce({ id: 77, agency_id: null, status: "scheduled", audience_mode: "all_groups" });
+    const res = await request(app)
+      .post("/api/v1/reminders")
+      .set("Authorization", `Bearer ${superToken}`)
+      .send({
+        audience_mode: "all_groups",
+        message: "Broadcast",
+        send_at: new Date().toISOString(),
+      });
+    expect(res.status).toBe(201);
+    expect(mockCreateReminder).toHaveBeenCalledWith(expect.objectContaining({
+      agency_id: null,
+      audience_mode: "all_groups",
+      targets: [
+        { target_type: "group", target_value: "a@g.us" },
+        { target_type: "group", target_value: "b@g.us" },
+      ],
+    }));
+  });
+
+  it("POST /api/v1/reminders with all_groups rejects when no active groups", async () => {
+    mockGetAllActiveGroupsForBroadcast.mockResolvedValueOnce([]);
+    const res = await request(app)
+      .post("/api/v1/reminders")
+      .set("Authorization", `Bearer ${superToken}`)
+      .send({
+        audience_mode: "all_groups",
+        message: "Broadcast",
+        send_at: new Date().toISOString(),
+      });
+    expect(res.status).toBe(400);
+    expect(mockCreateReminder).not.toHaveBeenCalled();
+  });
+
+  it("POST /api/v1/reminders requires agency_id when not all_groups", async () => {
+    const res = await request(app)
+      .post("/api/v1/reminders")
+      .set("Authorization", `Bearer ${superToken}`)
+      .send({
+        audience_mode: "contacts",
+        contact_ids: [1],
+        message: "Hi",
+        send_at: new Date().toISOString(),
+      });
+    expect(res.status).toBe(400);
   });
 
   it("POST /api/v1/reminders with quick_numbers normalizes and deduplicates targets", async () => {

@@ -20,6 +20,16 @@ interface ImportMetaEnv {
   /** URL WhatsApp pour « Nous contacter » sur les pages d’erreur (défaut : wa.link du projet) */
   readonly VITE_WHATSAPP_CONTACT_URL?: string;
 
+  /** PostHog project API key (optional; analytics disabled if unset) */
+  readonly VITE_PUBLIC_POSTHOG_KEY?: string;
+
+  /**
+   * PostHog API host (EU default used in code if unset)
+   * @example https://eu.i.posthog.com
+   * @example https://us.i.posthog.com
+   */
+  readonly VITE_PUBLIC_POSTHOG_HOST?: string;
+
   /**
    * Application mode
    * Automatically set by Vite based on the mode flag

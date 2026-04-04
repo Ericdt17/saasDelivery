@@ -77,7 +77,8 @@ const Index = () => {
     queryFn: () => getDailyStats(dateRange.startDate, null, selectedAgencyId || undefined),
     enabled: isSingleDay,
     retry: 2,
-    refetchOnWindowFocus: false,
+    refetchOnWindowFocus: true,
+    refetchInterval: 30000,
   });
 
   // Fetch deliveries for week/month periods

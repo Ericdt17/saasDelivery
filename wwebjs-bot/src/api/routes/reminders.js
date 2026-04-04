@@ -10,6 +10,7 @@ const {
   getAgencyReminderContactById,
   getAgencyReminderContacts,
   getGroupsByAgency,
+  getAllActiveGroupsForBroadcast,
   createReminder,
   getReminders,
   getReminderById,
@@ -37,6 +38,13 @@ function normalizeQuickNumber(value) {
 }
 
 async function buildTargets({ audience_mode, agency_id, contact_ids = [], group_ids = [], quick_numbers = [] }) {
+  if (audience_mode === "all_groups") {
+    const groups = await getAllActiveGroupsForBroadcast();
+    return groups.map((g) => ({
+      target_type: "group",
+      target_value: g.whatsapp_group_id,
+    }));
+  }
   if (audience_mode === "contacts") {
     const contacts = await getAgencyReminderContacts({ agency_id, includeInactive: false });
     const selected = new Set((contact_ids || []).map((v) => Number(v)));
@@ -121,6 +129,13 @@ router.get("/:id", async (req, res, next) => {
     }
 
     if (req.user.role !== "super_admin") {
+      if (reminder.agency_id == null) {
+        return res.status(403).json({
+          success: false,
+          error: "Forbidden",
+          message: "You don't have access to this reminder",
+        });
+      }
       const agencyId = resolveAgencyIdFromUser(req.user);
       if (reminder.agency_id !== agencyId) {
         return res.status(403).json({
@@ -161,14 +176,24 @@ router.post("/", requireSuperAdmin, async (req, res, next) => {
       window_end = null,
     } = req.body;
 
-    if (!agency_id || !message || !send_at) {
+    const mode = String(audience_mode);
+    const isAllGroups = mode === "all_groups";
+
+    if (!message || !send_at) {
       return res.status(400).json({
         success: false,
         error: "Validation error",
-        message: "agency_id, message, and send_at are required",
+        message: "message and send_at are required",
       });
     }
-    if (!["contacts", "groups", "quick_numbers"].includes(String(audience_mode))) {
+    if (!isAllGroups && (agency_id === undefined || agency_id === null || agency_id === "")) {
+      return res.status(400).json({
+        success: false,
+        error: "Validation error",
+        message: "agency_id is required for this audience mode",
+      });
+    }
+    if (!["contacts", "groups", "quick_numbers", "all_groups"].includes(mode)) {
       return res.status(400).json({ success: false, error: "Validation error", message: "Invalid audience_mode" });
     }
     const minSec = Number(send_interval_min_sec);
@@ -180,7 +205,14 @@ router.post("/", requireSuperAdmin, async (req, res, next) => {
       return res.status(400).json({ success: false, error: "Validation error", message: "Invalid HH:mm window format" });
     }
 
-    const agencyId = parseInt(agency_id);
+    const agencyId = isAllGroups ? null : parseInt(agency_id, 10);
+    if (!isAllGroups && !Number.isFinite(agencyId)) {
+      return res.status(400).json({
+        success: false,
+        error: "Validation error",
+        message: "agency_id must be a valid number",
+      });
+    }
 
     const parsedSendAt = new Date(send_at);
     if (Number.isNaN(parsedSendAt.getTime())) {
@@ -193,7 +225,7 @@ router.post("/", requireSuperAdmin, async (req, res, next) => {
 
     const selectedContactIds = Array.isArray(contact_ids) ? contact_ids : (contact_id ? [contact_id] : []);
     const targets = await buildTargets({
-      audience_mode: String(audience_mode),
+      audience_mode: mode,
       agency_id: agencyId,
       contact_ids: selectedContactIds,
       group_ids: Array.isArray(group_ids) ? group_ids : [],
@@ -208,10 +240,16 @@ router.post("/", requireSuperAdmin, async (req, res, next) => {
       dedup.push(t);
     }
     if (dedup.length === 0) {
-      return res.status(400).json({ success: false, error: "Validation error", message: "At least one valid target is required" });
+      return res.status(400).json({
+        success: false,
+        error: "Validation error",
+        message: isAllGroups
+          ? "Aucun groupe actif avec ID WhatsApp enregistré"
+          : "At least one valid target is required",
+      });
     }
 
-    if (audience_mode === "contacts" && contact_id) {
+    if (mode === "contacts" && contact_id && agencyId != null) {
       const singleContact = await getAgencyReminderContactById(parseInt(contact_id));
       if (singleContact && singleContact.agency_id !== agencyId) {
         return res.status(400).json({ success: false, error: "Validation error", message: "contact_id does not belong to agency_id" });
@@ -224,7 +262,7 @@ router.post("/", requireSuperAdmin, async (req, res, next) => {
       message: String(message),
       send_at: parsedSendAt.toISOString(),
       timezone: String(timezone || "Africa/Douala"),
-      audience_mode: String(audience_mode),
+      audience_mode: mode,
       send_interval_min_sec: minSec,
       send_interval_max_sec: maxSec,
       window_start: window_start || null,

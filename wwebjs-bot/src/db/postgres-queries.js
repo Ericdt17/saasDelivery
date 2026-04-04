@@ -109,6 +109,7 @@ function createPostgresQueries(pool) {
       group_id,
       whatsapp_message_id,
       tariff_pending,
+      created_by_user_id,
     } = data;
 
     // Round amount fields to 2 decimal places to ensure exact values
@@ -124,10 +125,15 @@ function createPostgresQueries(pool) {
         ? computedTariffPending
         : Boolean(tariff_pending);
 
+    const creatorId =
+      created_by_user_id != null && Number.isFinite(Number(created_by_user_id))
+        ? parseInt(created_by_user_id, 10)
+        : null;
+
     const res = await query(
       `INSERT INTO deliveries 
-        (phone, customer_name, items, amount_due, amount_paid, status, quartier, notes, carrier, delivery_fee, agency_id, group_id, whatsapp_message_id, tariff_pending)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+        (phone, customer_name, items, amount_due, amount_paid, status, quartier, notes, carrier, delivery_fee, agency_id, group_id, whatsapp_message_id, tariff_pending, created_by_user_id)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
         RETURNING id`,
       [
         phone,
@@ -144,6 +150,7 @@ function createPostgresQueries(pool) {
         group_id || null,
         whatsapp_message_id || null,
         finalTariffPending,
+        creatorId,
       ]
     );
 
@@ -989,7 +996,7 @@ function createPostgresQueries(pool) {
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 0, 0, 0)
       RETURNING id`,
       [
-        agency_id,
+        agency_id === undefined || agency_id === null ? null : agency_id,
         contact_id,
         message,
         send_at,
@@ -1364,6 +1371,17 @@ function createPostgresQueries(pool) {
     );
   }
 
+  async function getAllActiveGroupsForBroadcast() {
+    const rows = await query(
+      `SELECT g.id, g.whatsapp_group_id
+       FROM groups g
+       WHERE g.is_active = true
+         AND g.whatsapp_group_id IS NOT NULL
+         AND TRIM(g.whatsapp_group_id) <> ''`
+    );
+    return Array.isArray(rows) ? rows : rows ? [rows] : [];
+  }
+
   async function updateGroup(id, { name, is_active }) {
     const updates = [];
     const params = [];
@@ -1486,6 +1504,118 @@ function createPostgresQueries(pool) {
     return { changes: result.changes || 0 };
   }
 
+  // ============================================
+  // Stock Items (Vendor Inventory)
+  // ============================================
+
+  async function getStockItems({ group_id }) {
+    return query(
+      `SELECT id, group_id, name, subtitle, quantity, created_at, updated_at
+       FROM stock_items
+       WHERE group_id = $1
+       ORDER BY updated_at DESC, id DESC`,
+      [group_id]
+    );
+  }
+
+  async function getStockItemById({ id, group_id }) {
+    return query(
+      `SELECT id, group_id, name, subtitle, quantity, created_at, updated_at
+       FROM stock_items
+       WHERE id = $1 AND group_id = $2
+       LIMIT 1`,
+      [id, group_id]
+    );
+  }
+
+  async function createStockItem({ group_id, name, subtitle = null, quantity = 0 }) {
+    const qty = Math.max(0, parseInt(quantity, 10) || 0);
+    const res = await query(
+      `INSERT INTO stock_items (group_id, name, subtitle, quantity)
+       VALUES ($1, $2, $3, $4)
+       RETURNING id`,
+      [group_id, String(name), subtitle, qty]
+    );
+    const id = res.id || res[0]?.id;
+    return getStockItemById({ id, group_id });
+  }
+
+  async function updateStockItemQuantity({ id, group_id, delta }) {
+    const d = parseInt(delta, 10) || 0;
+    await query(
+      `UPDATE stock_items
+       SET quantity = GREATEST(0, quantity + $3),
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $1 AND group_id = $2`,
+      [id, group_id, d]
+    );
+    return getStockItemById({ id, group_id });
+  }
+
+  async function setStockItemQuantity({ id, group_id, quantity }) {
+    const qty = Math.max(0, parseInt(quantity, 10) || 0);
+    await query(
+      `UPDATE stock_items
+       SET quantity = $3,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $1 AND group_id = $2`,
+      [id, group_id, qty]
+    );
+    return getStockItemById({ id, group_id });
+  }
+
+  async function deleteStockItem({ id, group_id }) {
+    const result = await query(
+      `DELETE FROM stock_items WHERE id = $1 AND group_id = $2`,
+      [id, group_id]
+    );
+    return { changes: result.changes || 0 };
+  }
+
+  // ============================================
+  // Vendor push tokens (Expo)
+  // ============================================
+
+  async function upsertVendorPushToken({ vendor_user_id, expo_push_token, platform }) {
+    await query(
+      `INSERT INTO vendor_push_tokens (vendor_user_id, expo_push_token, platform, updated_at)
+       VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
+       ON CONFLICT (expo_push_token) DO UPDATE SET
+         vendor_user_id = EXCLUDED.vendor_user_id,
+         platform = EXCLUDED.platform,
+         updated_at = CURRENT_TIMESTAMP`,
+      [vendor_user_id, expo_push_token, platform]
+    );
+  }
+
+  async function deleteVendorPushToken({ vendor_user_id, expo_push_token }) {
+    const result = await query(
+      `DELETE FROM vendor_push_tokens WHERE vendor_user_id = $1 AND expo_push_token = $2`,
+      [vendor_user_id, expo_push_token]
+    );
+    return { changes: result.changes || 0 };
+  }
+
+  async function deleteAllVendorPushTokens({ vendor_user_id }) {
+    const result = await query(
+      `DELETE FROM vendor_push_tokens WHERE vendor_user_id = $1`,
+      [vendor_user_id]
+    );
+    return { changes: result.changes || 0 };
+  }
+
+  async function getExpoPushTokensForVendorUserIds(ids = []) {
+    if (!ids.length) {
+      return [];
+    }
+    const rows = await query(
+      `SELECT expo_push_token FROM vendor_push_tokens WHERE vendor_user_id = ANY($1::int[])`,
+      [ids]
+    );
+    const list = Array.isArray(rows) ? rows : rows ? [rows] : [];
+    return list.map((r) => r.expo_push_token).filter(Boolean);
+  }
+
   return {
     type: "postgres",
     query,
@@ -1545,6 +1675,7 @@ function createPostgresQueries(pool) {
     getGroupById,
     getGroupsByAgency,
     getAllGroups,
+    getAllActiveGroupsForBroadcast,
     updateGroup,
     deleteGroup,
     hardDeleteGroup,
@@ -1556,6 +1687,17 @@ function createPostgresQueries(pool) {
     getAllTariffs,
     updateTariff,
     deleteTariff,
+    // Stock items
+    getStockItems,
+    getStockItemById,
+    createStockItem,
+    updateStockItemQuantity,
+    setStockItemQuantity,
+    deleteStockItem,
+    upsertVendorPushToken,
+    deleteVendorPushToken,
+    deleteAllVendorPushTokens,
+    getExpoPushTokensForVendorUserIds,
     close: async () => pool.end(),
     getRawDb: () => pool,
     TIME_ZONE,

@@ -31,8 +31,9 @@ export function useDeliveries(
     queryFn: () => getDeliveries(params),
     enabled,
     retry: 2,
-    refetchOnWindowFocus: false,
+    refetchOnWindowFocus: true,
     staleTime: 10000,
+    refetchInterval: 30000,
   });
 
   useEffect(() => {
