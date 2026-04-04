@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { getAgencies, type Agency } from "@/services/agencies";
@@ -7,7 +7,9 @@ import { getReminderContacts } from "@/services/reminder-contacts";
 import { createReminder, cancelReminder, deleteReminder, getReminderById, getReminders, retryFailedReminder } from "@/services/reminders";
 import type { Reminder, ReminderContact, ReminderStatus, ReminderAudienceMode } from "@/types/reminders";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -72,7 +74,8 @@ export default function RemindersPage() {
 
   const [agencyId, setAgencyId] = useState<string>("all");
   const [contactId, setContactId] = useState<string>("none");
-  const [groupIds, setGroupIds] = useState<string>("");
+  /** Numeric DB ids for audience_mode "groups" */
+  const [selectedGroupIds, setSelectedGroupIds] = useState<number[]>([]);
   const [quickNumbers, setQuickNumbers] = useState("");
   const [audienceMode, setAudienceMode] = useState<ReminderAudienceMode>("contacts");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -132,6 +135,18 @@ export default function RemindersPage() {
     [allGroups]
   );
 
+  const agencyGroupsSelectable = useMemo(() => {
+    if (agencyId === "all") return [];
+    const aid = Number(agencyId);
+    return allGroups.filter(
+      (g) =>
+        g.agency_id === aid &&
+        g.is_active &&
+        g.whatsapp_group_id != null &&
+        String(g.whatsapp_group_id).trim() !== ""
+    );
+  }, [allGroups, agencyId]);
+
   const {
     data: reminders = [],
     isLoading: isLoadingReminders,
@@ -160,12 +175,31 @@ export default function RemindersPage() {
     }
   }, [isErrorReminders, remindersError]);
 
+  useEffect(() => {
+    setSelectedGroupIds([]);
+  }, [agencyId]);
+
+  const toggleGroupSelected = useCallback((id: number, checked: boolean) => {
+    setSelectedGroupIds((prev) => {
+      if (checked) return prev.includes(id) ? prev : [...prev, id];
+      return prev.filter((x) => x !== id);
+    });
+  }, []);
+
+  const selectAllAgencyGroups = useCallback(() => {
+    setSelectedGroupIds(agencyGroupsSelectable.map((g) => g.id));
+  }, [agencyGroupsSelectable]);
+
+  const clearGroupSelection = useCallback(() => {
+    setSelectedGroupIds([]);
+  }, []);
+
   const selectedCount = useMemo(() => {
     if (audienceMode === "all_groups") return broadcastEligibleCount;
     if (audienceMode === "contacts") return contactId === "none" ? 0 : 1;
-    if (audienceMode === "groups") return groupIds.split(",").map((s) => s.trim()).filter(Boolean).length;
+    if (audienceMode === "groups") return selectedGroupIds.length;
     return quickNumbers.split(/[\n,]/).map((s) => s.trim()).filter(Boolean).length;
-  }, [audienceMode, contactId, groupIds, quickNumbers, broadcastEligibleCount]);
+  }, [audienceMode, contactId, selectedGroupIds, quickNumbers, broadcastEligibleCount]);
 
   const formNeedsAgency = audienceMode !== "all_groups";
 
@@ -183,9 +217,7 @@ export default function RemindersPage() {
           audienceMode === "all_groups" ? null : Number(agencyId),
         contact_id: audienceMode === "contacts" && contactId !== "none" ? Number(contactId) : undefined,
         contact_ids: audienceMode === "contacts" && contactId !== "none" ? [Number(contactId)] : undefined,
-        group_ids: audienceMode === "groups"
-          ? groupIds.split(",").map((v) => Number(v.trim())).filter((n) => Number.isFinite(n))
-          : undefined,
+        group_ids: audienceMode === "groups" ? selectedGroupIds : undefined,
         quick_numbers: audienceMode === "quick_numbers"
           ? quickNumbers.split(/[\n,]/).map((v) => v.trim()).filter(Boolean)
           : undefined,
@@ -204,7 +236,7 @@ export default function RemindersPage() {
       setMessage("");
       setSendAtLocal("");
       setQuickNumbers("");
-      setGroupIds("");
+      setSelectedGroupIds([]);
       queryClient.invalidateQueries({ queryKey: ["reminders"] });
       queryClient.invalidateQueries({ queryKey: ["groups", "admin-broadcast-count"] });
     },
@@ -413,7 +445,10 @@ export default function RemindersPage() {
               <p className="text-sm font-medium">Agence</p>
               <Select
                 value={agencyId}
-                onValueChange={(v) => { setAgencyId(v); setContactId("none"); }}
+                onValueChange={(v) => {
+                  setAgencyId(v);
+                  setContactId("none");
+                }}
                 disabled={audienceMode === "all_groups"}
               >
                 <SelectTrigger className="mt-1">
@@ -470,9 +505,73 @@ export default function RemindersPage() {
             ) : null}
 
             {audienceMode === "groups" ? (
-              <div>
-                <p className="text-sm font-medium">IDs des groupes (séparés par virgule)</p>
-                <Input className="mt-1" value={groupIds} onChange={(e) => setGroupIds(e.target.value)} placeholder="ex: 12,15,19" />
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm font-medium">Groupes prestataires (WhatsApp)</p>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={agencyId === "all" || agencyGroupsSelectable.length === 0}
+                      onClick={selectAllAgencyGroups}
+                    >
+                      Tout sélectionner
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      disabled={selectedGroupIds.length === 0}
+                      onClick={clearGroupSelection}
+                    >
+                      Tout désélectionner
+                    </Button>
+                  </div>
+                </div>
+                {agencyId === "all" ? (
+                  <p className="text-sm text-muted-foreground">
+                    Choisissez d&apos;abord une agence pour afficher ses groupes enregistrés.
+                  </p>
+                ) : agencyGroupsSelectable.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    Aucun groupe actif avec ID WhatsApp pour cette agence. Ajoutez-en dans Opérations / Groupes.
+                  </p>
+                ) : (
+                  <div className="max-h-56 overflow-y-auto rounded-md border border-border bg-muted/10 p-2 space-y-2">
+                    {agencyGroupsSelectable.map((g) => {
+                      const checked = selectedGroupIds.includes(g.id);
+                      return (
+                        <div
+                          key={g.id}
+                          className="flex items-start gap-3 rounded-sm px-2 py-1.5 hover:bg-muted/40"
+                        >
+                          <Checkbox
+                            id={`reminder-group-${g.id}`}
+                            checked={checked}
+                            onCheckedChange={(v) => toggleGroupSelected(g.id, v === true)}
+                            className="mt-0.5"
+                          />
+                          <Label
+                            htmlFor={`reminder-group-${g.id}`}
+                            className="cursor-pointer text-sm font-normal leading-snug"
+                          >
+                            <span className="font-medium">{g.name || `Groupe #${g.id}`}</span>
+                            {g.whatsapp_group_id ? (
+                              <span className="block text-xs text-muted-foreground font-mono truncate max-w-[280px] sm:max-w-md">
+                                {g.whatsapp_group_id}
+                              </span>
+                            ) : null}
+                          </Label>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  {selectedGroupIds.length} groupe{selectedGroupIds.length === 1 ? "" : "s"} sélectionné
+                  {selectedGroupIds.length === 0 ? " — cochez au moins un groupe ou utilisez « Tout sélectionner »." : "."}
+                </p>
               </div>
             ) : null}
 
