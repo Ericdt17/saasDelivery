@@ -4,6 +4,7 @@ const {
   parseDeliveryMessage,
   isDeliveryMessage,
   looksLikeMalformedDelivery,
+  looksLikeMalformedDeliveryWithParsed,
   getFormatReminderMessage,
 } = require('../../parser');
 
@@ -178,6 +179,23 @@ describe('looksLikeMalformedDelivery', () => {
       'Un pack  :homme',
     ].join('\n');
     expect(looksLikeMalformedDelivery(msg)).toBe(true);
+  });
+});
+
+describe('looksLikeMalformedDeliveryWithParsed', () => {
+  it('matches looksLikeMalformedDelivery for the same text', () => {
+    const msg = '612345678\n15k';
+    const parsed = parseDeliveryMessage(msg);
+    expect(looksLikeMalformedDeliveryWithParsed(msg, parsed)).toBe(
+      looksLikeMalformedDelivery(msg)
+    );
+  });
+
+  it('returns false when parsed is valid', () => {
+    const msg = '612345678\n2 robes\n15k\nBonapriso';
+    const parsed = parseDeliveryMessage(msg);
+    expect(parsed.valid).toBe(true);
+    expect(looksLikeMalformedDeliveryWithParsed(msg, parsed)).toBe(false);
   });
 });
 

@@ -28,5 +28,20 @@ module.exports = {
 
   // Timezone for date filtering (must match the business timezone — Cameroon = UTC+1)
   TIME_ZONE: process.env.TIME_ZONE || "Africa/Douala",
+
+  // OpenAI fallback when strict parse fails but message looks like a delivery (see looksLikeMalformedDelivery)
+  // OPENAI_API_KEY: required when AI_DELIVERY_FALLBACK_ENABLED=true
+  AI_DELIVERY_FALLBACK_ENABLED:
+    process.env.AI_DELIVERY_FALLBACK_ENABLED === "true",
+  OPENAI_API_KEY: process.env.OPENAI_API_KEY || null,
+  AI_DELIVERY_MODEL: process.env.AI_DELIVERY_MODEL || "gpt-4o-mini",
+  AI_DELIVERY_TIMEOUT_MS: (() => {
+    const n = parseInt(process.env.AI_DELIVERY_TIMEOUT_MS || "4000", 10);
+    return Number.isFinite(n) && n >= 1000 ? n : 4000;
+  })(),
+  AI_DELIVERY_MAX_TOKENS: (() => {
+    const n = parseInt(process.env.AI_DELIVERY_MAX_TOKENS || "300", 10);
+    return Number.isFinite(n) && n >= 50 ? n : 300;
+  })(),
 };
 
