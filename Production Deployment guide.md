@@ -466,6 +466,10 @@ Edit the bot’s `.env` (same file PM2 loads, e.g. under your `wwebjs-bot` deplo
 BOT_ALERT_WEBHOOK_URL=https://discord.com/api/webhooks/...
 # Optional: discord (default) or slack
 # BOT_ALERT_WEBHOOK_TYPE=slack
+
+# Startup webhook: default = once per PM2 process (not every WhatsApp reconnect)
+# BOT_ALERT_STARTUP_ENABLED=false   # disable “bot is online” message
+# BOT_ALERT_STARTUP_EVERY_READY=true  # also post on each `ready` (reconnects)
 ```
 
 **Slack:** set `BOT_ALERT_WEBHOOK_TYPE=slack` if the URL is `https://hooks.slack.com/...` (or rely on auto-detect from the hostname).
@@ -481,7 +485,9 @@ All optional; defaults are sensible for production.
 | `BOT_ALERT_STATE_INTERVAL_MS` | `120000` (2 min) | How often to poll `getState()`. |
 | `BOT_ALERT_NOT_CONNECTED_MS` | `600000` (10 min) | Alert if state ≠ `CONNECTED` continuously this long (skipped while QR is showing). |
 | `BOT_ALERT_QR_STALE_MS` | `1200000` (20 min) | Alert if QR still not scanned after this long. |
-| `BOT_ALERT_ERROR_COOLDOWN_MS` | `900000` (15 min) | Min gap between throttled `client` **error** webhook alerts. |
+| `BOT_ALERT_ERROR_COOLDOWN_MS` | `900000` (15 min) | Throttle interval for **`client` error**, **message** handler errors, **daily report** failures, **`uncaughtException`**, **`unhandledRejection`** (each uses its own cooldown key). |
+| `BOT_ALERT_STARTUP_ENABLED` | on | Set `false` or `0` to disable the **ready / startup** webhook. |
+| `BOT_ALERT_STARTUP_EVERY_READY` | off | Set `true` or `1` to send startup message on **every** `ready` (each reconnect); default is **once per process**. |
 | `BOT_ALERT_DELIVERY_DB_COOLDOWN_MS` | `300000` (5 min) | Min gap between **delivery DB save failure** alerts (WhatsApp → `createDelivery`). |
 | `BOT_ALERT_REMINDERS_TICK_COOLDOWN_MS` | `600000` (10 min) | Min gap between **reminders worker tick** (DB poll) failure alerts. |
 | `BOT_ALERT_REMINDERS_SEND_COOLDOWN_MS` | `600000` (10 min) | Min gap between **reminder send / invalid target** batch alerts (per poll cycle). |
@@ -509,6 +515,11 @@ On startup, logs show either `[botAlerts] Webhook alerts enabled` or `BOT_ALERT_
 | Delivery **DB save** error | WhatsApp parsed delivery but `createDelivery` threw — throttled (`BOT_ALERT_DELIVERY_DB_COOLDOWN_MS`). |
 | Reminders **tick** error | `pollQueuedReminderTargets` / outer tick failed — throttled (`BOT_ALERT_REMINDERS_TICK_COOLDOWN_MS`). |
 | Reminders **send** failures | In one poll cycle: `sendMessage` failed or invalid target phone — one summary alert, throttled (`BOT_ALERT_REMINDERS_SEND_COOLDOWN_MS`). |
+| **`ready` / startup** | “Bot is online and ready” with startup duration — **once per process** by default; every reconnect if `BOT_ALERT_STARTUP_EVERY_READY=true`; off if `BOT_ALERT_STARTUP_ENABLED=false`. |
+| **Message handler** error | Outer `catch` around `message` processing — throttled (`BOT_ALERT_ERROR_COOLDOWN_MS`, key `message-error`). |
+| **Daily report** failure | Report generate/send failed in scheduler — throttled (`BOT_ALERT_ERROR_COOLDOWN_MS`, key `report-failed`). |
+| **`uncaughtException`** | Process-level — throttled (`BOT_ALERT_ERROR_COOLDOWN_MS`). Bot may still continue depending on existing handlers. |
+| **`unhandledRejection`** | Non–Puppeteer-filtered rejections — throttled (`BOT_ALERT_ERROR_COOLDOWN_MS`). |
 
 ---
 

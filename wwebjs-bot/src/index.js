@@ -185,6 +185,7 @@ let remindersWorker = null;
 client.on("ready", () => {
   botAlerts.notifyReady();
   const startupDuration = ((Date.now() - startupStartTime) / 1000).toFixed(1);
+  botAlerts.notifyStartup(startupDuration);
   console.log("\n" + "=".repeat(60));
   console.log("✅ BOT IS READY!");
   console.log("=".repeat(60));
@@ -1261,6 +1262,7 @@ client.on("message", async (msg) => {
       "   Message preview:",
       (msg.body || "").substring(0, 50) + "\n"
     );
+    botAlerts.notifyMessageError(error, msg.from);
   }
 });
 
@@ -1275,6 +1277,7 @@ client.on("error", (error) => {
 process.on("uncaughtException", (error) => {
   console.error("⚠️  Uncaught Exception:", error.message);
   console.error("   Bot will continue running...\n");
+  botAlerts.notifyProcessError("uncaughtException", error);
 });
 
 process.on("unhandledRejection", (reason, promise) => {
@@ -1295,6 +1298,7 @@ process.on("unhandledRejection", (reason, promise) => {
   } else {
     console.error("⚠️  Unhandled Rejection:", reason);
     console.error("   Bot will continue running...\n");
+    botAlerts.notifyProcessError("unhandledRejection", reason);
   }
 });
 
@@ -1361,6 +1365,7 @@ function setupDailyReportScheduler() {
         console.log("=".repeat(70) + "\n");
       } catch (error) {
         console.error("❌ Error generating daily report:", error.message);
+        botAlerts.notifyReportFailed(error);
       }
 
       // Schedule next report

@@ -11,6 +11,7 @@ let lastDisconnectReason = "";
 let qrStaleTimer = null;
 let stateWatchTimer = null;
 let firstNotConnectedAt = null;
+let startupWebhookSent = false;
 const lastCooldownSent = new Map();
 
 function config() {
@@ -184,6 +185,61 @@ function notifyRemindersTickFailed(err) {
   );
 }
 
+/**
+ * Bot came online and WhatsApp `ready` fired.
+ * Default: one Discord/Slack message per process (avoids spam on reconnect).
+ * Set BOT_ALERT_STARTUP_EVERY_READY=true for a message on every `ready`.
+ * Set BOT_ALERT_STARTUP_ENABLED=false to disable entirely.
+ */
+function notifyStartup(durationSeconds) {
+  if (!config().webhookUrl) return;
+  const disabled =
+    process.env.BOT_ALERT_STARTUP_ENABLED === "false" ||
+    process.env.BOT_ALERT_STARTUP_ENABLED === "0";
+  if (disabled) return;
+  const everyReady =
+    process.env.BOT_ALERT_STARTUP_EVERY_READY === "true" ||
+    process.env.BOT_ALERT_STARTUP_EVERY_READY === "1";
+  if (!everyReady && startupWebhookSent) return;
+  startupWebhookSent = true;
+  sendBotAlert(
+    `[Livsight bot] Bot is online and ready (startup: ${durationSeconds}s).`
+  );
+}
+
+/** Message event handler threw unexpectedly (throttled). */
+function notifyMessageError(error, from) {
+  if (!config().webhookUrl) return;
+  const msg = error?.message || String(error);
+  alertWithCooldown(
+    "message-error",
+    `[Livsight bot] Error processing message from ${from || "unknown"}:\n${msg.slice(0, 1500)}`,
+    config().errorCooldownMs
+  );
+}
+
+/** Daily report generation or send failed (throttled). */
+function notifyReportFailed(error) {
+  if (!config().webhookUrl) return;
+  const msg = error?.message || String(error);
+  alertWithCooldown(
+    "report-failed",
+    `[Livsight bot] Daily report failed:\n${msg.slice(0, 1500)}`,
+    config().errorCooldownMs
+  );
+}
+
+/** Uncaught process-level error (throttled). */
+function notifyProcessError(kind, error) {
+  if (!config().webhookUrl) return;
+  const msg = error?.message || String(error);
+  alertWithCooldown(
+    `process-error-${kind}`,
+    `[Livsight bot] Process ${kind}:\n${msg.slice(0, 1500)}`,
+    config().errorCooldownMs
+  );
+}
+
 /** One or more reminder sends failed or skipped as send in this tick (throttled). */
 function notifyRemindersSendFailures({ count, sample }) {
   if (!config().webhookUrl || !count) return;
@@ -244,4 +300,8 @@ module.exports = {
   notifyDeliverySaveFailed,
   notifyRemindersTickFailed,
   notifyRemindersSendFailures,
+  notifyStartup,
+  notifyMessageError,
+  notifyReportFailed,
+  notifyProcessError,
 };
