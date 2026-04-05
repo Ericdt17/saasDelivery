@@ -4,7 +4,12 @@ const QRCode = require("qrcode");
 const fs = require("fs");
 const path = require("path");
 const config = require("./config");
-const { isDeliveryMessage, parseDeliveryMessage } = require("./parser");
+const {
+  isDeliveryMessage,
+  parseDeliveryMessage,
+  looksLikeMalformedDelivery,
+  getFormatReminderMessage,
+} = require("./parser");
 const { parseStatusUpdate, isStatusUpdate } = require("./statusParser");
 const {
   createDelivery,
@@ -22,6 +27,9 @@ const {
   roundAmount,
 } = require("./lib/deliveryCalculations");
 const botAlerts = require("./lib/botAlerts");
+
+/** groupId:author → last format-reminder sent (ms) */
+const formatReminderCooldownByKey = new Map();
 
 // Log startup time
 const startupStartTime = Date.now();
@@ -1251,6 +1259,34 @@ client.on("message", async (msg) => {
       console.log(
         "   ℹ️  Not a delivery message (might be status update or other)"
       );
+
+      const looksMalformed = looksLikeMalformedDelivery(messageText);
+      if (looksMalformed && !config.FORMAT_REMINDER_ENABLED) {
+        console.log(
+          "   💡 Message matches format-reminder heuristics; set FORMAT_REMINDER_ENABLED=true in .env to reply in-thread"
+        );
+      }
+
+      if (config.FORMAT_REMINDER_ENABLED && looksMalformed) {
+        const author = msg.author || msg.from || "unknown";
+        const cooldownKey = `${whatsappGroupId}:${author}`;
+        const now = Date.now();
+        const lastSent = formatReminderCooldownByKey.get(cooldownKey) || 0;
+        if (now - lastSent < config.FORMAT_REMINDER_COOLDOWN_MS) {
+          console.log("   ⏭️  Format reminder skipped (cooldown)");
+        } else {
+          try {
+            await msg.reply(getFormatReminderMessage());
+            formatReminderCooldownByKey.set(cooldownKey, now);
+            console.log("   📤  Format reminder sent (reply)");
+          } catch (reminderErr) {
+            console.log(
+              "   ⚠️  Could not send format reminder:",
+              reminderErr.message
+            );
+          }
+        }
+      }
     }
 
     console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");

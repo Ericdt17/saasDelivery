@@ -1,10 +1,18 @@
 // Parser functions to extract delivery information from messages
 
+/** WhatsApp / mobile often inserts bidi and zero-width chars around numbers. */
+function stripInvisibleFormatting(text) {
+  if (!text || typeof text !== "string") return "";
+  return text.replace(/[\u200B-\u200D\uFEFF\u202A-\u202E\u2066-\u2069]/g, "");
+}
+
 /**
  * Extract phone number from text
  * Looks for patterns like: 6xx, 6xxxxx, +237, etc.
  */
 function extractPhone(text) {
+  text = stripInvisibleFormatting(text || "");
+
   // First, try to find phone after keywords like "Livraison:", "Numéro:", etc.
   const keywordPatterns = [
     /livraison[:\s]+([6x\d]+)/i,
@@ -20,6 +28,19 @@ function extractPhone(text) {
       if (phone.startsWith("6") && phone.length >= 7) {
         return phone.padEnd(9, "0"); // Pad to 9 digits if needed
       }
+    }
+  }
+
+  // Numéro with +237 and spaces (common in copy-paste from WhatsApp)
+  const numeroPlus = text.match(
+    /num[ée]ro\s*[:\s]+\+?\s*237\s*([^\n]+)/i
+  );
+  if (numeroPlus && numeroPlus[1]) {
+    const digits = numeroPlus[1].replace(/[^\d]/g, "");
+    if (digits.startsWith("6") && digits.length >= 8) {
+      const nine = digits.slice(0, 9);
+      if (nine.length === 9) return nine;
+      return nine.padEnd(9, "0");
     }
   }
 
@@ -66,6 +87,22 @@ function extractPhone(text) {
  * Looks for patterns like: 15k, 15000, 15.000, etc.
  */
 function extractAmount(text) {
+  text = stripInvisibleFormatting(text || "");
+
+  // Prefer explicit "Montant" label so we don't pick phone fragments (e.g. 694 from +237694…)
+  const montantKw = text.match(
+    /montant\s*[:\s]+\s*(\d+(?:[.,]\d{3})*(?:\.\d+)?)\s*(k)?/i
+  );
+  if (montantKw) {
+    let v = parseFloat(montantKw[1].replace(/[.,]/g, ""));
+    if (montantKw[2]) {
+      v *= 1000;
+    }
+    if (Number.isFinite(v) && v >= 100) {
+      return v;
+    }
+  }
+
   // Remove spaces
   const cleaned = text.replace(/\s/g, "");
 
@@ -416,6 +453,7 @@ function parseCompactStructuredFormat(text) {
  * Tries Alternative format first, then Option 3 format, then falls back to flexible parsing
  */
 function parseDeliveryMessage(text) {
+  text = stripInvisibleFormatting(text || "");
   const lines = text.split("\n").filter((line) => line.trim().length > 0);
 
   // First, try Alternative format (quartier first, products in middle, amount and phone at end)
@@ -465,23 +503,18 @@ function parseDeliveryMessage(text) {
 }
 
 /**
- * Check if a message looks like a new delivery
- * Prioritizes Option 3 format (4-line structured)
+ * Status updates, @-first messages, etc. — excluded from both strict delivery
+ * detection and format-reminder heuristics (shared with isDeliveryMessage).
  */
-function isDeliveryMessage(text) {
+function isExcludedFromDeliveryParsing(text) {
   const lowerText = text.toLowerCase();
 
-  // Check if it's a status update first.
-  // Rules must be tight: false positives here silently drop real deliveries.
-  //   - "livré"/"livrée" uses word-boundary to avoid matching product names
-  //     like "livre" (book/pound) — same logic as statusParser.js.
-  //   - "change"/"modifier" only count when at the start of the message;
-  //     mid-message they are almost always item descriptions ("1 change de
-  //     vêtements", "modifier la taille", etc.).
-  //   - Plain "livre" is removed: it's covered by the word-boundary livré
-  //     check above and is extremely common as a product noun.
+  // "livré" / "livrée": trailing \b is unreliable after accented letters in JS (\w is ASCII-only).
+  const hasLivreStatus =
+    /(?:^|[\s,.;:!?])livr[ée]e?(?=[\s,.;:!?]|$)/i.test(lowerText);
+
   const isStatusUpdate =
-    /\blivr[ée]e?\b/i.test(lowerText) ||
+    hasLivreStatus ||
     lowerText.includes("échec") ||
     lowerText.includes("echec") ||
     lowerText.includes("collecté") ||
@@ -493,13 +526,89 @@ function isDeliveryMessage(text) {
     lowerText.includes("ramassage");
 
   if (isStatusUpdate) {
+    return true;
+  }
+
+  const firstNonEmpty = text.trimStart();
+  if (firstNonEmpty.startsWith("@")) {
+    return true;
+  }
+
+  return false;
+}
+
+const FORMAT_REMINDER_MIN_SIGNALS = 2;
+
+/**
+ * True when the text has enough delivery-like signals (phone, amount, known quartier)
+ * but strict parse fails — candidate for a threaded format reminder in the group.
+ */
+function looksLikeMalformedDelivery(text) {
+  if (!text || typeof text !== "string") {
+    return false;
+  }
+  text = stripInvisibleFormatting(text);
+  if (isExcludedFromDeliveryParsing(text)) {
     return false;
   }
 
-  // Reject messages that start with a WhatsApp @mention — these are always
-  // conversational (group tags, follow-ups) and never delivery orders.
-  const firstNonEmpty = text.trimStart();
-  if (firstNonEmpty.startsWith("@")) {
+  const parsed = parseDeliveryMessage(text);
+  if (parsed.valid) {
+    return false;
+  }
+
+  const phone = extractPhone(text);
+  const rawAmount = extractAmount(text);
+
+  /** Avoid counting substrings of the phone (e.g. 612 from 612345678) as an amount signal. */
+  function amountCountsAsSignal() {
+    if (rawAmount == null) return false;
+    if (/\d+\s*k\b/i.test(text)) return true;
+    if (rawAmount >= 1000) return true;
+    if (phone == null) return rawAmount > 100;
+    const phoneDigits = phone.replace(/\D/g, "");
+    const amtStr = String(Math.floor(rawAmount));
+    if (phoneDigits.includes(amtStr) && amtStr.length >= 3) return false;
+    return rawAmount > 100;
+  }
+
+  let signals = 0;
+  if (phone != null) signals += 1;
+  if (amountCountsAsSignal()) signals += 1;
+  if (extractQuartier(text) != null) signals += 1;
+
+  return signals >= FORMAT_REMINDER_MIN_SIGNALS;
+}
+
+/**
+ * Short French error-style reminder for WhatsApp reply (threaded to user's message).
+ */
+function getFormatReminderMessage() {
+  return (
+    "❌ Format incorrect\n\n" +
+    "Votre livraison n'a pas été enregistrée.\n\n" +
+    "📦 Format à envoyer :\n\n" +
+    "Numéro\n" +
+    "Produit\n" +
+    "Montant\n" +
+    "Quartier\n\n" +
+    "Exemple :\n" +
+    "694397546\n" +
+    "Pack homme\n" +
+    "6000\n" +
+    "Messassi\n\n" +
+    "⚠️ 1 info par ligne — pas de « Numéro : », « Lieu : », etc.\n\n" +
+    "🙏 Merci de renvoyer correctement."
+  );
+}
+
+/**
+ * Check if a message looks like a new delivery
+ * Prioritizes Option 3 format (4-line structured)
+ */
+function isDeliveryMessage(text) {
+  text = stripInvisibleFormatting(text || "");
+  if (isExcludedFromDeliveryParsing(text)) {
     return false;
   }
 
@@ -519,6 +628,9 @@ function isDeliveryMessage(text) {
 module.exports = {
   parseDeliveryMessage,
   isDeliveryMessage,
+  isExcludedFromDeliveryParsing,
+  looksLikeMalformedDelivery,
+  getFormatReminderMessage,
   extractPhone,
   extractAmount,
   extractQuartier,
