@@ -62,6 +62,8 @@ npm run api:dev    # API only (no WhatsApp)
 | `ALLOWED_ORIGINS` | Comma-separated CORS origins |
 | `CLIENT_ID` | WhatsApp LocalAuth session ID |
 | `REPORT_ENABLED` / `REPORT_TIME` | Daily report config |
+| `FORMAT_REMINDER_ENABLED` | Set to `true` to reply in-thread when a message looks like a delivery (phone + amount + known quartier signals) but strict format fails |
+| `FORMAT_REMINDER_COOLDOWN_MS` | Min delay between reminders per sender in a group (default: `90000`) |
 
 ---
 

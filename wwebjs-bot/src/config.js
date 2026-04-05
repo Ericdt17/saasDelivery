@@ -19,6 +19,13 @@ module.exports = {
   // Message sending configuration
   SEND_CONFIRMATIONS: process.env.SEND_CONFIRMATIONS || "false", // Send confirmation messages to group when delivery created/updated
 
+  // Reply in thread when message looks like a delivery (phone + amount + quartier signals) but strict format fails
+  FORMAT_REMINDER_ENABLED: process.env.FORMAT_REMINDER_ENABLED === "true",
+  FORMAT_REMINDER_COOLDOWN_MS: (() => {
+    const n = parseInt(process.env.FORMAT_REMINDER_COOLDOWN_MS || "90000", 10);
+    return Number.isFinite(n) && n >= 0 ? n : 90000;
+  })(),
+
   // Timezone for date filtering (must match the business timezone — Cameroon = UTC+1)
   TIME_ZONE: process.env.TIME_ZONE || "Africa/Douala",
 };

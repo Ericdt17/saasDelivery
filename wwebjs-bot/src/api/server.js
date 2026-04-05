@@ -143,12 +143,25 @@ app.use("/api/v1/vendors", vendorsRouter);
 app.use("/api/v1/vendor", vendorRouter);
 
 // Health check endpoint
-app.get("/api/v1/health", (req, res) => {
-  res.json({
-    status: "ok",
+app.get("/api/v1/health", async (req, res) => {
+  const { adapter } = require("../db");
+  let dbOk = false;
+  let dbError = null;
+  try {
+    await adapter.query("SELECT 1");
+    dbOk = true;
+  } catch (err) {
+    dbError = err.message;
+  }
+
+  const status = dbOk ? "ok" : "degraded";
+  res.status(dbOk ? 200 : 503).json({
+    status,
     timestamp: new Date().toISOString(),
     service: "delivery-bot-api",
     version: "1.0.0",
+    db: dbOk ? "ok" : "error",
+    ...(dbError && { db_error: dbError }),
   });
 });
 

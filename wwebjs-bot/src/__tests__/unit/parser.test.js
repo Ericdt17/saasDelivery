@@ -1,6 +1,11 @@
 'use strict';
 
-const { parseDeliveryMessage, isDeliveryMessage } = require('../../parser');
+const {
+  parseDeliveryMessage,
+  isDeliveryMessage,
+  looksLikeMalformedDelivery,
+  getFormatReminderMessage,
+} = require('../../parser');
 
 // ---------------------------------------------------------------------------
 // parseDeliveryMessage
@@ -124,5 +129,89 @@ describe('isDeliveryMessage', () => {
 
   it('returns false for a status message that starts with "change"', () => {
     expect(isDeliveryMessage('change numéro 691234567')).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// looksLikeMalformedDelivery / getFormatReminderMessage
+// ---------------------------------------------------------------------------
+describe('looksLikeMalformedDelivery', () => {
+  it('returns false for a plain greeting', () => {
+    expect(looksLikeMalformedDelivery('bonjour comment tu vas')).toBe(false);
+  });
+
+  it('returns false for status keyword Livré', () => {
+    expect(looksLikeMalformedDelivery('Livré 612345678 15k makepe')).toBe(false);
+  });
+
+  it('returns false when message starts with @', () => {
+    expect(
+      looksLikeMalformedDelivery('@admin 612345678 15k bonapriso')
+    ).toBe(false);
+  });
+
+  it('returns false for a valid 4-line delivery', () => {
+    const msg = '612345678\n2 robes\n15k\nBonapriso';
+    expect(looksLikeMalformedDelivery(msg)).toBe(false);
+  });
+
+  it('returns false when only one signal is present (phone only)', () => {
+    expect(looksLikeMalformedDelivery('612345678')).toBe(false);
+  });
+
+  it('returns true for two signals without valid structure (phone + amount)', () => {
+    expect(looksLikeMalformedDelivery('612345678\n15k')).toBe(true);
+  });
+
+  it('returns true for messy one-line text with phone, amount, known quartier', () => {
+    const msg = 'Livraison 612345678 client 15k vers makepe stp';
+    expect(looksLikeMalformedDelivery(msg)).toBe(true);
+  });
+
+  it('returns true for WhatsApp-style labeled message with bidi chars and Montant line', () => {
+    const msg = [
+      'Livraison ',
+      '',
+      'Numéro : \u202A\u202C+237 6 94 39 75 46',
+      'Lieu :messassi',
+      'Montant : 6000fr',
+      'Un pack  :homme',
+    ].join('\n');
+    expect(looksLikeMalformedDelivery(msg)).toBe(true);
+  });
+});
+
+describe('getFormatReminderMessage', () => {
+  it('contains error intro, both formats, examples and closing', () => {
+    const text = getFormatReminderMessage();
+
+    // Error intro
+    expect(text).toMatch(/Format incorrect/i);
+    expect(text).toMatch(/pas été enregistr/i);
+
+    // Standard format
+    expect(text).toMatch(/Format standard/i);
+    expect(text).toMatch(/Numéro/);
+    expect(text).toMatch(/Produit/);
+    expect(text).toMatch(/Montant/);
+    expect(text).toMatch(/Quartier/);
+
+    // Standard format example — concrete phone + amount
+    expect(text).toMatch(/694397546/);
+    expect(text).toMatch(/6000/);
+    expect(text).toMatch(/Messassi/i);
+
+    // Alternative format
+    expect(text).toMatch(/Format alternatif/i);
+    expect(text).toMatch(/multi-articles/i);
+
+    // Alternative format example
+    expect(text).toMatch(/Melen/i);
+    expect(text).toMatch(/18k/i);
+    expect(text).toMatch(/612345678/);
+
+    // Warning and closing
+    expect(text).toMatch(/1 info par ligne/i);
+    expect(text).toMatch(/Merci de renvoyer correctement/i);
   });
 });

@@ -4,7 +4,12 @@ const QRCode = require("qrcode");
 const fs = require("fs");
 const path = require("path");
 const config = require("./config");
-const { isDeliveryMessage, parseDeliveryMessage } = require("./parser");
+const {
+  isDeliveryMessage,
+  parseDeliveryMessage,
+  looksLikeMalformedDelivery,
+  getFormatReminderMessage,
+} = require("./parser");
 const { parseStatusUpdate, isStatusUpdate } = require("./statusParser");
 const {
   createDelivery,
@@ -22,6 +27,9 @@ const {
   roundAmount,
 } = require("./lib/deliveryCalculations");
 const botAlerts = require("./lib/botAlerts");
+
+/** groupId:author → last format-reminder sent (ms) */
+const formatReminderCooldownByKey = new Map();
 
 // Log startup time
 const startupStartTime = Date.now();
@@ -185,6 +193,7 @@ let remindersWorker = null;
 client.on("ready", () => {
   botAlerts.notifyReady();
   const startupDuration = ((Date.now() - startupStartTime) / 1000).toFixed(1);
+  botAlerts.notifyStartup(startupDuration);
   console.log("\n" + "=".repeat(60));
   console.log("✅ BOT IS READY!");
   console.log("=".repeat(60));
@@ -1250,6 +1259,35 @@ client.on("message", async (msg) => {
       console.log(
         "   ℹ️  Not a delivery message (might be status update or other)"
       );
+
+      const looksMalformed = looksLikeMalformedDelivery(messageText);
+      if (looksMalformed && !config.FORMAT_REMINDER_ENABLED) {
+        console.log(
+          "   💡 Message matches format-reminder heuristics; set FORMAT_REMINDER_ENABLED=true in .env to reply in-thread"
+        );
+      }
+
+      if (config.FORMAT_REMINDER_ENABLED && looksMalformed) {
+        const author = msg.author || msg.from || "unknown";
+        const cooldownKey = `${whatsappGroupId}:${author}`;
+        const now = Date.now();
+        const lastSent = formatReminderCooldownByKey.get(cooldownKey) || 0;
+        if (now - lastSent < config.FORMAT_REMINDER_COOLDOWN_MS) {
+          console.log("   ⏭️  Format reminder skipped (cooldown)");
+        } else {
+          try {
+            await msg.reply(getFormatReminderMessage());
+            formatReminderCooldownByKey.set(cooldownKey, now);
+            console.log("   📤  Format reminder sent (reply)");
+          } catch (reminderErr) {
+            console.log(
+              "   ⚠️  Could not send format reminder:",
+              reminderErr.message
+            );
+            botAlerts.notifyMessageError(reminderErr, `format-reminder:${author}`);
+          }
+        }
+      }
     }
 
     console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
@@ -1261,6 +1299,7 @@ client.on("message", async (msg) => {
       "   Message preview:",
       (msg.body || "").substring(0, 50) + "\n"
     );
+    botAlerts.notifyMessageError(error, msg.from);
   }
 });
 
@@ -1275,6 +1314,7 @@ client.on("error", (error) => {
 process.on("uncaughtException", (error) => {
   console.error("⚠️  Uncaught Exception:", error.message);
   console.error("   Bot will continue running...\n");
+  botAlerts.notifyProcessError("uncaughtException", error);
 });
 
 process.on("unhandledRejection", (reason, promise) => {
@@ -1295,6 +1335,7 @@ process.on("unhandledRejection", (reason, promise) => {
   } else {
     console.error("⚠️  Unhandled Rejection:", reason);
     console.error("   Bot will continue running...\n");
+    botAlerts.notifyProcessError("unhandledRejection", reason);
   }
 });
 
@@ -1361,6 +1402,7 @@ function setupDailyReportScheduler() {
         console.log("=".repeat(70) + "\n");
       } catch (error) {
         console.error("❌ Error generating daily report:", error.message);
+        botAlerts.notifyReportFailed(error);
       }
 
       // Schedule next report
