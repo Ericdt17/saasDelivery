@@ -3,7 +3,12 @@
 /** WhatsApp / mobile often inserts bidi and zero-width chars around numbers. */
 function stripInvisibleFormatting(text) {
   if (!text || typeof text !== "string") return "";
-  return text.replace(/[\u200B-\u200D\uFEFF\u202A-\u202E\u2066-\u2069]/g, "");
+  // Remove bidi / zero-width chars
+  text = text.replace(/[\u200B-\u200D\uFEFF\u202A-\u202E\u2066-\u2069]/g, "");
+  // Strip WhatsApp copy-paste / forwarded message headers like:
+  // "[15:43, 2026/4/5] kb store:" or "[15:43, 04/05/2026] Name:"
+  text = text.replace(/^\[[\d]{1,2}:[\d]{2}[^\]]*\][^\n]*$/gm, "");
+  return text;
 }
 
 /**
@@ -89,13 +94,14 @@ function extractPhone(text) {
 function extractAmount(text) {
   text = stripInvisibleFormatting(text || "");
 
-  // Prefer explicit "Montant" label so we don't pick phone fragments (e.g. 694 from +237694…)
-  const montantKw = text.match(
-    /montant\s*[:\s]+\s*(\d+(?:[.,]\d{3})*(?:\.\d+)?)\s*(k)?/i
+  // Prefer explicit amount labels so we don't pick phone fragments or timestamp noise.
+  // Covers: "Montant : 15000", "Prix : 50 000fcfa", "Total : 12k"
+  const amountKw = text.match(
+    /(?:montant|prix|total)\s*[:\s]+\s*(\d[\d\s.,]*)\s*(k)?(?:\s*(?:fcfa|frs|fr|xaf|f))?\b/i
   );
-  if (montantKw) {
-    let v = parseFloat(montantKw[1].replace(/[.,]/g, ""));
-    if (montantKw[2]) {
+  if (amountKw) {
+    let v = parseFloat(amountKw[1].replace(/[\s,]/g, "").replace(/\./g, ""));
+    if (amountKw[2]) {
       v *= 1000;
     }
     if (Number.isFinite(v) && v >= 100) {
@@ -103,8 +109,8 @@ function extractAmount(text) {
     }
   }
 
-  // Remove spaces
-  const cleaned = text.replace(/\s/g, "");
+  // Remove spaces but preserve newlines so digit sequences on separate lines don't merge
+  const cleaned = text.replace(/[^\S\n]/g, "");
 
   // Pattern 1: Number followed by k/K (e.g., 15k, 20K)
   const pattern1 = /(\d+(?:\.\d+)?)\s*k/gi;
@@ -114,8 +120,9 @@ function extractAmount(text) {
     return num * 1000;
   }
 
-  // Pattern 2: Numbers with dots or commas as thousands separator
-  const pattern2 = /(\d{1,3}(?:[.,]\d{3})*)/g;
+  // Pattern 2: Numbers with dots or commas as thousands separator (e.g. 15,000 / 15.000)
+  // Requires at least one separator group — plain numbers fall through to Pattern 3.
+  const pattern2 = /(\d{1,3}(?:[.,]\d{3})+)/g;
   const matches = cleaned.match(pattern2);
   if (matches) {
     // Get the largest number (likely the amount)
@@ -126,12 +133,14 @@ function extractAmount(text) {
   // Pattern 3: Just plain numbers
   const numbers = cleaned.match(/\d+/g);
   if (numbers) {
-    // Filter out phone numbers (9 digits starting with 6)
     const amounts = numbers
       .map((n) => parseInt(n))
+      // Filter local Cameroon phone numbers (9 digits starting with 6)
       .filter(
         (n) => !(n.toString().startsWith("6") && n.toString().length === 9)
       )
+      // Filter international phone numbers and country-code prefixes (10+ digits)
+      .filter((n) => n.toString().length <= 9)
       .filter((n) => n > 100); // Amounts should be > 100 FCFA
 
     if (amounts.length > 0) {
@@ -541,29 +550,29 @@ const FORMAT_REMINDER_MIN_SIGNALS = 2;
 
 /**
  * True when the text has enough delivery-like signals (phone, amount, known quartier)
- * but strict parse fails — candidate for a threaded format reminder in the group.
+ * but strict parse fails — candidate for AI fallback or threaded format reminder.
+ * @param {string} text - raw message (will be stripped for checks)
+ * @param {{ valid: boolean }} parsed - result of parseDeliveryMessage(text)
  */
-function looksLikeMalformedDelivery(text) {
+function looksLikeMalformedDeliveryWithParsed(text, parsed) {
   if (!text || typeof text !== "string") {
     return false;
   }
-  text = stripInvisibleFormatting(text);
-  if (isExcludedFromDeliveryParsing(text)) {
+  const stripped = stripInvisibleFormatting(text);
+  if (isExcludedFromDeliveryParsing(stripped)) {
+    return false;
+  }
+  if (!parsed || parsed.valid) {
     return false;
   }
 
-  const parsed = parseDeliveryMessage(text);
-  if (parsed.valid) {
-    return false;
-  }
-
-  const phone = extractPhone(text);
-  const rawAmount = extractAmount(text);
+  const phone = extractPhone(stripped);
+  const rawAmount = extractAmount(stripped);
 
   /** Avoid counting substrings of the phone (e.g. 612 from 612345678) as an amount signal. */
   function amountCountsAsSignal() {
     if (rawAmount == null) return false;
-    if (/\d+\s*k\b/i.test(text)) return true;
+    if (/\d+\s*k\b/i.test(stripped)) return true;
     if (rawAmount >= 1000) return true;
     if (phone == null) return rawAmount > 100;
     const phoneDigits = phone.replace(/\D/g, "");
@@ -572,12 +581,49 @@ function looksLikeMalformedDelivery(text) {
     return rawAmount > 100;
   }
 
+  /**
+   * True when at least one line looks like a free-form location:
+   * - not empty, not a pure phone number, not a pure amount
+   * - contains at least one letter (rules out pure digit lines)
+   * Does NOT require a known COMMON_QUARTIERS match.
+   */
+  function hasLocationSignal() {
+    const lines = stripped.split("\n").map((l) => l.trim()).filter(Boolean);
+    const phoneDigits = phone ? phone.replace(/\D/g, "") : null;
+    for (const line of lines) {
+      if (!/[a-zA-ZÀ-ÿ]/.test(line)) continue; // must have letters
+      if (/^\+?[\d\s()-]{7,}$/.test(line)) continue; // looks like a phone line
+      const lineClean = line.replace(/\s/g, "");
+      if (/^\d+k?$/i.test(lineClean)) continue; // looks like a pure amount line
+      if (phoneDigits && line.replace(/\D/g, "") === phoneDigits) continue; // is the phone
+      // Line has letters and is not phone/amount — treat as a location candidate
+      return true;
+    }
+    return false;
+  }
+
   let signals = 0;
   if (phone != null) signals += 1;
   if (amountCountsAsSignal()) signals += 1;
-  if (extractQuartier(text) != null) signals += 1;
+  if (extractQuartier(stripped) != null || hasLocationSignal()) signals += 1;
 
   return signals >= FORMAT_REMINDER_MIN_SIGNALS;
+}
+
+/**
+ * True when the text has enough delivery-like signals (phone, amount, known quartier)
+ * but strict parse fails — candidate for a threaded format reminder in the group.
+ */
+function looksLikeMalformedDelivery(text) {
+  if (!text || typeof text !== "string") {
+    return false;
+  }
+  const stripped = stripInvisibleFormatting(text);
+  if (isExcludedFromDeliveryParsing(stripped)) {
+    return false;
+  }
+  const parsed = parseDeliveryMessage(text);
+  return looksLikeMalformedDeliveryWithParsed(stripped, parsed);
 }
 
 /**
@@ -642,6 +688,7 @@ module.exports = {
   isDeliveryMessage,
   isExcludedFromDeliveryParsing,
   looksLikeMalformedDelivery,
+  looksLikeMalformedDeliveryWithParsed,
   getFormatReminderMessage,
   extractPhone,
   extractAmount,
