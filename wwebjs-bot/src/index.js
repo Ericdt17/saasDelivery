@@ -21,6 +21,7 @@ const {
   computeAmountPaidAfterFee,
   roundAmount,
 } = require("./lib/deliveryCalculations");
+const botAlerts = require("./lib/botAlerts");
 
 // Log startup time
 const startupStartTime = Date.now();
@@ -103,6 +104,8 @@ const client = new Client({
 
 // Show QR code in terminal when authentication needed
 let qrShown = false;
+botAlerts.init({ getQrShown: () => qrShown, client });
+
 client.on("qr", async (qr) => {
   if (!qrShown) {
     console.log("\n" + "=".repeat(60));
@@ -118,9 +121,11 @@ client.on("qr", async (qr) => {
       "⚠️  QR code expires in 20 seconds. If it refreshes, scan the NEWEST one.\n"
     );
     qrShown = true;
+    botAlerts.onQrShown();
   } else {
     console.log("\n⚠️  QR code refreshed! Scan the NEWEST QR code below:");
     console.log("   (Open WhatsApp → Linked Devices → Link a Device)\n");
+    botAlerts.onQrShown();
   }
 
   // Show medium-sized QR code in terminal (may be distorted in Render logs)
@@ -178,6 +183,7 @@ client.on("qr", async (qr) => {
 // When client is ready
 let remindersWorker = null;
 client.on("ready", () => {
+  botAlerts.notifyReady();
   const startupDuration = ((Date.now() - startupStartTime) / 1000).toFixed(1);
   console.log("\n" + "=".repeat(60));
   console.log("✅ BOT IS READY!");
@@ -232,6 +238,7 @@ client.on("authenticated", async () => {
       console.log(`   State: ${state}`);
 
       if (state === "CONNECTED") {
+        botAlerts.notifyReady();
         console.log("\n" + "=".repeat(60));
         console.log("✅ CLIENT STATE: CONNECTED");
         console.log("=".repeat(60));
@@ -282,6 +289,7 @@ client.on("authenticated", async () => {
 
 // When authentication fails
 client.on("auth_failure", (msg) => {
+  botAlerts.notifyAuthFailure(msg);
   console.error("\n" + "=".repeat(60));
   console.error("❌ AUTHENTICATION FAILED!");
   console.error("Error:", msg);
@@ -290,6 +298,7 @@ client.on("auth_failure", (msg) => {
 
 // When client is disconnected
 client.on("disconnected", (reason) => {
+  botAlerts.notifyDisconnected(reason);
   console.log("\n" + "=".repeat(60));
   console.log("⚠️  CLIENT DISCONNECTED");
   console.log("=".repeat(60));
@@ -1235,6 +1244,7 @@ client.on("message", async (msg) => {
         }
       } catch (dbError) {
         console.error("   ❌ Erreur lors de la sauvegarde:", dbError.message);
+        botAlerts.notifyDeliverySaveFailed(dbError.message);
       }
     } else {
       console.log(
@@ -1256,6 +1266,7 @@ client.on("message", async (msg) => {
 
 // Handle errors
 client.on("error", (error) => {
+  botAlerts.notifyClientError(error);
   console.error("❌ Client Error:", error.message);
   console.error("   Stack:", error.stack);
 });
