@@ -587,7 +587,7 @@ function getFormatReminderMessage() {
   return (
     "❌ Format incorrect\n\n" +
     "Votre livraison n'a pas été enregistrée.\n\n" +
-    "📦 Format à envoyer :\n\n" +
+    "📦 *Format standard (4 lignes) :*\n" +
     "Numéro\n" +
     "Produit\n" +
     "Montant\n" +
@@ -597,6 +597,18 @@ function getFormatReminderMessage() {
     "Pack homme\n" +
     "6000\n" +
     "Messassi\n\n" +
+    "📦 *Format alternatif (multi-articles) :*\n" +
+    "Quartier\n" +
+    "Article 1\n" +
+    "Article 2\n" +
+    "Montant\n" +
+    "Numéro\n\n" +
+    "Exemple :\n" +
+    "Melen\n" +
+    "Chaussures Nike taille 42\n" +
+    "Ceinture cuir\n" +
+    "18k\n" +
+    "612345678\n\n" +
     "⚠️ 1 info par ligne — pas de « Numéro : », « Lieu : », etc.\n\n" +
     "🙏 Merci de renvoyer correctement."
   );

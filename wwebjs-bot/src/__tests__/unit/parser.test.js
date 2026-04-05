@@ -182,12 +182,36 @@ describe('looksLikeMalformedDelivery', () => {
 });
 
 describe('getFormatReminderMessage', () => {
-  it('returns short error intro and format lines', () => {
+  it('contains error intro, both formats, examples and closing', () => {
     const text = getFormatReminderMessage();
-    expect(text.length).toBeGreaterThan(80);
+
+    // Error intro
     expect(text).toMatch(/Format incorrect/i);
     expect(text).toMatch(/pas été enregistr/i);
-    expect(text).toMatch(/Format à envoyer/i);
+
+    // Standard format
+    expect(text).toMatch(/Format standard/i);
+    expect(text).toMatch(/Numéro/);
+    expect(text).toMatch(/Produit/);
+    expect(text).toMatch(/Montant/);
+    expect(text).toMatch(/Quartier/);
+
+    // Standard format example — concrete phone + amount
+    expect(text).toMatch(/694397546/);
+    expect(text).toMatch(/6000/);
+    expect(text).toMatch(/Messassi/i);
+
+    // Alternative format
+    expect(text).toMatch(/Format alternatif/i);
+    expect(text).toMatch(/multi-articles/i);
+
+    // Alternative format example
+    expect(text).toMatch(/Melen/i);
+    expect(text).toMatch(/18k/i);
+    expect(text).toMatch(/612345678/);
+
+    // Warning and closing
+    expect(text).toMatch(/1 info par ligne/i);
     expect(text).toMatch(/Merci de renvoyer correctement/i);
   });
 });

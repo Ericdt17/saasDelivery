@@ -1284,6 +1284,7 @@ client.on("message", async (msg) => {
               "   ⚠️  Could not send format reminder:",
               reminderErr.message
             );
+            botAlerts.notifyMessageError(reminderErr, `format-reminder:${author}`);
           }
         }
       }
