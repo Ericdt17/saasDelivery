@@ -1,4 +1,5 @@
 const logger = require("../../logger");
+const botAlerts = require("../../lib/botAlerts");
 
 function errorHandler(err, req, res, next) {
   logger.error({ err, method: req.method, path: req.path }, "API error");
@@ -76,6 +77,7 @@ function errorHandler(err, req, res, next) {
 
   // Database connection errors
   if (err.code === 'ECONNREFUSED' || err.code === 'ENOTFOUND' || err.code === 'ETIMEDOUT') {
+    botAlerts.notifyApiError(req.method, req.path, err);
     return res.status(503).json({
       success: false,
       error: 'Database connection failed',
@@ -97,8 +99,11 @@ function errorHandler(err, req, res, next) {
   if (res.headersSent) {
     return next(err);
   }
-  
+
   const statusCode = err.status || err.statusCode || 500;
+  if (statusCode >= 500) {
+    botAlerts.notifyApiError(req.method, req.path, err);
+  }
   res.status(statusCode).json({
     success: false,
     error: err.message || 'Internal server error',

@@ -229,6 +229,17 @@ function notifyReportFailed(error) {
   );
 }
 
+/** API route threw an unexpected error (DB connection down, unhandled 500, etc.) — throttled. */
+function notifyApiError(method, path, error) {
+  if (!config().webhookUrl) return;
+  const msg = error?.message || String(error);
+  alertWithCooldown(
+    `api-error:${method}:${path}`,
+    `[Livsight API] Error on ${method} ${path}:\n${msg.slice(0, 1500)}`,
+    config().errorCooldownMs
+  );
+}
+
 /** Uncaught process-level error (throttled). */
 function notifyProcessError(kind, error) {
   if (!config().webhookUrl) return;
@@ -304,4 +315,5 @@ module.exports = {
   notifyMessageError,
   notifyReportFailed,
   notifyProcessError,
+  notifyApiError,
 };
