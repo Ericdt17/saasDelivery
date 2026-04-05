@@ -4,6 +4,7 @@
  */
 
 const db = require("../db");
+const botAlerts = require("../lib/botAlerts");
 
 function phoneToChatId(phone) {
   // WhatsApp expects digits only for c.us
@@ -54,6 +55,14 @@ function createRemindersWorker({ client, pollIntervalMs = 60000, batchSize = 50,
       const due = await db.pollQueuedReminderTargets({ limit: batchSize });
       const rows = Array.isArray(due) ? due : [];
 
+      let reminderSendProblems = 0;
+      let reminderProblemSample = "";
+
+      const noteReminderProblem = (msg) => {
+        reminderSendProblems += 1;
+        if (!reminderProblemSample) reminderProblemSample = String(msg || "");
+      };
+
       for (const r of rows) {
         await db.markReminderTargetProcessing(r.reminder_id);
         if (!isNowInWindow(r.timezone, r.window_start, r.window_end)) {
@@ -63,6 +72,7 @@ function createRemindersWorker({ client, pollIntervalMs = 60000, batchSize = 50,
         const chatId = toTargetChatId(r);
         if (!chatId) {
           await db.updateReminderTargetStatus(r.target_id, "failed", "Invalid target phone");
+          noteReminderProblem("Invalid target phone / chatId");
           continue;
         }
 
@@ -70,14 +80,24 @@ function createRemindersWorker({ client, pollIntervalMs = 60000, batchSize = 50,
           await client.sendMessage(chatId, String(r.message || ""));
           await db.updateReminderTargetStatus(r.target_id, "sent", null);
         } catch (err) {
-          await db.updateReminderTargetStatus(r.target_id, "failed", err?.message || String(err));
+          const errMsg = err?.message || String(err);
+          await db.updateReminderTargetStatus(r.target_id, "failed", errMsg);
+          noteReminderProblem(errMsg);
         }
         const min = Number(r.send_interval_min_sec ?? 60);
         const max = Number(r.send_interval_max_sec ?? 120);
         await sleep(randomInt(min, max) * 1000);
       }
+
+      if (reminderSendProblems > 0) {
+        botAlerts.notifyRemindersSendFailures({
+          count: reminderSendProblems,
+          sample: reminderProblemSample,
+        });
+      }
     } catch (err) {
       logger.error?.("Reminders worker tick failed:", err);
+      botAlerts.notifyRemindersTickFailed(err);
     } finally {
       running = false;
     }
