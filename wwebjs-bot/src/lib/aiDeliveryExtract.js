@@ -13,6 +13,7 @@ Rules:
 - amount is the price the customer pays for the goods (Prix, Montant, Total). If the user wrote 15k or 15K, amount is 15000.
 - amount must NOT include or subtract delivery/shipping/livraison fees — ignore lines labelled "Livraison", "Frais", "Transport", "Frais de livraison".
 - phone must be a Cameroon number: 8-9 digits starting with 6, 7, or 2. Strip country code (+237) if present.
+- product must contain only the item description (e.g. "3 bee venom", "Pack homme"). Do NOT include product/order reference codes (e.g. P1718, REF-001, CMD-42) or time markers (e.g. 13h, 08h30) in the product field — ignore them entirely.
 - If a field cannot be determined, use empty string for phone/location/product or 0 for amount only when no amount exists.
 - Respond with JSON only, no markdown.`;
 
