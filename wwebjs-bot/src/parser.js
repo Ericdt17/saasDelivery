@@ -52,6 +52,14 @@ function extractPhone(text) {
   // Remove all spaces and common separators
   const cleaned = text.replace(/[\s\-\.]/g, "");
 
+  // Pattern 3 first: +237 followed by 8-9 digits — must run before Pattern 1
+  // because +23772158817 in cleaned would let Pattern 1 grab "237721588" (wrong)
+  const pattern3 = /\+237(\d{8,9})/;
+  const match3 = cleaned.match(pattern3);
+  if (match3) {
+    return match3[1]; // return the local number as-is (preserves 7xx, 2xx, 6xx)
+  }
+
   // Pattern 1: Cameroon mobile starting with 6, 7, or 2 (9 digits)
   const pattern1 = /[627]\d{8}/;
   const match1 = cleaned.match(pattern1);
@@ -64,13 +72,6 @@ function extractPhone(text) {
   const match2 = cleaned.match(pattern2);
   if (match2) {
     return match2[0].replace(/x/gi, "0");
-  }
-
-  // Pattern 3: +237 followed by 8-9 digits (any Cameroon format)
-  const pattern3 = /\+237(\d{8,9})/;
-  const match3 = cleaned.match(pattern3);
-  if (match3) {
-    return match3[1]; // return the local number as-is (preserves 7xx, 2xx, 6xx)
   }
 
   // Pattern 4: Just numbers — 9-digit starting with 6, 7, or 2

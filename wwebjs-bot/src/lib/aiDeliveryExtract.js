@@ -29,7 +29,7 @@ function normalizePhoneString(raw) {
   }
   // Accept Cameroon mobile formats: 6xx, 7xx, 2xx (8-9 digits)
   if (/^[627]\d{7,8}$/.test(digits)) {
-    return digits.length === 9 ? digits : digits.padEnd(9, "0");
+    return digits;
   }
   return null;
 }
