@@ -1047,6 +1047,42 @@ client.on("message", async (msg) => {
               }
               break;
 
+            case "no_answer":
+              updateData.status = "no_answer";
+              historyAction = "marked_no_answer";
+              console.log(
+                `   📵 Livraison #${delivery.id} marquée comme NE DÉCROCHE PAS`
+              );
+              updateData.delivery_fee = 0;
+              const currentAmountPaidNoAnswer =
+                parseFloat(delivery.amount_paid) || 0;
+              if (currentAmountPaidNoAnswer > 0) {
+                updateData.amount_paid = 0;
+                console.log(
+                  `   💰 Remboursement de ${currentAmountPaidNoAnswer} F (amount_paid mis à 0)`
+                );
+              }
+              console.log(`   🚫 Tarif annulé (delivery_fee mis à 0)`);
+              break;
+
+            case "unreachable":
+              updateData.status = "unreachable";
+              historyAction = "marked_unreachable";
+              console.log(
+                `   📵 Livraison #${delivery.id} marquée comme INJOIGNABLE`
+              );
+              updateData.delivery_fee = 0;
+              const currentAmountPaidUnreachable =
+                parseFloat(delivery.amount_paid) || 0;
+              if (currentAmountPaidUnreachable > 0) {
+                updateData.amount_paid = 0;
+                console.log(
+                  `   💰 Remboursement de ${currentAmountPaidUnreachable} F (amount_paid mis à 0)`
+                );
+              }
+              console.log(`   🚫 Tarif annulé (delivery_fee mis à 0)`);
+              break;
+
             case "pending":
               updateData.status = "pending";
               historyAction = "marked_pending";

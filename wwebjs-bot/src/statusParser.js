@@ -165,7 +165,40 @@ function parseStatusUpdate(text, isReply = false) {
     };
   }
 
-  // 4. PAYMENT COLLECTED - "Collecté", "Collecte", "Payé"
+  // 5. NO_ANSWER - "Ne décroche pas", "Décroche pas", "Répond pas"
+  if (
+    lowerText.includes("ne décroche pas") ||
+    lowerText.includes("ne decroche pas") ||
+    lowerText.includes("décroche pas") ||
+    lowerText.includes("decroche pas") ||
+    lowerText.includes("répond pas") ||
+    lowerText.includes("repond pas") ||
+    lowerText.includes("ne répond pas") ||
+    lowerText.includes("ne repond pas")
+  ) {
+    const phone = extractPhoneFromStatus(text);
+    return {
+      type: "no_answer",
+      phone: phone,
+      amount: null,
+      details: text,
+    };
+  }
+
+  // 6. UNREACHABLE - "Injoignable"
+  if (
+    lowerText.includes("injoignable")
+  ) {
+    const phone = extractPhoneFromStatus(text);
+    return {
+      type: "unreachable",
+      phone: phone,
+      amount: null,
+      details: text,
+    };
+  }
+
+  // 7. PAYMENT COLLECTED - "Collecté", "Collecte", "Payé"
   if (
     lowerText.match(/^collect[ée]?/i) ||
     lowerText.match(/^pay[ée]?/i) ||
