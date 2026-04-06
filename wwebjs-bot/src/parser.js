@@ -52,33 +52,32 @@ function extractPhone(text) {
   // Remove all spaces and common separators
   const cleaned = text.replace(/[\s\-\.]/g, "");
 
-  // Pattern 1: 6 followed by 8 digits (Cameroon mobile: 6xxxxxxxx)
-  const pattern1 = /6\d{8}/;
+  // Pattern 1: Cameroon mobile starting with 6, 7, or 2 (9 digits)
+  const pattern1 = /[627]\d{8}/;
   const match1 = cleaned.match(pattern1);
   if (match1) {
     return match1[0];
   }
 
-  // Pattern 2: 6xx followed by digits (handles 6xx345678 format)
-  const pattern2 = /6[x\d]{7,8}/;
+  // Pattern 2: 6/7/2 followed by digits with x placeholders
+  const pattern2 = /[627][x\d]{7,8}/;
   const match2 = cleaned.match(pattern2);
   if (match2) {
-    // Replace x with 0 for matching, but keep original format
     return match2[0].replace(/x/gi, "0");
   }
 
-  // Pattern 3: +237 followed by 9 digits
-  const pattern3 = /\+237\d{9}/;
+  // Pattern 3: +237 followed by 8-9 digits (any Cameroon format)
+  const pattern3 = /\+237(\d{8,9})/;
   const match3 = cleaned.match(pattern3);
   if (match3) {
-    return match3[0].replace("+237", "6");
+    return match3[1]; // return the local number as-is (preserves 7xx, 2xx, 6xx)
   }
 
-  // Pattern 4: Just numbers (6xxxxxxxx format)
+  // Pattern 4: Just numbers — 9-digit starting with 6, 7, or 2
   const numbers = cleaned.match(/\d+/g);
   if (numbers) {
     for (const num of numbers) {
-      if (num.startsWith("6") && num.length === 9) {
+      if (/^[627]\d{8}$/.test(num)) {
         return num;
       }
     }
@@ -135,10 +134,8 @@ function extractAmount(text) {
   if (numbers) {
     const amounts = numbers
       .map((n) => parseInt(n))
-      // Filter local Cameroon phone numbers (9 digits starting with 6)
-      .filter(
-        (n) => !(n.toString().startsWith("6") && n.toString().length === 9)
-      )
+      // Filter local Cameroon phone numbers (9 digits starting with 6, 7, or 2)
+      .filter((n) => !/^[627]\d{8}$/.test(n.toString()))
       // Filter international phone numbers and country-code prefixes (10+ digits)
       .filter((n) => n.toString().length <= 9)
       .filter((n) => n > 100); // Amounts should be > 100 FCFA
