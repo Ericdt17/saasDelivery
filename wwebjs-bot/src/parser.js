@@ -49,16 +49,16 @@ function extractPhone(text) {
     }
   }
 
-  // Remove all spaces and common separators
-  const cleaned = text.replace(/[\s\-\.]/g, "");
-
-  // Pattern 3 first: +237 followed by 8-9 digits — must run before Pattern 1
-  // because +23772158817 in cleaned would let Pattern 1 grab "237721588" (wrong)
+  // Pattern 3 first: +237 followed by 8-9 digits — run on raw text (before stripping
+  // newlines) so adjacent lines like "3 bee venom" don't bleed into the digit match.
   const pattern3 = /\+237(\d{8,9})/;
-  const match3 = cleaned.match(pattern3);
+  const match3 = text.match(pattern3);
   if (match3) {
     return match3[1]; // return the local number as-is (preserves 7xx, 2xx, 6xx)
   }
+
+  // Remove all spaces and common separators (newlines too) for remaining patterns
+  const cleaned = text.replace(/[\s\-\.]/g, "");
 
   // Pattern 1: Cameroon mobile starting with 6, 7, or 2 (9 digits)
   const pattern1 = /[627]\d{8}/;
