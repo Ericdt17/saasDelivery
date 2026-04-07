@@ -258,7 +258,7 @@ function parseAlternativeFormat(text) {
 
   // Check if first line looks like a quartier (not a number, not a phone)
   const isQuartier =
-    !/^\d+$/.test(quartier) && !/^6\d{8,9}$/.test(quartier.replace(/\s/g, ""));
+    !/^\d+$/.test(quartier) && !/^[627]\d{7,8}$/.test(quartier.replace(/\s/g, ""));
   if (!isQuartier) {
     return {
       valid: false,
@@ -270,25 +270,23 @@ function parseAlternativeFormat(text) {
   const phoneLine = lines[lines.length - 1];
   let phone = phoneLine.replace(/[\s\-\.]/g, ""); // Remove spaces and separators
 
-  // Check if it's a valid phone number
-  if (!phone.startsWith("6") || phone.length < 8) {
+  // Check if it's a valid phone number (6, 7, or 2 start)
+  if (!/^[627]/.test(phone) || phone.length < 8) {
     return {
       valid: false,
       error: `Format alternatif: La dernière ligne devrait être un numéro de téléphone, reçu: "${phoneLine}"`,
     };
   }
 
-  // Normalize phone (replace x with 0, pad to 9 digits if needed)
+  // Normalize phone (replace x with 0)
   phone = phone.replace(/x/gi, "0");
-  if (phone.length !== 9) {
-    if (phone.length === 8) {
-      phone = phone.padEnd(9, "0");
-    } else {
-      return {
-        valid: false,
-        error: `Format alternatif: Numéro invalide: "${phoneLine}" - Doit avoir 8-9 chiffres`,
-      };
-    }
+  if (phone.length === 8) {
+    phone = "6" + phone; // prepend 6 for 8-digit local numbers
+  } else if (phone.length !== 9) {
+    return {
+      valid: false,
+      error: `Format alternatif: Numéro invalide: "${phoneLine}" - Doit avoir 8-9 chiffres`,
+    };
   }
 
   // Second to last line: Amount
@@ -375,19 +373,24 @@ function parseCompactStructuredFormat(text) {
 
   // Line 1: Phone number
   const phoneLine = lines[0];
-  let phone = phoneLine.replace(/[^\dx]/gi, ""); // Keep only digits and x
-  if (!phone.startsWith("6")) {
+  let phone = phoneLine.replace(/[^\dx+]/gi, ""); // Keep only digits, x, and +
+  // Strip +237 country code if present
+  if (phone.startsWith("+237") || phone.startsWith("237")) {
+    phone = phone.replace(/^\+?237/, "");
+  }
+  phone = phone.replace(/x/gi, "0");
+  if (!/^[627]/.test(phone)) {
     return {
       valid: false,
-      error: `Numéro invalide: "${phoneLine}" - Doit commencer par 6`,
+      error: `Numéro invalide: "${phoneLine}" - Doit commencer par 6, 7 ou 2`,
     };
   }
-  // Normalize phone (replace x with 0 for storage, but keep original for display)
-  phone = phone.replace(/x/gi, "0");
-  if (phone.length !== 9) {
+  if (phone.length === 8) {
+    phone = "6" + phone; // prepend 6 for 8-digit local numbers
+  } else if (phone.length !== 9) {
     return {
       valid: false,
-      error: `Numéro invalide: "${phoneLine}" - Doit avoir 9 chiffres`,
+      error: `Numéro invalide: "${phoneLine}" - Doit avoir 8-9 chiffres`,
     };
   }
 
@@ -476,8 +479,8 @@ function parseDeliveryMessage(text) {
     // - Last line looks like a phone number
     const firstLineIsQuartier =
       !/^\d+$/.test(firstLine) &&
-      !/^6\d{8,9}$/.test(firstLine.replace(/\s/g, ""));
-    const lastLineIsPhone = /^6[\d\sx]{7,10}$/i.test(
+      !/^[627]\d{7,8}$/.test(firstLine.replace(/\s/g, ""));
+    const lastLineIsPhone = /^[627][\d\sx]{7,10}$/i.test(
       lastLine.replace(/[\s\-\.]/g, "")
     );
 

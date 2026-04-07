@@ -2,21 +2,28 @@
 
 /**
  * Extract phone number from status message
- * Examples: "Livré 6xx123456", "Échec 612345678"
+ * Examples: "Livré 6xx123456", "Échec 72158817", "+23772158817"
  */
 function extractPhoneFromStatus(text) {
+  // +237 prefix first (before stripping whitespace loses the + context)
+  const intlMatch = text.match(/\+237(\d{8,9})/);
+  if (intlMatch) {
+    const local = intlMatch[1];
+    return local.length === 9 ? local : "6" + local;
+  }
+
   // Remove all spaces and common separators
   const cleaned = text.replace(/[\s\-\.]/g, "");
 
-  // Pattern 1: 6 followed by 8 digits (Cameroon mobile: 6xxxxxxxx)
-  const pattern1 = /6\d{8}/;
+  // Pattern 1: Cameroon mobile starting with 6, 7, or 2 (9 digits)
+  const pattern1 = /[627]\d{8}/;
   const match1 = cleaned.match(pattern1);
   if (match1) {
     return match1[0];
   }
 
-  // Pattern 2: 6xx followed by digits (handles 6xx345678 format)
-  const pattern2 = /6[x\d]{7,8}/;
+  // Pattern 2: 6/7/2 followed by digits with x placeholders (not preceded by another digit)
+  const pattern2 = /(?<!\d)[627][x\d]{7,8}/;
   const match2 = cleaned.match(pattern2);
   if (match2) {
     return match2[0].replace(/x/gi, "0");
@@ -31,7 +38,7 @@ function extractPhoneFromStatus(text) {
  */
 function extractAmountFromStatus(text) {
   // First, extract and remove phone numbers to avoid confusion
-  const phonePattern = /6\d{8}|6[x\d]{7,8}/g;
+  const phonePattern = /[627]\d{8}|[627][x\d]{7,8}/g;
   let textWithoutPhones = text;
   const phones = text.match(phonePattern);
   if (phones) {
@@ -67,9 +74,9 @@ function extractAmountFromStatus(text) {
     const amounts = numbers
       .map((n) => parseInt(n))
       .filter((n) => {
-        // Exclude phone numbers (9 digits starting with 6)
+        // Exclude phone numbers (9 digits starting with 6, 7, or 2)
         const str = n.toString();
-        if (str.length === 9 && str.startsWith("6")) {
+        if (str.length === 9 && /^[627]/.test(str)) {
           return false;
         }
         // Exclude numbers that are part of phone numbers (like 333 from 633333333)
