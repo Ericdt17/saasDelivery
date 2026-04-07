@@ -1,4 +1,4 @@
-const { getTodayDeliveries, getDeliveryStats, close } = require("./db");
+const { getTodayDeliveries, getDeliveryStats, close } = require("../db");
 
 async function main() {
   console.log("\n" + "=".repeat(60));

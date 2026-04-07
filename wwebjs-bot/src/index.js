@@ -24,7 +24,7 @@ const {
   getTariffByAgencyAndQuartier,
 } = require("./db");
 const { createRemindersWorker } = require("./reminders/worker");
-const { generateDailyReport } = require("./daily-report");
+const { generateDailyReport } = require("./lib/daily-report");
 const { getGroup, getAgencyIdForGroup } = require("./utils/group-manager");
 const {
   computeAmountPaidAfterFee,

@@ -1,4 +1,4 @@
-const { adapter, close } = require("./db");
+const { adapter, close } = require("../db");
 
 async function main() {
   console.log("\n" + "=".repeat(70));

@@ -9,7 +9,7 @@
  * Works with both SQLite and PostgreSQL
  */
 
-const { adapter, query } = require("./db");
+const { adapter, query } = require("../db");
 
 // Check if bcrypt is installed
 let bcrypt;

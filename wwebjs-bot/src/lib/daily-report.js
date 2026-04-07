@@ -3,8 +3,8 @@
  * Generates and optionally sends daily delivery reports
  */
 
-const { getTodayDeliveries, getDeliveryStats } = require("./db");
-const { adapter } = require("./db");
+const { getTodayDeliveries, getDeliveryStats } = require("../db");
+const { adapter } = require("../db");
 const fs = require("fs");
 const path = require("path");
 
@@ -100,7 +100,7 @@ async function getDeliveriesByDate(date) {
 
 // If called directly from command line
 if (require.main === module) {
-  const { close } = require("./db");
+  const { close } = require("../db");
   const args = process.argv.slice(2);
   const dateArg = args.find(arg => arg.startsWith('--date='));
   const date = dateArg ? dateArg.split('=')[1] : null;

@@ -4,7 +4,7 @@
  */
 
 const { Client, LocalAuth } = require("whatsapp-web.js");
-const config = require("./config");
+const config = require("../config");
 const path = require("path");
 
 // Note: This requires the bot to be running to use the same client

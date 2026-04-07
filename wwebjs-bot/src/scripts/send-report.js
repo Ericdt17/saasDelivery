@@ -7,9 +7,9 @@
  */
 
 const { Client, LocalAuth } = require("whatsapp-web.js");
-const { generateDailyReport } = require("./daily-report");
-const config = require("./config");
-const { close } = require("./db");
+const { generateDailyReport } = require("../lib/daily-report");
+const config = require("../config");
+const { close } = require("../db");
 
 if (require.main === module) {
   (async () => {
