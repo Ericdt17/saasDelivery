@@ -2,6 +2,10 @@
 
 Node.js backend for the LivSight delivery management platform. Includes a WhatsApp bot (whatsapp-web.js) and a REST API (Express 5).
 
+This backend is used by:
+- The **web dashboard** in `../client` (cookie-based auth)
+- A **vendor mobile app** via `/api/v1/vendor/*` routes (Bearer token auth fallback is supported when enabled)
+
 ---
 
 ## Architecture
@@ -52,6 +56,11 @@ npm run dev        # Bot + API with auto-reload
 npm run api:dev    # API only (no WhatsApp)
 ```
 
+### Run modes (which command to use?)
+
+- `npm run dev`: runs the **bot entrypoint** (`src/index.js`) under nodemon. The bot process also boots the API in the same runtime.
+- `npm run api:dev`: runs the **API only** (`src/api/server.js`) under nodemon (best for dashboard work when you don’t need WhatsApp).
+
 ### Key env vars
 
 | Variable | Purpose |
@@ -64,6 +73,11 @@ npm run api:dev    # API only (no WhatsApp)
 | `REPORT_ENABLED` / `REPORT_TIME` | Daily report config |
 | `FORMAT_REMINDER_ENABLED` | Set to `true` to reply in-thread when a message looks like a delivery (phone + amount + known quartier signals) but strict format fails |
 | `FORMAT_REMINDER_COOLDOWN_MS` | Min delay between reminders per sender in a group (default: `90000`) |
+| `AUTH_HEADER_FALLBACK` | When `true`, allows `Authorization: Bearer <token>` auth (needed for mobile vendor clients that can’t use HTTP-only cookies) |
+
+Security notes:
+- Do **not** commit `.env` files. Use the `env.*.example` templates instead.
+- Rotate any secrets if they were ever committed to git history.
 
 ---
 
@@ -95,6 +109,8 @@ Optionally add a carrier on line 5: `Men Travel`, `General Voyage`, etc.
 ## API Endpoints
 
 Base path: `/api/v1/`
+
+For the full contract and examples, see `../API.md`.
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -131,6 +147,9 @@ Migrations live in `db/migrations/`, named `YYYYMMDDHHMMSS_description.sql`, exe
 ## Scripts
 
 ```bash
+# Seed test deliveries (dev helper)
+npm run seed
+
 # Create super admin account
 node src/scripts/seed-super-admin.js
 
@@ -138,14 +157,19 @@ node src/scripts/seed-super-admin.js
 node src/scripts/reset-password.js
 
 # Test DB connection
-node src/scripts/test-db-connection.js
+npm run test:db
 ```
+
+Other useful scripts live in `src/scripts/` (examples: vendor creation, migration checks, prod migration helpers).
 
 ---
 
 ## Production
 
-Deployed on VPS via GitHub Actions CD pipeline. See `PRODUCTION_DEPLOYMENT_CHECKLIST.md` in the repo root.
+Deployed on VPS via GitHub Actions CD pipeline. See:
+- `../PRODUCTION_DEPLOYMENT_CHECKLIST.md`
+- `../Production Deployment guide.md`
+- `../PRODUCTION_TROUBLESHOOTING.md`
 
 ```bash
 npm start    # node src/index.js
