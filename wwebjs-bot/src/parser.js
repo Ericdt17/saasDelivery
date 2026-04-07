@@ -54,7 +54,9 @@ function extractPhone(text) {
   const pattern3 = /\+237(\d{8,9})/;
   const match3 = text.match(pattern3);
   if (match3) {
-    return match3[1]; // return the local number as-is (preserves 7xx, 2xx, 6xx)
+    const local = match3[1];
+    // 9 digits → keep as-is; 8 digits → prepend 6 (replace +237 with 6)
+    return local.length === 9 ? local : "6" + local;
   }
 
   // Remove all spaces and common separators (newlines too) for remaining patterns

@@ -27,8 +27,12 @@ function normalizePhoneString(raw) {
   if (digits.startsWith("237") && digits.length > 9) {
     digits = digits.slice(3);
   }
-  // Accept Cameroon mobile formats: 6xx, 7xx, 2xx (8-9 digits)
-  if (/^[627]\d{7,8}$/.test(digits)) {
+  // 8-digit local number: prepend 6 (replace +237 with 6 per Cameroon convention)
+  if (/^[627]\d{7}$/.test(digits)) {
+    digits = "6" + digits;
+  }
+  // Accept Cameroon mobile formats: 6xx (9 digits)
+  if (/^[627]\d{8}$/.test(digits)) {
     return digits;
   }
   return null;
