@@ -137,6 +137,8 @@ const api = {
   deleteVendorPushToken: queries.deleteVendorPushToken,
   deleteAllVendorPushTokens: queries.deleteAllVendorPushTokens,
   getExpoPushTokensForVendorUserIds: queries.getExpoPushTokensForVendorUserIds,
+  getWaitlistEntries: queries.getWaitlistEntries,
+  insertWaitlistEntry: queries.insertWaitlistEntry,
   close: queries.close,
   getRawDb: queries.getRawDb,
 };

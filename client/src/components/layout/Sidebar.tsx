@@ -18,6 +18,7 @@ import {
   Tags,
   Building2,
   Bell,
+  ClipboardList,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -45,6 +46,7 @@ const allNavItems: NavItem[] = [
   { title: "Tarifs", href: "/tarifs", icon: Tags },
   { title: "Agences", href: "/agences", icon: Building2, requireSuperAdmin: true },
   { title: "Rappels", href: "/rappels", icon: Bell, requireSuperAdmin: true },
+  { title: "Liste d'attente", href: "/liste-attente", icon: ClipboardList, requireSuperAdmin: true },
   { title: "Rapports", href: "/rapports", icon: FileText },
   { title: "Paramètres", href: "/parametres", icon: Settings },
 ];

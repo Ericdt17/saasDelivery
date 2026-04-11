@@ -718,14 +718,28 @@ function createPostgresQueries(pool) {
     };
   }
 
-  async function searchDeliveries(term) {
+  async function searchDeliveries(term, agencyId = null) {
     if (!term || !term.trim()) return [];
     const searchTerm = `%${term.trim()}%`;
+    if (agencyId !== null) {
+      return query(
+        `SELECT * FROM deliveries
+         WHERE agency_id = $2
+           AND (phone ILIKE $1
+             OR items ILIKE $1
+             OR customer_name ILIKE $1
+             OR quartier ILIKE $1)
+         ORDER BY created_at DESC
+         LIMIT 100`,
+        [searchTerm, agencyId]
+      );
+    }
+    // super_admin: no agency filter
     return query(
-      `SELECT * FROM deliveries 
-       WHERE phone ILIKE $1 
-       OR items ILIKE $1 
-       OR customer_name ILIKE $1 
+      `SELECT * FROM deliveries
+       WHERE phone ILIKE $1
+       OR items ILIKE $1
+       OR customer_name ILIKE $1
        OR quartier ILIKE $1
        ORDER BY created_at DESC
        LIMIT 100`,
@@ -1616,6 +1630,48 @@ function createPostgresQueries(pool) {
     return list.map((r) => r.expo_push_token).filter(Boolean);
   }
 
+  // ============================================
+  // Landing waitlist (public signups)
+  // ============================================
+
+  async function getWaitlistEntries({ page = 1, limit = 50 } = {}) {
+    const safePage = Math.max(1, parseInt(page, 10) || 1);
+    const rawLimit = parseInt(limit, 10);
+    const safeLimit = Math.min(100, Math.max(1, Number.isFinite(rawLimit) ? rawLimit : 50));
+    const offset = (safePage - 1) * safeLimit;
+
+    const countRows = await query(
+      "SELECT COUNT(*)::bigint AS total FROM waitlist_entries"
+    );
+    const countList = Array.isArray(countRows) ? countRows : countRows ? [countRows] : [];
+    const total = Number(countList[0]?.total ?? 0) || 0;
+
+    const rows = await query(
+      `SELECT id, email, phone, created_at FROM waitlist_entries ORDER BY created_at DESC LIMIT $1 OFFSET $2`,
+      [safeLimit, offset]
+    );
+    const entries = Array.isArray(rows) ? rows : rows ? [rows] : [];
+    const totalPages = safeLimit > 0 ? Math.ceil(total / safeLimit) : 0;
+
+    return {
+      entries,
+      pagination: {
+        page: safePage,
+        limit: safeLimit,
+        total,
+        totalPages,
+      },
+    };
+  }
+
+  async function insertWaitlistEntry({ email, phone }) {
+    const res = await query(
+      `INSERT INTO waitlist_entries (email, phone) VALUES ($1, $2) RETURNING id, created_at`,
+      [email, phone]
+    );
+    return res;
+  }
+
   return {
     type: "postgres",
     query,
@@ -1698,6 +1754,8 @@ function createPostgresQueries(pool) {
     deleteVendorPushToken,
     deleteAllVendorPushTokens,
     getExpoPushTokensForVendorUserIds,
+    getWaitlistEntries,
+    insertWaitlistEntry,
     close: async () => pool.end(),
     getRawDb: () => pool,
     TIME_ZONE,

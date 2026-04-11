@@ -308,7 +308,7 @@ Vendor-only endpoints for the mobile app. These routes are **additive** and do n
 All vendor routes require a vendor JWT (recommended for mobile):
 - `Authorization: Bearer <token>` (token is returned by `POST /auth/login` as `data.token`)
 
-> Vendors are scoped server-side by their `groupId` (from the token). Vendors can create and list their deliveries, but **cannot update delivery status** (status updates are done by the agency/admin dashboard).
+> Vendors are scoped server-side by their `groupId` (from the token). Vendors can create, list, and fetch a single delivery, but **cannot update delivery status** (status updates are done by the agency/admin dashboard).
 
 ### GET /vendor/me
 Return the current vendor profile.
@@ -372,6 +372,25 @@ Create a delivery as a vendor (scoped by vendor `groupId`, `agencyId` from token
 ```
 
 > The returned delivery includes **`created_by_user_id`** (the authenticated vendor’s user id) so the backend can notify that vendor when an agency updates the delivery status.
+
+---
+
+### GET /vendor/deliveries/:id
+Fetch one delivery by id. The vendor must have the same `groupId` as the delivery’s `group_id`; otherwise **403 Forbidden**.
+
+Requires `agencyId` and `groupId` on the token (same as list/create); otherwise **400** with `Invalid vendor token`.
+
+**Response 200**
+```json
+{
+  "success": true,
+  "data": { /* delivery object */ }
+}
+```
+
+**Response 404** — delivery does not exist.
+
+**Response 403** — delivery belongs to another group.
 
 ---
 
