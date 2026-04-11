@@ -40,6 +40,7 @@ function formatCurrency(amount) {
  *   allLivraisonsDetails: Array,
  *   totalFraisExpeditions: number,
  *   totalExpeditions: number,
+ *   stockLines?: Array<{ name: string, quantity: number, subtitle?: string|null }>,
  * }} data
  */
 function generateGroupPdf(doc, data) {
@@ -55,6 +56,7 @@ function generateGroupPdf(doc, data) {
     allLivraisonsDetails,
     totalFraisExpeditions,
     totalExpeditions,
+    stockLines = [],
   } = data;
 
   // ── Page constants ─────────────────────────────────────────────────────────
@@ -79,6 +81,7 @@ function generateGroupPdf(doc, data) {
   // ── Mutable state (shared across inner helpers via closure) ────────────────
   let currentY;
   let hasContentOnPage = false;
+  let pageNumber = 1;
 
   // ── Debug harness (set PDF_DEBUG=true locally to trace page creation) ──────
   const PDF_DEBUG = false;
@@ -108,6 +111,7 @@ function generateGroupPdf(doc, data) {
   // ── pageAdded listener ─────────────────────────────────────────────────────
   doc.on("pageAdded", () => {
     debugPageIndex += 1;
+    pageNumber += 1;
     const kind = isManualAddPage ? "manual" : "auto";
     const reason = isManualAddPage ? manualAddPageReason : undefined;
     lastPageAddKind = kind;
@@ -124,9 +128,10 @@ function generateGroupPdf(doc, data) {
       });
 
     drawHeader(false);
+    // drawHeader() already sets currentY to the correct safe position below the header.
+    // Never override it — for both manual and auto pages currentY is correct after drawHeader.
 
     if (!isManualAddPage) {
-      currentY = doc.y || 50;
       hasContentOnPage = false;
       if (footerInProgress) suppressNextManualAddForResume = true;
     }
@@ -266,30 +271,13 @@ function generateGroupPdf(doc, data) {
       continued: false,
     });
 
-    const pageNumber = docInstance.page?.number;
-    if (pageNumber) {
-      docInstance.text(`Page ${pageNumber}`, leftX, textY, {
-        width: usableWidth,
-        align: "right",
-        lineBreak: false,
-        ellipsis: true,
-        continued: false,
-      });
-    }
-
-    const contactInfo = [];
-    if (agencyInfo.email) contactInfo.push(`Email: ${agencyInfo.email}`);
-    if (agencyInfo.phone) contactInfo.push(`Téléphone: ${agencyInfo.phone}`);
-
-    if (contactInfo.length > 0) {
-      docInstance.text(contactInfo.join(" | "), leftX, textY + 12, {
-        width: usableWidth,
-        align: "left",
-        lineBreak: false,
-        ellipsis: true,
-        continued: false,
-      });
-    }
+    docInstance.text(`Page ${pageNumber}`, leftX, textY, {
+      width: usableWidth,
+      align: "right",
+      lineBreak: false,
+      ellipsis: true,
+      continued: false,
+    });
 
     docInstance.fillColor("#000000");
     footerInProgress = false;
@@ -303,11 +291,11 @@ function generateGroupPdf(doc, data) {
       if (hasContentOnPage && currentY >= MIN_CONTENT_HEIGHT) {
         drawFooter(doc);
         addPage("ensureSpace");
-        currentY = 50;
+        // currentY is already set correctly by drawHeader() inside the pageAdded listener
         hasContentOnPage = false;
         if (onNewPage) onNewPage();
       } else {
-        currentY = 50;
+        // Not enough content for a footer — currentY from drawHeader() is already correct
         hasContentOnPage = false;
         if (onNewPage) onNewPage();
       }
@@ -642,6 +630,95 @@ function generateGroupPdf(doc, data) {
     currentY += 15;
   }
 
+  // ── Section Stock (optional, manual snapshot) ─────────────────────────────
+  if (Array.isArray(stockLines) && stockLines.length > 0) {
+    const stockRowHeight = 16;
+    ensureSpace(50 + stockLines.length * stockRowHeight);
+
+    currentY += 12;
+
+    const stockTitle = "STOCK (ÉTAT AU MOMENT DU RAPPORT)";
+    const stockTitleWidth = doc.widthOfString(stockTitle, {
+      fontSize: 14,
+      font: "Helvetica-Bold",
+    });
+
+    doc.fontSize(14).font("Helvetica-Bold").fillColor("#1a1a1a");
+    doc.text(stockTitle, leftColumnX, currentY);
+
+    doc
+      .moveTo(leftColumnX, currentY + 18)
+      .lineTo(leftColumnX + stockTitleWidth, currentY + 18)
+      .lineWidth(0.5)
+      .strokeColor("#cccccc")
+      .stroke()
+      .strokeColor("#000000")
+      .lineWidth(1);
+
+    currentY += 25;
+    markContent("stock:title");
+
+    const stCol1 = leftColumnX;
+    const stCol2 = stCol1 + 350;
+    const stTableTop = currentY;
+
+    doc
+      .rect(stCol1 - 5, stTableTop - 5, tableRight - stCol1 + 10, 18)
+      .fillColor("#e8e8e8")
+      .fill()
+      .fillColor("#000000");
+
+    doc.fontSize(8).font("Helvetica-Bold").fillColor("#1a1a1a");
+    doc.text("Produit", stCol1 + 3, stTableTop + 1, { width: 340, ellipsis: true });
+    doc.text("Qté restante", stCol2, stTableTop + 1, { width: tableRight - stCol2, align: "right" });
+    doc.fillColor("#000000");
+
+    doc
+      .rect(stCol1 - 5, stTableTop - 5, tableRight - stCol1 + 10, 18)
+      .lineWidth(1)
+      .strokeColor("#333333")
+      .stroke()
+      .strokeColor("#000000");
+
+    currentY = stTableTop + 18;
+    doc.fontSize(8).font("Helvetica");
+
+    let stIdx = 0;
+    stockLines.forEach((row) => {
+      ensureSpace(stockRowHeight, () => {
+        stIdx = 0;
+      });
+
+      if (stIdx % 2 === 0) {
+        doc
+          .rect(stCol1 - 5, currentY - 2, tableRight - stCol1 + 10, stockRowHeight)
+          .fillColor("#f8f8f8")
+          .fill()
+          .fillColor("#000000");
+      }
+
+      doc.fillColor("#1a1a1a");
+      doc.text(row.name || "", stCol1 + 3, currentY + 2, { width: 340, ellipsis: true });
+      doc.text(String(row.quantity ?? 0), stCol2, currentY + 2, { width: tableRight - stCol2, align: "right" });
+      doc.fillColor("#000000");
+
+      doc
+        .moveTo(stCol1 - 5, currentY + stockRowHeight - 2)
+        .lineTo(tableRight + 5, currentY + stockRowHeight - 2)
+        .lineWidth(0.5)
+        .strokeColor("#e0e0e0")
+        .stroke()
+        .strokeColor("#000000")
+        .lineWidth(1);
+
+      currentY += stockRowHeight;
+      markContent("stock:row");
+      stIdx++;
+    });
+
+    currentY += 8;
+  }
+
   // ── Section 3: Résumé ──────────────────────────────────────────────────────
   const resumeLineCount = 3 + (totalExpeditions > 0 ? 1 : 0);
   const spaceForResume = 25 + 15 + 28 + 18 * resumeLineCount;
@@ -651,10 +728,10 @@ function generateGroupPdf(doc, data) {
     if (hasContentOnPage && currentY >= MIN_CONTENT_HEIGHT_FOR_FOOTER) {
       drawFooter(doc);
       addPage("beforeResume");
-      currentY = 50;
+      // currentY is already set correctly by drawHeader() inside the pageAdded listener
       hasContentOnPage = false;
     } else {
-      currentY = 50;
+      // currentY from drawHeader() is already correct
       hasContentOnPage = false;
     }
   }
