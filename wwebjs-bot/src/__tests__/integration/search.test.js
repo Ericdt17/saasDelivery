@@ -1,6 +1,7 @@
 "use strict";
 
 const request = require("supertest");
+const { createTestToken } = require("../helpers/createAuthToken");
 
 jest.mock("../../db", () => ({
   adapter: { query: jest.fn(), type: "sqlite" },
@@ -35,13 +36,19 @@ jest.mock("../../db", () => ({
 const { searchDeliveries } = require("../../db");
 const app = require("../../api/server");
 
+const token = createTestToken({ userId: 1, agencyId: 1 });
+
 describe("GET /api/v1/search", () => {
   it("returns 400 when q is missing or empty", async () => {
-    const resNoParam = await request(app).get("/api/v1/search");
+    const resNoParam = await request(app)
+      .get("/api/v1/search")
+      .set("Authorization", `Bearer ${token}`);
     expect(resNoParam.status).toBe(400);
     expect(resNoParam.body.success).toBe(false);
 
-    const resBlank = await request(app).get("/api/v1/search?q=   ");
+    const resBlank = await request(app)
+      .get("/api/v1/search?q=   ")
+      .set("Authorization", `Bearer ${token}`);
     expect(resBlank.status).toBe(400);
   });
 
@@ -49,12 +56,14 @@ describe("GET /api/v1/search", () => {
     const rows = [{ id: 1, phone: "0612345678" }];
     searchDeliveries.mockResolvedValueOnce(rows);
 
-    const res = await request(app).get("/api/v1/search?q=612");
+    const res = await request(app)
+      .get("/api/v1/search?q=612")
+      .set("Authorization", `Bearer ${token}`);
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     expect(res.body.data).toEqual(rows);
     expect(res.body.count).toBe(1);
     expect(res.body.query).toBe("612");
-    expect(searchDeliveries).toHaveBeenCalledWith("612");
+    expect(searchDeliveries).toHaveBeenCalledWith("612", 1);
   });
 });
