@@ -1,5 +1,43 @@
 # SaaS Delivery (LivSight) — Repository Documentation
 
+## Start here (junior dev)
+
+If you’re new to the codebase, use this section to get productive fast.
+
+### Quick run (local dev)
+
+- **Backend API (recommended for dashboard work)**:
+
+```bash
+cd saasDelivery/wwebjs-bot
+npm install
+cp env.local.postgres.example .env   # or env.local.sqlite.example
+npm run migrate
+npm run api:dev
+```
+
+- **Web dashboard**:
+
+```bash
+cd saasDelivery/client
+npm install
+cp .env.example .env.local
+npm run dev
+```
+
+### “Where do I change X?”
+
+- **Sidebar / routes**: `client/src/components/layout/Sidebar.tsx` and `client/src/App.tsx`
+- **Prestataire list** (UI label “Prestataire” = backend `groups`): `client/src/pages/operations/Groups.tsx`
+- **Prestataire details**: `client/src/pages/operations/GroupDetail.tsx`
+- **API routes**: `wwebjs-bot/src/api/routes/*`
+- **DB queries**: `wwebjs-bot/src/db/*` (Postgres queries live in `src/db/postgres-queries.js`)
+
+### Reference docs (don’t reinvent)
+
+- **API reference**: `API.md`
+- **Deployment**: `Production Deployment guide.md` and `PRODUCTION_DEPLOYMENT_CHECKLIST.md`
+
 ## Overview
 
 This repository implements a multi-agency delivery management system with:

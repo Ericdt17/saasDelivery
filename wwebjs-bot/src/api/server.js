@@ -17,6 +17,7 @@ const reminderContactsRouter = require("./routes/reminder-contacts");
 const remindersRouter = require("./routes/reminders");
 const vendorsRouter = require("./routes/vendors");
 const vendorRouter = require("./routes/vendor");
+const waitlistRouter = require("./routes/waitlist");
 const errorHandler = require("./middleware/errorHandler");
 
 const app = express();
@@ -56,10 +57,10 @@ const corsOptions = {
         const normalizeUrl = (url) => url.trim().replace(/\/+$/, "");
         const normalizedOrigin = normalizeUrl(origin);
         
-        // Check exact match or if origin starts with any allowed origin
+        // Exact match only — startsWith is unsafe (allows app.example.com.evil.com)
         const isAllowed = allowedOrigins.some((allowed) => {
           const allowedClean = normalizeUrl(allowed);
-          return normalizedOrigin === allowedClean || normalizedOrigin.startsWith(allowedClean);
+          return normalizedOrigin === allowedClean;
         });
 
         if (isAllowed) {
@@ -141,6 +142,7 @@ app.use("/api/v1/reminder-contacts", reminderContactsRouter);
 app.use("/api/v1/reminders", remindersRouter);
 app.use("/api/v1/vendors", vendorsRouter);
 app.use("/api/v1/vendor", vendorRouter);
+app.use("/api/v1/waitlist", waitlistRouter);
 
 // Health check endpoint
 app.get("/api/v1/health", async (req, res) => {

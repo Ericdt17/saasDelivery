@@ -6,16 +6,14 @@
 const jwt = require("jsonwebtoken");
 const config = require("../config");
 
-// JWT secret from environment or use a default (NOT recommended for production)
-const JWT_SECRET = process.env.JWT_SECRET || "change-this-secret-in-production";
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "24h"; // 24 hours default
-
-// Validate JWT_SECRET in production — refuse to start with the insecure default
-if (process.env.NODE_ENV === "production" && (!process.env.JWT_SECRET || JWT_SECRET === "change-this-secret-in-production")) {
+// JWT secret — must always be explicitly set. No insecure default.
+if (!process.env.JWT_SECRET) {
   const logger = require("../logger");
-  logger.fatal("JWT_SECRET is not set or is using the default value in production — refusing to start");
+  logger.fatal("JWT_SECRET environment variable is not set — refusing to start. Set JWT_SECRET to a long random string.");
   process.exit(1);
 }
+const JWT_SECRET = process.env.JWT_SECRET;
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "24h";
 
 /**
  * Generate a JWT token for a user
@@ -35,11 +33,6 @@ function generateToken(payload) {
 
     if (!payload.role) {
       throw new Error("Invalid token payload: role is required");
-    }
-
-    // Validate JWT_SECRET
-    if (!JWT_SECRET || JWT_SECRET === "change-this-secret-in-production") {
-      throw new Error("JWT_SECRET is not configured. Please set JWT_SECRET environment variable.");
     }
 
     const token = jwt.sign(

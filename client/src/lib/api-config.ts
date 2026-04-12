@@ -20,4 +20,5 @@ export const API_ENDPOINTS = {
   SEARCH: "/api/v1/search",
   REMINDER_CONTACTS: "/api/v1/reminder-contacts",
   REMINDERS: "/api/v1/reminders",
+  WAITLIST: "/api/v1/waitlist",
 };

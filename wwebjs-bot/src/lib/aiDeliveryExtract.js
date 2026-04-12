@@ -12,7 +12,8 @@ Return a single JSON object with keys: phone (string, 9 digits starting with 6, 
 Rules:
 - amount is the price the customer pays for the goods (Prix, Montant, Total). If the user wrote 15k or 15K, amount is 15000.
 - amount must NOT include or subtract delivery/shipping/livraison fees — ignore lines labelled "Livraison", "Frais", "Transport", "Frais de livraison".
-- phone must be Cameroon mobile format 6XXXXXXXX (9 digits). Strip country code (+237) if present.
+- phone must be a Cameroon number: 8-9 digits starting with 6, 7, or 2. Strip country code (+237) if present.
+- product must contain only the item description (e.g. "3 bee venom", "Pack homme"). Do NOT include product/order reference codes (e.g. P1718, REF-001, CMD-42) or time markers (e.g. 13h, 08h30) in the product field — ignore them entirely.
 - If a field cannot be determined, use empty string for phone/location/product or 0 for amount only when no amount exists.
 - Respond with JSON only, no markdown.`;
 
@@ -21,12 +22,18 @@ Rules:
  */
 function normalizePhoneString(raw) {
   if (raw == null || typeof raw !== "string") return null;
-  const digits = raw.replace(/\D/g, "");
-  if (digits.length >= 9 && digits.startsWith("6")) {
-    return digits.slice(0, 9);
+  let digits = raw.replace(/\D/g, "");
+  // Strip Cameroon country code if present (+237 or 237 prefix)
+  if (digits.startsWith("237") && digits.length > 9) {
+    digits = digits.slice(3);
   }
-  if (digits.length === 8 && digits.startsWith("6")) {
-    return digits.padEnd(9, "0");
+  // 8-digit local number: prepend 6 (replace +237 with 6 per Cameroon convention)
+  if (/^[627]\d{7}$/.test(digits)) {
+    digits = "6" + digits;
+  }
+  // Accept Cameroon mobile formats: 6xx (9 digits)
+  if (/^[627]\d{8}$/.test(digits)) {
+    return digits;
   }
   return null;
 }
@@ -69,7 +76,7 @@ function validateAndNormalizeAiDelivery(modelObj, originalText) {
     typeof modelObj.phone === "string" ? modelObj.phone : String(modelObj.phone || "")
   );
   const phone = phoneFromText || phoneFromModel;
-  if (!phone || !/^6\d{8}$/.test(phone)) return null;
+  if (!phone || !/^[627]\d{7,8}$/.test(phone)) return null;
 
   const amountFromText = extractAmount(text);
   const amountFromModel = coerceAmountFromModel(modelObj.amount);

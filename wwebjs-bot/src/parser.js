@@ -49,36 +49,38 @@ function extractPhone(text) {
     }
   }
 
-  // Remove all spaces and common separators
+  // Pattern 3 first: +237 followed by 8-9 digits — run on raw text (before stripping
+  // newlines) so adjacent lines like "3 bee venom" don't bleed into the digit match.
+  const pattern3 = /\+237(\d{8,9})/;
+  const match3 = text.match(pattern3);
+  if (match3) {
+    const local = match3[1];
+    // 9 digits → keep as-is; 8 digits → prepend 6 (replace +237 with 6)
+    return local.length === 9 ? local : "6" + local;
+  }
+
+  // Remove all spaces and common separators (newlines too) for remaining patterns
   const cleaned = text.replace(/[\s\-\.]/g, "");
 
-  // Pattern 1: 6 followed by 8 digits (Cameroon mobile: 6xxxxxxxx)
-  const pattern1 = /6\d{8}/;
+  // Pattern 1: Cameroon mobile starting with 6, 7, or 2 (9 digits)
+  const pattern1 = /[627]\d{8}/;
   const match1 = cleaned.match(pattern1);
   if (match1) {
     return match1[0];
   }
 
-  // Pattern 2: 6xx followed by digits (handles 6xx345678 format)
-  const pattern2 = /6[x\d]{7,8}/;
+  // Pattern 2: 6/7/2 followed by digits with x placeholders
+  const pattern2 = /[627][x\d]{7,8}/;
   const match2 = cleaned.match(pattern2);
   if (match2) {
-    // Replace x with 0 for matching, but keep original format
     return match2[0].replace(/x/gi, "0");
   }
 
-  // Pattern 3: +237 followed by 9 digits
-  const pattern3 = /\+237\d{9}/;
-  const match3 = cleaned.match(pattern3);
-  if (match3) {
-    return match3[0].replace("+237", "6");
-  }
-
-  // Pattern 4: Just numbers (6xxxxxxxx format)
+  // Pattern 4: Just numbers — 9-digit starting with 6, 7, or 2
   const numbers = cleaned.match(/\d+/g);
   if (numbers) {
     for (const num of numbers) {
-      if (num.startsWith("6") && num.length === 9) {
+      if (/^[627]\d{8}$/.test(num)) {
         return num;
       }
     }
@@ -135,10 +137,8 @@ function extractAmount(text) {
   if (numbers) {
     const amounts = numbers
       .map((n) => parseInt(n))
-      // Filter local Cameroon phone numbers (9 digits starting with 6)
-      .filter(
-        (n) => !(n.toString().startsWith("6") && n.toString().length === 9)
-      )
+      // Filter local Cameroon phone numbers (9 digits starting with 6, 7, or 2)
+      .filter((n) => !/^[627]\d{8}$/.test(n.toString()))
       // Filter international phone numbers and country-code prefixes (10+ digits)
       .filter((n) => n.toString().length <= 9)
       .filter((n) => n > 100); // Amounts should be > 100 FCFA
@@ -258,7 +258,7 @@ function parseAlternativeFormat(text) {
 
   // Check if first line looks like a quartier (not a number, not a phone)
   const isQuartier =
-    !/^\d+$/.test(quartier) && !/^6\d{8,9}$/.test(quartier.replace(/\s/g, ""));
+    !/^\d+$/.test(quartier) && !/^[627]\d{7,8}$/.test(quartier.replace(/\s/g, ""));
   if (!isQuartier) {
     return {
       valid: false,
@@ -270,25 +270,23 @@ function parseAlternativeFormat(text) {
   const phoneLine = lines[lines.length - 1];
   let phone = phoneLine.replace(/[\s\-\.]/g, ""); // Remove spaces and separators
 
-  // Check if it's a valid phone number
-  if (!phone.startsWith("6") || phone.length < 8) {
+  // Check if it's a valid phone number (6, 7, or 2 start)
+  if (!/^[627]/.test(phone) || phone.length < 8) {
     return {
       valid: false,
       error: `Format alternatif: La dernière ligne devrait être un numéro de téléphone, reçu: "${phoneLine}"`,
     };
   }
 
-  // Normalize phone (replace x with 0, pad to 9 digits if needed)
+  // Normalize phone (replace x with 0)
   phone = phone.replace(/x/gi, "0");
-  if (phone.length !== 9) {
-    if (phone.length === 8) {
-      phone = phone.padEnd(9, "0");
-    } else {
-      return {
-        valid: false,
-        error: `Format alternatif: Numéro invalide: "${phoneLine}" - Doit avoir 8-9 chiffres`,
-      };
-    }
+  if (phone.length === 8) {
+    phone = "6" + phone; // prepend 6 for 8-digit local numbers
+  } else if (phone.length !== 9) {
+    return {
+      valid: false,
+      error: `Format alternatif: Numéro invalide: "${phoneLine}" - Doit avoir 8-9 chiffres`,
+    };
   }
 
   // Second to last line: Amount
@@ -375,19 +373,24 @@ function parseCompactStructuredFormat(text) {
 
   // Line 1: Phone number
   const phoneLine = lines[0];
-  let phone = phoneLine.replace(/[^\dx]/gi, ""); // Keep only digits and x
-  if (!phone.startsWith("6")) {
+  let phone = phoneLine.replace(/[^\dx+]/gi, ""); // Keep only digits, x, and +
+  // Strip +237 country code if present
+  if (phone.startsWith("+237") || phone.startsWith("237")) {
+    phone = phone.replace(/^\+?237/, "");
+  }
+  phone = phone.replace(/x/gi, "0");
+  if (!/^[627]/.test(phone)) {
     return {
       valid: false,
-      error: `Numéro invalide: "${phoneLine}" - Doit commencer par 6`,
+      error: `Numéro invalide: "${phoneLine}" - Doit commencer par 6, 7 ou 2`,
     };
   }
-  // Normalize phone (replace x with 0 for storage, but keep original for display)
-  phone = phone.replace(/x/gi, "0");
-  if (phone.length !== 9) {
+  if (phone.length === 8) {
+    phone = "6" + phone; // prepend 6 for 8-digit local numbers
+  } else if (phone.length !== 9) {
     return {
       valid: false,
-      error: `Numéro invalide: "${phoneLine}" - Doit avoir 9 chiffres`,
+      error: `Numéro invalide: "${phoneLine}" - Doit avoir 8-9 chiffres`,
     };
   }
 
@@ -476,8 +479,8 @@ function parseDeliveryMessage(text) {
     // - Last line looks like a phone number
     const firstLineIsQuartier =
       !/^\d+$/.test(firstLine) &&
-      !/^6\d{8,9}$/.test(firstLine.replace(/\s/g, ""));
-    const lastLineIsPhone = /^6[\d\sx]{7,10}$/i.test(
+      !/^[627]\d{7,8}$/.test(firstLine.replace(/\s/g, ""));
+    const lastLineIsPhone = /^[627][\d\sx]{7,10}$/i.test(
       lastLine.replace(/[\s\-\.]/g, "")
     );
 

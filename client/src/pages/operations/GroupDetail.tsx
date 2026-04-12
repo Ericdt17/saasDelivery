@@ -27,6 +27,7 @@ import {
   ArrowLeft,
   CircleAlert,
   FileText,
+  Minus,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { StatCard } from "@/components/ui/stat-card";
@@ -46,9 +47,11 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -76,7 +79,8 @@ import { ApiError } from "@/types/api";
 import { AppErrorExperience } from "@/components/errors/AppErrorExperience";
 import { getGroupById } from "@/services/groups";
 import { getDailyStats } from "@/services/stats";
-import { buildApiUrl, API_ENDPOINTS } from "@/lib/api-config";
+import { API_ENDPOINTS } from "@/lib/api-config";
+import { postGroupPdfBlob, type ReportStockLine } from "@/services/reports";
 import { getDeliveries, type GetDeliveriesParams, type CreateDeliveryRequest, updateDelivery } from "@/services/deliveries";
 import { apiDelete } from "@/services/api";
 import { searchDeliveries } from "@/services/search";
@@ -130,6 +134,12 @@ export default function GroupDetail() {
   const [isPdfPreviewOpen, setIsPdfPreviewOpen] = useState(false);
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
   const [isLoadingPdf, setIsLoadingPdf] = useState(false);
+  const [isStockModalOpen, setIsStockModalOpen] = useState(false);
+  const [pdfModalAction, setPdfModalAction] = useState<"preview" | "download" | null>(null);
+  const [stockRows, setStockRows] = useState<{ name: string; quantity: string }[]>([
+    { name: "", quantity: "" },
+  ]);
+  const [lastReportStock, setLastReportStock] = useState<ReportStockLine[]>([]);
   const [isFeeConfirmOpen, setIsFeeConfirmOpen] = useState(false);
   const [pendingFee, setPendingFee] = useState<{ delivery: FrontendDelivery; fee: number } | null>(null);
 
@@ -351,6 +361,21 @@ export default function GroupDetail() {
       montantNetEncaisse: 0,
     };
   }, [isSingleDay, dailyStats, deliveriesData, expeditionStats]);
+
+  // Unique product names from deliveries in the current date range
+  const suggestedProducts = useMemo(() => {
+    const deliveries = deliveriesData?.deliveries ?? [];
+    const seen = new Set<string>();
+    deliveries.forEach((d) => {
+      if (!d.produits) return;
+      d.produits.split(/[,\n]+/).forEach((part) => {
+        // Strip leading quantity (e.g. "3 " in "3 packs eau")
+        const name = part.replace(/^\d+\s+/, "").trim();
+        if (name) seen.add(name);
+      });
+    });
+    return Array.from(seen);
+  }, [deliveriesData]);
 
   // Get unique quartiers
   const availableQuartiers = useMemo(() => {
@@ -606,26 +631,85 @@ export default function GroupDetail() {
     );
   }
 
-  const buildPdfUrl = () => {
-    const params = new URLSearchParams();
-    if (dateRange.startDate) params.append("startDate", dateRange.startDate);
-    if (dateRange.endDate) params.append("endDate", dateRange.endDate);
-    return buildApiUrl(`/api/v1/reports/groups/${groupId}/pdf${params.toString() ? `?${params.toString()}` : ""}`);
+  const parseStockRowsForApi = (): ReportStockLine[] => {
+    return stockRows
+      .filter((r) => r.name.trim().length > 0)
+      .map((r) => ({
+        name: r.name.trim(),
+        quantity: Math.max(0, parseInt(String(r.quantity).replace(/\D/g, ""), 10) || 0),
+        subtitle: null,
+      }));
   };
 
-  const handlePdfPreview = async () => {
+  const openPdfStockModal = (action: "preview" | "download") => {
+    if (!groupId) return;
+    setPdfModalAction(action);
+    setStockRows(
+      lastReportStock.length > 0
+        ? lastReportStock.map((s) => ({ name: s.name, quantity: String(s.quantity) }))
+        : [{ name: "", quantity: "" }]
+    );
+    setIsStockModalOpen(true);
+  };
+
+  const handleConfirmPdfStockModal = async () => {
+    if (!groupId || !pdfModalAction) return;
+    const action = pdfModalAction;
+    const stock = parseStockRowsForApi();
     setIsLoadingPdf(true);
     try {
-      const response = await fetch(buildPdfUrl(), { credentials: "include" });
-      if (!response.ok) throw new Error(`Erreur ${response.status}`);
-      const blob = await response.blob();
-      // Revoke previous URL to avoid memory leaks
-      if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl);
-      const objectUrl = URL.createObjectURL(blob);
-      setPdfPreviewUrl(objectUrl);
-      setIsPdfPreviewOpen(true);
+      const { blob, filename } = await postGroupPdfBlob(groupId, {
+        startDate: dateRange.startDate,
+        endDate: dateRange.endDate,
+        stock,
+      });
+      setLastReportStock(stock);
+      setIsStockModalOpen(false);
+      setPdfModalAction(null);
+      if (action === "preview") {
+        if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl);
+        setPdfPreviewUrl(URL.createObjectURL(blob));
+        setIsPdfPreviewOpen(true);
+      } else {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename || `rapport-${group?.name?.replace(/[^\w.-]+/g, "_") || "prestataire"}.pdf`;
+        a.rel = "noopener";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        toast.success("Téléchargement lancé");
+      }
     } catch (err) {
-      toast.error("Impossible de charger le rapport PDF");
+      toast.error(err instanceof Error ? err.message : "Impossible de générer le rapport PDF");
+    } finally {
+      setIsLoadingPdf(false);
+    }
+  };
+
+  const handleDownloadPdfFromPreview = async () => {
+    if (!groupId) return;
+    setIsLoadingPdf(true);
+    try {
+      const { blob, filename } = await postGroupPdfBlob(groupId, {
+        startDate: dateRange.startDate,
+        endDate: dateRange.endDate,
+        stock: lastReportStock,
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename || `rapport-${group?.name?.replace(/[^\w.-]+/g, "_") || "prestataire"}.pdf`;
+      a.rel = "noopener";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.success("Téléchargement lancé");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Impossible de télécharger le PDF");
     } finally {
       setIsLoadingPdf(false);
     }
@@ -664,7 +748,7 @@ export default function GroupDetail() {
             <Button
               variant="outline"
               size="sm"
-              onClick={handlePdfPreview}
+              onClick={() => openPdfStockModal("preview")}
               disabled={isLoadingPdf}
               className="gap-1 sm:gap-2"
             >
@@ -678,7 +762,8 @@ export default function GroupDetail() {
             <Button
               variant="default"
               size="sm"
-              onClick={() => window.open(buildPdfUrl(), "_blank")}
+              onClick={() => openPdfStockModal("download")}
+              disabled={isLoadingPdf}
               className="gap-1 sm:gap-2"
             >
               <Download className="w-4 h-4" />
@@ -1245,6 +1330,136 @@ export default function GroupDetail() {
         </AlertDialogContent>
       </AlertDialog>
 
+      {/* Stock modal */}
+      <Dialog
+        open={isStockModalOpen}
+        onOpenChange={(open) => {
+          if (!open && !isLoadingPdf) {
+            setIsStockModalOpen(false);
+            setPdfModalAction(null);
+          }
+        }}
+      >
+        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Stock au moment du rapport</DialogTitle>
+            <DialogDescription>
+              Sélectionnez les produits livrés ce jour et indiquez les quantités restantes.
+            </DialogDescription>
+          </DialogHeader>
+          {suggestedProducts.length > 0 && (
+            <div className="space-y-1.5 pb-1">
+              <p className="text-xs text-muted-foreground font-medium">Produits du jour</p>
+              <div className="flex flex-wrap gap-1.5">
+                {suggestedProducts.map((product) => {
+                  const alreadyAdded = stockRows.some(
+                    (r) => r.name.trim().toLowerCase() === product.toLowerCase()
+                  );
+                  return (
+                    <button
+                      key={product}
+                      type="button"
+                      onClick={() => {
+                        if (alreadyAdded) return;
+                        // Fill first empty row, or append a new one
+                        const emptyIdx = stockRows.findIndex((r) => r.name.trim() === "");
+                        if (emptyIdx !== -1) {
+                          const next = [...stockRows];
+                          next[emptyIdx] = { ...next[emptyIdx], name: product };
+                          setStockRows(next);
+                        } else {
+                          setStockRows((rows) => [...rows, { name: product, quantity: "" }]);
+                        }
+                      }}
+                      className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${
+                        alreadyAdded
+                          ? "bg-primary text-primary-foreground border-primary cursor-default"
+                          : "bg-background border-border hover:bg-accent hover:text-accent-foreground cursor-pointer"
+                      }`}
+                    >
+                      {product}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          <div className="space-y-2 py-2">
+            {stockRows.map((row, index) => (
+              <div key={index} className="flex items-end gap-2">
+                <div className="flex-1 space-y-1">
+                  <Label htmlFor={`stock-name-${index}`}>Produit</Label>
+                  <Input
+                    id={`stock-name-${index}`}
+                    value={row.name}
+                    onChange={(e) => {
+                      const next = [...stockRows];
+                      next[index] = { ...next[index], name: e.target.value };
+                      setStockRows(next);
+                    }}
+                    placeholder="Ex: Pack eau 1,5L"
+                  />
+                </div>
+                <div className="w-24 space-y-1">
+                  <Label htmlFor={`stock-qty-${index}`}>Qté</Label>
+                  <Input
+                    id={`stock-qty-${index}`}
+                    inputMode="numeric"
+                    value={row.quantity}
+                    onChange={(e) => {
+                      const next = [...stockRows];
+                      next[index] = { ...next[index], quantity: e.target.value };
+                      setStockRows(next);
+                    }}
+                    placeholder="0"
+                  />
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="shrink-0 text-muted-foreground mb-0.5"
+                  disabled={stockRows.length <= 1}
+                  onClick={() => setStockRows((rows) => rows.filter((_, i) => i !== index))}
+                  aria-label="Retirer la ligne"
+                >
+                  <Minus className="w-4 h-4" />
+                </Button>
+              </div>
+            ))}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="w-full"
+              onClick={() => setStockRows((rows) => [...rows, { name: "", quantity: "" }])}
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Ajouter une ligne
+            </Button>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => { setIsStockModalOpen(false); setPdfModalAction(null); }}
+              disabled={isLoadingPdf}
+            >
+              Annuler
+            </Button>
+            <Button
+              type="button"
+              onClick={() => void handleConfirmPdfStockModal()}
+              disabled={isLoadingPdf}
+              className="gap-2"
+            >
+              {isLoadingPdf ? <RefreshCw className="w-4 h-4 animate-spin" /> : null}
+              {pdfModalAction === "download" ? "Télécharger" : "Prévisualiser"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Fee Confirmation Dialog */}
       <AlertDialog open={isFeeConfirmOpen} onOpenChange={setIsFeeConfirmOpen}>
         <AlertDialogContent>
@@ -1287,9 +1502,14 @@ export default function GroupDetail() {
                 variant="outline"
                 size="sm"
                 className="gap-2 mr-8"
-                onClick={() => window.open(buildPdfUrl(), "_blank")}
+                onClick={() => void handleDownloadPdfFromPreview()}
+                disabled={isLoadingPdf}
               >
-                <Download className="w-4 h-4" />
+                {isLoadingPdf ? (
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Download className="w-4 h-4" />
+                )}
                 Télécharger
               </Button>
             </div>

@@ -3,12 +3,13 @@ const { z } = require("zod");
 const router = express.Router();
 
 const { authenticateToken, requireVendor } = require("../middleware/auth");
+const logger = require("../../logger");
+const { createDeliveriesService } = require("../../services/deliveriesService");
+const deliveriesRepo = require("../../repositories/deliveriesRepo");
+const tariffsRepo = require("../../repositories/tariffsRepo");
+const pushPort = require("../../ports/pushNotifications");
 const {
   adapter,
-  getAllDeliveries,
-  getDeliveryById,
-  createDelivery,
-  getTariffByAgencyAndQuartier,
   getStockItems,
   createStockItem,
   updateStockItemQuantity,
@@ -18,10 +19,13 @@ const {
   deleteVendorPushToken,
   deleteAllVendorPushTokens,
 } = require("../../db");
-const {
-  computeTariffPending,
-  computeAmountPaidAfterFee,
-} = require("../../lib/deliveryCalculations");
+
+const deliveriesService = createDeliveriesService({
+  deliveriesRepo,
+  tariffsRepo,
+  pushPort,
+  logger,
+});
 
 const VALID_STATUSES = [
   "pending",
@@ -307,18 +311,6 @@ router.delete("/push-tokens", async (req, res, next) => {
 // GET /api/v1/vendor/deliveries — vendor-scoped list
 router.get("/deliveries", async (req, res, next) => {
   try {
-    const {
-      page = 1,
-      limit = 50,
-      status,
-      date,
-      phone,
-      startDate,
-      endDate,
-      sortBy = "created_at",
-      sortOrder = "DESC",
-    } = req.query;
-
     if (!req.user.agencyId || !req.user.groupId) {
       return res.status(400).json({
         success: false,
@@ -327,18 +319,9 @@ router.get("/deliveries", async (req, res, next) => {
       });
     }
 
-    const result = await getAllDeliveries({
-      page: parseInt(page),
-      limit: parseInt(limit),
-      status,
-      date,
-      phone,
-      startDate,
-      endDate,
-      sortBy,
-      sortOrder,
-      agency_id: req.user.agencyId,
-      group_id: req.user.groupId,
+    const result = await deliveriesService.listDeliveries({
+      user: req.user,
+      query: req.query,
     });
 
     res.json({
@@ -371,99 +354,10 @@ router.post("/deliveries", async (req, res, next) => {
         message: firstIssue?.message || "Invalid delivery data",
       });
     }
-
-    const {
-      phone,
-      customer_name,
-      items,
-      amount_due,
-      amount_paid = 0,
-      status = "pending",
-      quartier,
-      notes,
-      carrier,
-      delivery_fee,
-    } = parsed.data;
-
-    const agencyId = req.user.agencyId;
-    const groupId = req.user.groupId;
-
-    const parsedAmountDue = parseFloat(amount_due);
-    const parsedAmountPaid = parseFloat(amount_paid) || 0;
-    const parsedDeliveryFee =
-      delivery_fee !== undefined && delivery_fee !== null
-        ? parseFloat(delivery_fee)
-        : undefined;
-    const parsedStatus = status || "pending";
-
-    let finalDeliveryFee = parsedDeliveryFee;
-    let finalAmountPaid = parsedAmountPaid;
-
-    if (parsedDeliveryFee === undefined || parsedDeliveryFee === null) {
-      if (parsedStatus === "pickup") {
-        finalDeliveryFee = 1000;
-        if (parsedAmountPaid === 0 && parsedAmountDue > 0) {
-          finalAmountPaid = computeAmountPaidAfterFee(parsedAmountDue, finalDeliveryFee);
-        }
-      } else if (parsedStatus === "present_ne_decroche_zone1") {
-        finalDeliveryFee = 500;
-        finalAmountPaid = 0;
-      } else if (parsedStatus === "present_ne_decroche_zone2") {
-        finalDeliveryFee = 1000;
-        finalAmountPaid = 0;
-      } else if (parsedStatus === "delivered" || parsedStatus === "client_absent") {
-        if (quartier) {
-          try {
-            const tariffResult = await getTariffByAgencyAndQuartier(agencyId, quartier);
-            const tariff = Array.isArray(tariffResult) ? tariffResult[0] : tariffResult;
-            if (tariff && tariff.tarif_amount) {
-              finalDeliveryFee = parseFloat(tariff.tarif_amount) || 0;
-              if (parsedStatus === "delivered") {
-                if (parsedAmountPaid === 0 && parsedAmountDue > 0) {
-                  finalAmountPaid = computeAmountPaidAfterFee(parsedAmountDue, finalDeliveryFee);
-                }
-              } else if (parsedStatus === "client_absent") {
-                finalAmountPaid = 0;
-              }
-            }
-          } catch {
-            // Keep defaults when tariff lookup fails
-          }
-        }
-      }
-    } else {
-      if (
-        parsedStatus === "client_absent" ||
-        parsedStatus === "present_ne_decroche_zone1" ||
-        parsedStatus === "present_ne_decroche_zone2"
-      ) {
-        finalAmountPaid = 0;
-      } else if (parsedStatus === "delivered" || parsedStatus === "pickup") {
-        if (parsedAmountPaid === 0 && parsedAmountDue > 0) {
-          finalAmountPaid = computeAmountPaidAfterFee(parsedAmountDue, parsedDeliveryFee);
-        }
-      }
-    }
-
-    const deliveryId = await createDelivery({
-      phone,
-      customer_name,
-      items,
-      amount_due: parsedAmountDue,
-      amount_paid: finalAmountPaid,
-      status: parsedStatus,
-      quartier,
-      notes,
-      carrier,
-      delivery_fee: finalDeliveryFee,
-      tariff_pending: computeTariffPending(parsedStatus, quartier, finalDeliveryFee),
-      group_id: groupId,
-      agency_id: agencyId,
-      created_by_user_id: req.user.userId,
+    const delivery = await deliveriesService.createDeliveryAsVendor({
+      user: req.user,
+      body: parsed.data,
     });
-
-    const deliveryResult = await getDeliveryById(deliveryId);
-    const delivery = Array.isArray(deliveryResult) ? deliveryResult[0] : deliveryResult;
 
     res.status(201).json({
       success: true,
@@ -471,6 +365,54 @@ router.post("/deliveries", async (req, res, next) => {
       data: delivery,
     });
   } catch (error) {
+    next(error);
+  }
+});
+
+// GET /api/v1/vendor/deliveries/:id — vendor-scoped read one (no status updates)
+router.get("/deliveries/:id", async (req, res, next) => {
+  try {
+    if (!req.user.agencyId || !req.user.groupId) {
+      return res.status(400).json({
+        success: false,
+        error: "Invalid vendor token",
+        message: "Vendor account is not linked to an agency and group",
+      });
+    }
+
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isFinite(id) || id <= 0) {
+      return res.status(400).json({
+        success: false,
+        error: "Validation error",
+        message: "Invalid id",
+      });
+    }
+
+    const delivery = await deliveriesService.getDelivery({
+      user: req.user,
+      id,
+    });
+
+    if (!delivery) {
+      return res.status(404).json({
+        success: false,
+        error: "Delivery not found",
+      });
+    }
+
+    res.json({
+      success: true,
+      data: delivery,
+    });
+  } catch (error) {
+    if (error?.statusCode === 403) {
+      return res.status(403).json({
+        success: false,
+        error: "Forbidden",
+        message: error.message,
+      });
+    }
     next(error);
   }
 });

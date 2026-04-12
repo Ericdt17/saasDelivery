@@ -19,6 +19,14 @@ module.exports = {
     '!src/api/routes/vendor.js',        // vendor API — smoke-tested via running server; add Jest when stable
     '!src/api/routes/vendors.js',
     '!src/lib/expoPush.js',             // push helper — thin wrapper around fetch; exercised in staging
+    '!src/lib/pdfReport.js',           // PDF rendering — PDFKit output verified manually/e2e; not unit-testable
+    '!src/utils/group-manager.js',         // WhatsApp group ops — requires live WA session; not unit-testable
+    '!src/utils/group-verification.js',   // WhatsApp group verification — same as above
+    '!src/handlers/deliveryHandler.js',   // WhatsApp message handler — requires live WA session
+    '!src/handlers/messageHandler.js',    // WhatsApp message handler — requires live WA session
+    '!src/handlers/statusUpdateHandler.js', // WhatsApp status handler — requires live WA session
+    '!src/lib/botAlerts.js',              // WhatsApp alert sender — requires live WA session
+    '!src/lib/daily-report.js',           // Scheduled report sender — requires live WA session
     '!src/daily-report.js',
     '!src/send-report.js',
     '!src/send-message.js',
