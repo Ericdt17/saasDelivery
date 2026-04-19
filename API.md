@@ -888,6 +888,55 @@ All errors follow this shape:
 
 ---
 
+## Recruitment (public)
+
+Public routes are under **`/api/v1/recruitment`**. No cookie required. Use `multipart/form-data` for **`POST /recruitment/apply`** (browser sets `Content-Type` with boundary).
+
+### GET /recruitment/jobs
+
+List **open** job offers (minimal fields).
+
+### GET /recruitment/jobs/:id
+
+Single **open** offer by numeric id (`BIGSERIAL` in Postgres). **404** if closed or missing. Same public field set as list rows: `id`, `title`, `type`, `description`, `location`, `slots`.
+
+### GET /recruitment/jobs/:id/questions
+
+Custom questions for an **open** offer. **404** if offer closed or unknown.
+
+### POST /recruitment/apply
+
+Creates a candidature + optional answers + optional photo + optional CV + optional cover letter.
+
+**Body:** `multipart/form-data` only.
+
+**UX (landing)** : pour guider le candidat, présenter l’upload **photo avant** le CV dans le formulaire. Le protocole HTTP n’impose pas l’ordre des parties du multipart.
+
+| Champ multipart | Alias accepté | Type | Obligatoire | Contraintes | Exemple valide |
+|-----------------|---------------|------|-------------|-------------|----------------|
+| `job_offer_id` | `job_id` | string ou number (coercé) | oui | Entier Postgres **> 0** (id séquentiel, pas Mongo/ObjectId) | `"2"` |
+| `full_name` | — | string | oui | non vide | `"Jean Dupont"` |
+| `phone` | — | string | oui | 1–32 caractères (trim côté serveur) | `"699000001"` |
+| `quartier` | `neighborhood` | string | non | vide → `null` | `"Bonamoussadi"` |
+| `transport` | — | string | non | Si présent : **`scooter`**, **`velo`**, **`voiture`**, **`apied`** uniquement | `scooter` |
+| `availability` | — | string | non | Si présent : **`plein`**, **`partiel`**, **`weekend`** uniquement | `plein` |
+| `answers` | — | string | non | Chaîne JSON : tableau d’objets **`{ "question_id": number \| string, "answer_text": string }`**. Peut être `"[]"`. Les `question_id` sont des ids de `job_questions` (entiers). | `"[{\"question_id\":10,\"answer_text\":\"Oui\"}]"` |
+| `photo` | `profile_photo`, `picture` | fichier | non | JPEG, PNG ou WebP ; max **5 MB** (multer). Si Cloudinary non configuré → **503** avant traitement. | fichier image |
+| `cv` | `file`, `resume` | fichier | non | PDF uniquement ; max **5 MB** (multer). Si Cloudinary non configuré → **503** avant traitement. | fichier `.pdf` |
+| `cover_letter` | `motivation_letter`, `letter` | fichier | non | PDF uniquement ; max **5 MB** (multer). | fichier `.pdf` |
+
+**Réponses d’erreur 400 (validation corps de formulaire)**
+
+- `error`: `"Validation failed"`
+- `invalidFields`: liste `{ field, messages[] }` (noms **canoniques** après normalisation : `job_offer_id`, `quartier`, etc.)
+- `details`: objet Zod aplati (`fieldErrors`, `formErrors`) pour le détail
+
+Autres 400 sur la même route : JSON `answers` invalide, `question_id` dupliqué, réponse QCM hors options, `job_offer_id` qui ne correspond pas à une offre **ouverte**, etc. (messages `error` dédiés). **Les réponses ne sont pas obligatoires** : le front peut envoyer `answers: "[]"`.
+
+**201** : `{ "success": true, "data": { "id": <application_id> } }` (schéma exact selon implémentation du contrôleur).
+
+---
+
 ## Status Reference
 
 | Backend value | Frontend label |

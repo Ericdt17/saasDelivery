@@ -23,6 +23,8 @@ import Parametres from "./pages/config/Parametres";
 import Agencies from "./pages/admin/Agencies";
 import Reminders from "./pages/admin/Reminders";
 import Waitlist from "./pages/admin/Waitlist";
+import JobsPage from "./pages/recruitment/JobsPage";
+import ApplicationsPage from "./pages/recruitment/ApplicationsPage";
 import NotFound from "./pages/NotFound";
 import ServerError from "./pages/ServerError";
 import ErrorNetworkPreview from "./pages/dev/ErrorNetworkPreview";
@@ -124,6 +126,8 @@ const App = () => (
             <Route path="/expeditions" element={<Expeditions />} />
             <Route path="/modifications" element={<Modifications />} />
             <Route path="/parametres" element={<Parametres />} />
+            <Route path="/recruitment/jobs" element={<JobsPage />} />
+            <Route path="/recruitment/applications" element={<ApplicationsPage />} />
           </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>
