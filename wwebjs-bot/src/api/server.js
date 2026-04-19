@@ -18,6 +18,7 @@ const remindersRouter = require("./routes/reminders");
 const vendorsRouter = require("./routes/vendors");
 const vendorRouter = require("./routes/vendor");
 const waitlistRouter = require("./routes/waitlist");
+const recruitmentRouter = require("./routes/recruitment");
 const errorHandler = require("./middleware/errorHandler");
 
 const app = express();
@@ -79,7 +80,7 @@ const corsOptions = {
     }
   },
   credentials: true, // Allow cookies/credentials
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization", "Cookie"],
   exposedHeaders: ["Set-Cookie"],
 };
@@ -143,6 +144,7 @@ app.use("/api/v1/reminders", remindersRouter);
 app.use("/api/v1/vendors", vendorsRouter);
 app.use("/api/v1/vendor", vendorRouter);
 app.use("/api/v1/waitlist", waitlistRouter);
+app.use("/api/v1/recruitment", recruitmentRouter);
 
 // Health check endpoint
 app.get("/api/v1/health", async (req, res) => {

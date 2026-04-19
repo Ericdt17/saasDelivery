@@ -1672,6 +1672,347 @@ function createPostgresQueries(pool) {
     return res;
   }
 
+  // ============================================
+  // Recruitment (job offers, questions, applications)
+  // ============================================
+
+  async function recruitmentListOpenJobs() {
+    const rows = await query(
+      `SELECT id, title, type, description, location, slots
+       FROM job_offers
+       WHERE is_open = true
+       ORDER BY created_at DESC`
+    );
+    return Array.isArray(rows) ? rows : rows ? [rows] : [];
+  }
+
+  async function recruitmentGetJobOfferById(id) {
+    const row = await query(
+      `SELECT * FROM job_offers WHERE id = $1 LIMIT 1`,
+      [id]
+    );
+    return row || null;
+  }
+
+  async function recruitmentGetOpenJobOfferById(id) {
+    const row = await query(
+      `SELECT * FROM job_offers WHERE id = $1 AND is_open = true LIMIT 1`,
+      [id]
+    );
+    return row || null;
+  }
+
+  async function recruitmentListQuestionsForJobOffer(jobOfferId) {
+    const rows = await query(
+      `SELECT id, job_offer_id, question_text, question_type, options, is_required, order_index, created_at
+       FROM job_questions
+       WHERE job_offer_id = $1
+       ORDER BY order_index ASC, id ASC`,
+      [jobOfferId]
+    );
+    return Array.isArray(rows) ? rows : rows ? [rows] : [];
+  }
+
+  async function recruitmentListAdminJobsWithCounts() {
+    const rows = await query(
+      `SELECT jo.*,
+              (SELECT COUNT(*)::int FROM job_applications ja WHERE ja.job_offer_id = jo.id) AS application_count
+       FROM job_offers jo
+       ORDER BY jo.created_at DESC`
+    );
+    return Array.isArray(rows) ? rows : rows ? [rows] : [];
+  }
+
+  async function recruitmentCreateJobOffer({
+    title,
+    type,
+    description = null,
+    location = "Hippodrome, Yaoundé",
+    slots = 1,
+    is_open = true,
+  }) {
+    const result = await pool.query(
+      `INSERT INTO job_offers (title, type, description, location, slots, is_open)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING *`,
+      [title, type, description, location, slots, is_open]
+    );
+    return result.rows[0] || null;
+  }
+
+  async function recruitmentUpdateJobOffer(id, updates = {}) {
+    const allowed = [
+      "title",
+      "type",
+      "description",
+      "location",
+      "slots",
+      "is_open",
+    ];
+    const fields = [];
+    const values = [];
+    let i = 1;
+    for (const [key, value] of Object.entries(updates)) {
+      if (!allowed.includes(key)) continue;
+      if (value === undefined) continue;
+      fields.push(`${key} = $${i++}`);
+      values.push(value);
+    }
+    if (!fields.length) {
+      return recruitmentGetJobOfferById(id);
+    }
+    fields.push(`updated_at = NOW()`);
+    values.push(id);
+    const result = await pool.query(
+      `UPDATE job_offers SET ${fields.join(", ")} WHERE id = $${i} RETURNING *`,
+      values
+    );
+    return result.rows[0] || null;
+  }
+
+  async function recruitmentCountApplicationsForJob(jobOfferId) {
+    const row = await query(
+      `SELECT COUNT(*)::int AS c FROM job_applications WHERE job_offer_id = $1`,
+      [jobOfferId]
+    );
+    return row?.c ?? 0;
+  }
+
+  async function recruitmentDeleteJobOffer(id) {
+    const count = await recruitmentCountApplicationsForJob(id);
+    if (count > 0) {
+      return { deleted: false, reason: "has_applications" };
+    }
+    const res = await query(`DELETE FROM job_offers WHERE id = $1 RETURNING id`, [id]);
+    if (!res || !res.id) {
+      return { deleted: false, reason: "not_found" };
+    }
+    return { deleted: true, id: res.id };
+  }
+
+  async function recruitmentCreateJobQuestion({
+    job_offer_id,
+    question_text,
+    question_type,
+    options = null,
+    is_required = true,
+    order_index = 0,
+  }) {
+    const result = await pool.query(
+      `INSERT INTO job_questions (job_offer_id, question_text, question_type, options, is_required, order_index)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING *`,
+      [
+        job_offer_id,
+        question_text,
+        question_type,
+        options === undefined ? null : options,
+        is_required,
+        order_index,
+      ]
+    );
+    return result.rows[0] || null;
+  }
+
+  async function recruitmentUpdateJobQuestion(questionId, updates = {}) {
+    const allowed = ["question_text", "question_type", "options", "is_required", "order_index"];
+    const fields = [];
+    const values = [];
+    let i = 1;
+    for (const [key, value] of Object.entries(updates)) {
+      if (!allowed.includes(key)) continue;
+      if (value === undefined) continue;
+      if (key === "options") {
+        fields.push(`options = $${i++}`);
+        values.push(value === undefined ? null : value);
+      } else {
+        fields.push(`${key} = $${i++}`);
+        values.push(value);
+      }
+    }
+    if (!fields.length) {
+      const row = await query(
+        `SELECT * FROM job_questions WHERE id = $1 LIMIT 1`,
+        [questionId]
+      );
+      return row || null;
+    }
+    values.push(questionId);
+    const result = await pool.query(
+      `UPDATE job_questions SET ${fields.join(", ")} WHERE id = $${i} RETURNING *`,
+      values
+    );
+    return result.rows[0] || null;
+  }
+
+  async function recruitmentDeleteJobQuestion(questionId) {
+    const res = await query(`DELETE FROM job_questions WHERE id = $1 RETURNING id`, [
+      questionId,
+    ]);
+    return { deleted: !!(res && res.id), id: res?.id };
+  }
+
+  async function recruitmentGetQuestionById(questionId) {
+    const row = await query(
+      `SELECT * FROM job_questions WHERE id = $1 LIMIT 1`,
+      [questionId]
+    );
+    return row || null;
+  }
+
+  async function recruitmentListAdminApplications(filters = {}) {
+    const { job_offer_id, status, funnel_step } = filters;
+    const conditions = [];
+    const params = [];
+    let i = 1;
+    if (job_offer_id != null && job_offer_id !== "") {
+      conditions.push(`ja.job_offer_id = $${i++}`);
+      params.push(Number(job_offer_id));
+    }
+    if (status != null && status !== "") {
+      conditions.push(`ja.status = $${i++}`);
+      params.push(status);
+    }
+    if (funnel_step != null && funnel_step !== "") {
+      conditions.push(`ja.funnel_step = $${i++}`);
+      params.push(Number(funnel_step));
+    }
+    const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+    const rows = await query(
+      `SELECT ja.*, jo.title AS job_title
+       FROM job_applications ja
+       INNER JOIN job_offers jo ON jo.id = ja.job_offer_id
+       ${where}
+       ORDER BY ja.created_at DESC`,
+      params
+    );
+    return Array.isArray(rows) ? rows : rows ? [rows] : [];
+  }
+
+  async function recruitmentGetApplicationDetail(applicationId) {
+    const app = await query(
+      `SELECT ja.*, jo.title AS job_title, jo.type AS job_type, jo.description AS job_description
+       FROM job_applications ja
+       INNER JOIN job_offers jo ON jo.id = ja.job_offer_id
+       WHERE ja.id = $1
+       LIMIT 1`,
+      [applicationId]
+    );
+    if (!app) return null;
+    const answers = await query(
+      `SELECT ja.id, ja.question_id, ja.answer_text, ja.created_at,
+              jq.question_text, jq.question_type, jq.order_index
+       FROM job_answers ja
+       INNER JOIN job_questions jq ON jq.id = ja.question_id
+       WHERE ja.application_id = $1
+       ORDER BY jq.order_index ASC, jq.id ASC`,
+      [applicationId]
+    );
+    const list = Array.isArray(answers) ? answers : answers ? [answers] : [];
+    return { application: app, answers: list };
+  }
+
+  async function recruitmentUpdateApplication(id, updates = {}) {
+    const allowed = ["status", "funnel_step", "score", "notes"];
+    const fields = [];
+    const values = [];
+    let i = 1;
+    for (const [key, value] of Object.entries(updates)) {
+      if (!allowed.includes(key)) continue;
+      if (value === undefined) continue;
+      fields.push(`${key} = $${i++}`);
+      values.push(value);
+    }
+    if (!fields.length) {
+      const row = await query(
+        `SELECT * FROM job_applications WHERE id = $1 LIMIT 1`,
+        [id]
+      );
+      return row || null;
+    }
+    fields.push(`updated_at = NOW()`);
+    values.push(id);
+    const result = await pool.query(
+      `UPDATE job_applications SET ${fields.join(", ")} WHERE id = $${i} RETURNING *`,
+      values
+    );
+    return result.rows[0] || null;
+  }
+
+  async function recruitmentCreateApplicationWithAnswers({
+    job_offer_id,
+    full_name,
+    phone,
+    quartier = null,
+    transport = null,
+    availability = null,
+    photo_url = null,
+    photo_original_name = null,
+    cv_url = null,
+    cv_original_name = null,
+    cover_letter_url = null,
+    cover_letter_original_name = null,
+    answers = [],
+  }) {
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+
+      const offerRes = await client.query(
+        `SELECT id, is_open FROM job_offers WHERE id = $1 FOR UPDATE`,
+        [job_offer_id]
+      );
+      if (!offerRes.rows.length) {
+        await client.query("ROLLBACK");
+        return { error: "offer_not_found" };
+      }
+      if (!offerRes.rows[0].is_open) {
+        await client.query("ROLLBACK");
+        return { error: "offer_closed" };
+      }
+
+      const ins = await client.query(
+        `INSERT INTO job_applications (
+          job_offer_id, full_name, phone, quartier, transport, availability,
+          photo_url, photo_original_name,
+          cv_url, cv_original_name, cover_letter_url, cover_letter_original_name
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        RETURNING id`,
+        [
+          job_offer_id,
+          full_name,
+          phone,
+          quartier,
+          transport,
+          availability,
+          photo_url,
+          photo_original_name,
+          cv_url,
+          cv_original_name,
+          cover_letter_url,
+          cover_letter_original_name,
+        ]
+      );
+      const applicationId = ins.rows[0].id;
+
+      for (const a of answers) {
+        await client.query(
+          `INSERT INTO job_answers (application_id, question_id, answer_text)
+           VALUES ($1, $2, $3)`,
+          [applicationId, a.question_id, a.answer_text ?? null]
+        );
+      }
+
+      await client.query("COMMIT");
+      return { id: applicationId };
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
   return {
     type: "postgres",
     query,
@@ -1756,6 +2097,24 @@ function createPostgresQueries(pool) {
     getExpoPushTokensForVendorUserIds,
     getWaitlistEntries,
     insertWaitlistEntry,
+    // Recruitment
+    recruitmentListOpenJobs,
+    recruitmentGetJobOfferById,
+    recruitmentGetOpenJobOfferById,
+    recruitmentListQuestionsForJobOffer,
+    recruitmentListAdminJobsWithCounts,
+    recruitmentCreateJobOffer,
+    recruitmentUpdateJobOffer,
+    recruitmentDeleteJobOffer,
+    recruitmentCountApplicationsForJob,
+    recruitmentCreateJobQuestion,
+    recruitmentUpdateJobQuestion,
+    recruitmentDeleteJobQuestion,
+    recruitmentGetQuestionById,
+    recruitmentListAdminApplications,
+    recruitmentGetApplicationDetail,
+    recruitmentUpdateApplication,
+    recruitmentCreateApplicationWithAnswers,
     close: async () => pool.end(),
     getRawDb: () => pool,
     TIME_ZONE,
