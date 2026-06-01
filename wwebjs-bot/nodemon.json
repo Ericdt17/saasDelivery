@@ -1,23 +1,21 @@
 {
-  "watch": ["src"],
-  "ext": "js,json",
+  "watch": ["src", ".env"],
+  "ext": "js,json,env",
   "ignore": [
     "node_modules",
+    ".wwebjs_auth",
+    ".wwebjs_cache",
     "auth",
     "auth-dev",
     "data",
     "*.log",
     "qr-code.png",
-    "reports"
+    "reports",
+    "src/__tests__"
   ],
-  "delay": 1000,
+  "delay": 1500,
   "env": {
     "NODE_ENV": "development"
   },
-  "verbose": true
+  "verbose": false
 }
-
-
-
-
-

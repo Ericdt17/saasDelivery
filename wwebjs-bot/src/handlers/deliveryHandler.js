@@ -11,6 +11,7 @@ const {
   extractDeliveryWithAI,
   validateAndNormalizeAiDelivery,
 } = require("../lib/aiDeliveryExtract");
+const coreApi = require("../services/coreApiClient");
 const botAlerts = require("../lib/botAlerts");
 
 /** groupId:author → timestamp of last format-reminder sent (ms) */
@@ -25,16 +26,138 @@ const formatReminderCooldownByKey = new Map();
  *   msg: object,        WhatsApp message object
  *   group: object,      group row from DB
  *   agencyId: number,
+ *   linkedClient: object|null,  { keycloakId } when USE_CORE_API
  *   client: object,     WhatsApp client (for sending confirmations)
  *   config: object,
  *   whatsappGroupId: string,
  * }} ctx
  */
+/** @type {Set<string>} */
+const submittedMessageIds = new Set();
+
+async function saveDelivery({
+  parsed,
+  messageText,
+  whatsappMessageId,
+  group,
+  agencyId,
+  linkedClient,
+  config,
+  client,
+  viaAi,
+}) {
+  if (config.USE_CORE_API) {
+    if (!linkedClient?.keycloakId) {
+      throw new Error("No linked client keycloakId for core API submission");
+    }
+    if (submittedMessageIds.has(whatsappMessageId)) {
+      console.log(`   ⏭️  Transaction already submitted for message ${whatsappMessageId}`);
+      return { skipped: true };
+    }
+
+    const result = await coreApi.createTransaction(
+      linkedClient.keycloakId,
+      parsed,
+      messageText,
+      whatsappMessageId,
+      { clientUserId: linkedClient.raw?.id ?? linkedClient.raw?.user_id }
+    );
+    submittedMessageIds.add(whatsappMessageId);
+
+    const ref =
+      result.id ||
+      result.transactionId ||
+      result.transactionReference ||
+      result.reference ||
+      "OK";
+
+    console.log("\n" + "=".repeat(60));
+    console.log(`   ✅ TRANSACTION CORE API (${viaAi ? "AI" : "strict"})`);
+    console.log("=".repeat(60));
+    console.log(`   🔑 Client: ${linkedClient.keycloakId}`);
+    console.log(`   📎 Ref: ${ref}`);
+    console.log(`   📱 Numéro: ${parsed.phone || "Non trouvé"}`);
+    console.log(`   📦 Produits: ${parsed.items}`);
+    console.log(`   💰 Montant: ${parsed.amount_due || 0} FCFA`);
+    console.log(`   📍 Quartier: ${parsed.quartier || "Non spécifié"}`);
+    if (result._packageMatch) {
+      console.log(
+        `   🏷️  Source: ${result._packageMatch.source} (${result._packageMatch.matchMethod}) → ${result._packageMatch.package_name}`
+      );
+    }
+    console.log("=".repeat(60) + "\n");
+
+    if (config.SEND_CONFIRMATIONS === "true" && config.GROUP_ID) {
+      try {
+        const confirmMsg =
+          `✅ Commande enregistrée (${ref})\n` +
+          `📱 ${parsed.phone}\n` +
+          `📦 ${parsed.items}\n` +
+          `💰 ${parsed.amount_due || 0} FCFA`;
+        const chat = await client.getChatById(config.GROUP_ID);
+        await chat.sendMessage(confirmMsg);
+      } catch {
+        console.log("   ⚠️  Could not send confirmation message");
+      }
+    }
+    return { id: ref };
+  }
+
+  const existingByMsg = await findDeliveryByMessageId(whatsappMessageId);
+  if (existingByMsg) {
+    console.log(
+      `   ⏭️  Delivery already exists for this message ID — skip create (id=${existingByMsg.id})`
+    );
+    return { skipped: true };
+  }
+
+  console.log(`   💾 Storing WhatsApp message ID: ${whatsappMessageId}`);
+  const deliveryId = await createDelivery({
+    phone: parsed.phone || "unknown",
+    customer_name: parsed.customer_name,
+    items: parsed.items,
+    amount_due: parsed.amount_due || 0,
+    quartier: parsed.quartier,
+    carrier: parsed.carrier,
+    notes: `${viaAi ? "AI fallback | " : ""}Original message: ${messageText.substring(0, 100)}`,
+    group_id: group ? group.id : null,
+    agency_id: agencyId,
+    whatsapp_message_id: whatsappMessageId,
+  });
+
+  console.log("\n" + "=".repeat(60));
+  console.log(`   ✅ LIVRAISON #${deliveryId} ENREGISTRÉE${viaAi ? " (AI fallback)" : " AVEC SUCCÈS!"}`);
+  console.log("=".repeat(60));
+  console.log(`   📎 WhatsApp Message ID stored: ${whatsappMessageId}`);
+  console.log(`   📱 Numéro: ${parsed.phone || "Non trouvé"}`);
+  console.log(`   📦 Produits: ${parsed.items}`);
+  console.log(`   💰 Montant: ${parsed.amount_due || 0} FCFA`);
+  console.log(`   📍 Quartier: ${parsed.quartier || "Non spécifié"}`);
+  if (parsed.carrier) console.log(`   🚚 Transporteur: ${parsed.carrier}`);
+  console.log("=".repeat(60) + "\n");
+
+  if (config.SEND_CONFIRMATIONS === "true" && config.GROUP_ID) {
+    try {
+      const confirmMsg =
+        `✅ Livraison #${deliveryId} enregistrée${viaAi ? " (saisie assistée)" : ""}\n` +
+        `📱 ${parsed.phone}\n` +
+        `📦 ${parsed.items}\n` +
+        `💰 ${parsed.amount_due || 0} FCFA`;
+      const chat = await client.getChatById(config.GROUP_ID);
+      await chat.sendMessage(confirmMsg);
+    } catch {
+      console.log("   ⚠️  Could not send confirmation message");
+    }
+  }
+  return { id: deliveryId };
+}
+
 async function handleDelivery({
   messageText,
   msg,
   group,
   agencyId,
+  linkedClient,
   client,
   config,
   whatsappGroupId,
@@ -69,52 +192,17 @@ async function handleDelivery({
     }
 
     try {
-      const existingByMsg = await findDeliveryByMessageId(whatsappMessageId);
-      if (existingByMsg) {
-        console.log(
-          `   ⏭️  Delivery already exists for this message ID — skip create (id=${existingByMsg.id})`
-        );
-        return;
-      }
-
-      console.log(`   💾 Storing WhatsApp message ID: ${whatsappMessageId}`);
-      const deliveryId = await createDelivery({
-        phone: deliveryData.phone || "unknown",
-        customer_name: deliveryData.customer_name,
-        items: deliveryData.items,
-        amount_due: deliveryData.amount_due || 0,
-        quartier: deliveryData.quartier,
-        carrier: deliveryData.carrier,
-        notes: `Original message: ${messageText.substring(0, 100)}`,
-        group_id: group ? group.id : null,
-        agency_id: agencyId,
-        whatsapp_message_id: whatsappMessageId,
+      await saveDelivery({
+        parsed: deliveryData,
+        messageText,
+        whatsappMessageId,
+        group,
+        agencyId,
+        linkedClient,
+        config,
+        client,
+        viaAi: false,
       });
-
-      console.log("\n" + "=".repeat(60));
-      console.log(`   ✅ LIVRAISON #${deliveryId} ENREGISTRÉE AVEC SUCCÈS!`);
-      console.log("=".repeat(60));
-      console.log(`   📎 WhatsApp Message ID stored: ${whatsappMessageId}`);
-      console.log(`   📱 Numéro: ${deliveryData.phone || "Non trouvé"}`);
-      console.log(`   📦 Produits: ${deliveryData.items}`);
-      console.log(`   💰 Montant: ${deliveryData.amount_due || 0} FCFA`);
-      console.log(`   📍 Quartier: ${deliveryData.quartier || "Non spécifié"}`);
-      if (deliveryData.carrier) console.log(`   🚚 Transporteur: ${deliveryData.carrier}`);
-      console.log("=".repeat(60) + "\n");
-
-      if (config.SEND_CONFIRMATIONS === "true" && config.GROUP_ID) {
-        try {
-          const confirmMsg =
-            `✅ Livraison #${deliveryId} enregistrée\n` +
-            `📱 ${deliveryData.phone}\n` +
-            `📦 ${deliveryData.items}\n` +
-            `💰 ${deliveryData.amount_due || 0} FCFA`;
-          const chat = await client.getChatById(config.GROUP_ID);
-          await chat.sendMessage(confirmMsg);
-        } catch {
-          console.log("   ⚠️  Could not send confirmation message");
-        }
-      }
     } catch (dbError) {
       console.error("   ❌ Erreur lors de la sauvegarde:", dbError.message);
       botAlerts.notifyDeliverySaveFailed(dbError.message);
@@ -134,78 +222,63 @@ async function handleDelivery({
   // ── AI fallback ─────────────────────────────────────────────────────────
   if (looksMalformed && config.AI_DELIVERY_FALLBACK_ENABLED && config.OPENAI_API_KEY) {
     try {
-      const existingByMsg = await findDeliveryByMessageId(whatsappMessageId);
-      if (existingByMsg) {
-        console.log(
-          `   ⏭️  AI fallback skipped — delivery already exists for message id=${existingByMsg.id}`
-        );
-      } else {
-        console.log("   🤖 AI delivery fallback: calling OpenAI…");
-        const aiResult = await extractDeliveryWithAI(messageText, config);
-
-        if (!aiResult.ok) {
-          console.log("   ⚠️  AI extraction failed:", aiResult.error || "unknown");
-          if (aiResult.error !== "timeout") {
-            botAlerts.notifyMessageError(
-              new Error(`AI extraction failed: ${aiResult.error}`),
-              "ai-delivery-fallback"
-            );
-          }
+      if (!config.USE_CORE_API) {
+        const existingByMsg = await findDeliveryByMessageId(whatsappMessageId);
+        if (existingByMsg) {
+          console.log(
+            `   ⏭️  AI fallback skipped — delivery already exists for message id=${existingByMsg.id}`
+          );
         } else {
-          const normalized = validateAndNormalizeAiDelivery(aiResult.raw, messageText);
-          if (!normalized) {
-            console.log(
-              "   ⚠️  AI extraction did not pass validation (phone/amount mismatch)"
-            );
-          } else {
-            try {
-              console.log(`   💾 Storing WhatsApp message ID: ${whatsappMessageId}`);
-              const deliveryId = await createDelivery({
-                phone: normalized.phone,
-                customer_name: null,
-                items: normalized.items,
-                amount_due: normalized.amount_due,
-                quartier: normalized.quartier,
-                carrier: normalized.carrier,
-                notes: `AI fallback | Original: ${messageText.substring(0, 100)}`,
-                group_id: group ? group.id : null,
-                agency_id: agencyId,
-                whatsapp_message_id: whatsappMessageId,
-              });
-              savedViaAi = true;
-
-              console.log("\n" + "=".repeat(60));
-              console.log(`   ✅ LIVRAISON #${deliveryId} ENREGISTRÉE (AI fallback)`);
-              console.log("=".repeat(60));
-              console.log(`   📱 Numéro: ${normalized.phone}`);
-              console.log(`   📦 Produits: ${normalized.items}`);
-              console.log(`   💰 Montant: ${normalized.amount_due} FCFA`);
-              console.log(`   📍 Quartier: ${normalized.quartier || "Non spécifié"}`);
-              console.log("=".repeat(60) + "\n");
-
-              if (config.SEND_CONFIRMATIONS === "true" && config.GROUP_ID) {
-                try {
-                  const confirmMsg =
-                    `✅ Livraison #${deliveryId} enregistrée (saisie assistée)\n` +
-                    `📱 ${normalized.phone}\n` +
-                    `📦 ${normalized.items}\n` +
-                    `💰 ${normalized.amount_due} FCFA`;
-                  const chat = await client.getChatById(config.GROUP_ID);
-                  await chat.sendMessage(confirmMsg);
-                } catch {
-                  console.log("   ⚠️  Could not send confirmation message");
-                }
-              }
-            } catch (dbAiError) {
-              console.error("   ❌ Erreur lors de la sauvegarde (AI):", dbAiError.message);
-              botAlerts.notifyDeliverySaveFailed(dbAiError.message);
-            }
-          }
+          await runAiFallback();
         }
+      } else {
+        await runAiFallback();
       }
     } catch (aiErr) {
       console.error("   ❌ AI fallback error:", aiErr.message);
       botAlerts.notifyMessageError(aiErr, "ai-delivery-fallback");
+    }
+
+    async function runAiFallback() {
+      console.log("   🤖 AI delivery fallback: calling OpenAI…");
+      const aiResult = await extractDeliveryWithAI(messageText, config);
+
+      if (!aiResult.ok) {
+        console.log("   ⚠️  AI extraction failed:", aiResult.error || "unknown");
+        if (aiResult.error !== "timeout") {
+          botAlerts.notifyMessageError(
+            new Error(`AI extraction failed: ${aiResult.error}`),
+            "ai-delivery-fallback"
+          );
+        }
+        return;
+      }
+
+      const normalized = validateAndNormalizeAiDelivery(aiResult.raw, messageText);
+      if (!normalized) {
+        console.log(
+          "   ⚠️  AI extraction did not pass validation (phone/amount mismatch)"
+        );
+        return;
+      }
+
+      try {
+        await saveDelivery({
+          parsed: normalized,
+          messageText,
+          whatsappMessageId,
+          group,
+          agencyId,
+          linkedClient,
+          config,
+          client,
+          viaAi: true,
+        });
+        savedViaAi = true;
+      } catch (dbAiError) {
+        console.error("   ❌ Erreur lors de la sauvegarde (AI):", dbAiError.message);
+        botAlerts.notifyDeliverySaveFailed(dbAiError.message);
+      }
     }
   } else if (looksMalformed && config.AI_DELIVERY_FALLBACK_ENABLED) {
     console.log("   💡 AI fallback enabled but OPENAI_API_KEY missing — skipping");

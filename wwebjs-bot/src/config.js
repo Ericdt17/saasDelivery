@@ -43,5 +43,27 @@ module.exports = {
     const n = parseInt(process.env.AI_DELIVERY_MAX_TOKENS || "300", 10);
     return Number.isFinite(n) && n >= 50 ? n : 300;
   })(),
+
+  // LivSight core API (staging/prod via gateway)
+  CORE_API_BASE_URL: (process.env.CORE_API_BASE_URL || "").replace(/\/+$/, ""),
+  CORE_AUTH_URL: process.env.CORE_AUTH_URL || "",
+  CORE_BOT_USERNAME: process.env.CORE_BOT_USERNAME || null,
+  CORE_BOT_PASSWORD: process.env.CORE_BOT_PASSWORD || null,
+  CORE_DEPARTURE_CITY: process.env.CORE_DEPARTURE_CITY || "Douala",
+  CORE_DEPARTURE_REGION: process.env.CORE_DEPARTURE_REGION || "Littoral",
+  CORE_DEPARTURE_STREET: process.env.CORE_DEPARTURE_STREET || "",
+  CORE_DESTINATION_CITY: process.env.CORE_DESTINATION_CITY || "Douala",
+  CORE_DESTINATION_REGION: process.env.CORE_DESTINATION_REGION || "Littoral",
+  CORE_DESTINATION_STREET: process.env.CORE_DESTINATION_STREET || "N/A",
+
+  // Use LivSight core API (shared livsight DB via API — no bot migrations)
+  USE_CORE_API: process.env.USE_CORE_API === "true",
+  SKIP_MIGRATIONS: process.env.SKIP_MIGRATIONS === "true",
+  // Legacy reminders need bot DB tables (reminder_targets, etc.) — off when USE_CORE_API
+  REMINDERS_ENABLED: (() => {
+    if (process.env.REMINDERS_ENABLED === "true") return true;
+    if (process.env.REMINDERS_ENABLED === "false") return false;
+    return process.env.USE_CORE_API !== "true";
+  })(),
 };
 

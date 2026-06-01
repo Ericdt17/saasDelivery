@@ -23,8 +23,12 @@ const queries = createPostgresQueries(pool);
 
 logger.info({ host, db: dbName, durationMs: Date.now() - dbStartTime }, "PostgreSQL connected");
 
-// Run migrations on startup (non-blocking)
+// Run migrations on startup unless skipped (shared core DB — do not add bot tables)
 setImmediate(async () => {
+  if (process.env.SKIP_MIGRATIONS === "true") {
+    logger.info("SKIP_MIGRATIONS=true — bot schema migrations skipped (shared livsight DB)");
+    return;
+  }
   try {
     const migrationStartTime = Date.now();
     await runMigrations();

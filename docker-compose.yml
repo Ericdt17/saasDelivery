@@ -1,0 +1,33 @@
+# Local Postgres for LivSight dev (matches wwebjs-bot/.envexample)
+#
+# Start:  docker compose up -d
+# Stop:   docker compose down
+# Logs:   docker compose logs -f postgres
+#
+# Then in wwebjs-bot:
+#   cp .envexample .env   # if needed
+#   npm run migrate
+#   npm run api:dev
+
+name: serviceWhatsappLivsight
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: serviceWhatsappLivsight
+    environment:
+      POSTGRES_DB: deliverybot
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: livsight_dev
+    ports:
+      - "5434:5432"
+    volumes:
+      - serviceWhatsappLivsight_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d deliverybot"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  serviceWhatsappLivsight_pgdata:

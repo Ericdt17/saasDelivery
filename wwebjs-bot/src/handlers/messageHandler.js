@@ -7,6 +7,7 @@ const {
   findDeliveryByPhoneForUpdate,
 } = require("../db");
 const { getGroup } = require("../utils/group-manager");
+const coreApi = require("../services/coreApiClient");
 const botAlerts = require("../lib/botAlerts");
 const { handleStatusUpdate } = require("./statusUpdateHandler");
 const { handleDelivery } = require("./deliveryHandler");
@@ -29,25 +30,32 @@ async function onMessage(msg, client) {
 
     const chat = await msg.getChat();
     const messageText = msg.body || "";
+    const chatId = chat.id?._serialized || msg.from || "";
+    const isGroupChat =
+      chat.isGroup === true || String(chatId).endsWith("@g.us");
 
     console.log("\n🔍 DEBUG - Raw message received:");
-    console.log("   isGroup:", chat.isGroup);
-    console.log("   groupId:", chat.id?._serialized || "N/A");
+    console.log("   isGroup:", chat.isGroup, "→ treated as group:", isGroupChat);
+    console.log("   groupId:", chatId || "N/A");
+    console.log("   msg.from:", msg.from || "N/A");
     console.log("   targetGroupId:", config.GROUP_ID);
     console.log("   message length:", messageText.length);
     console.log("   message preview:", messageText.substring(0, 150));
 
-    if (!chat.isGroup) {
+    if (!isGroupChat) {
       console.log("   ⏭️  Skipped: Not a group message\n");
       return;
     }
 
-    const whatsappGroupId = chat.id._serialized;
+    const whatsappGroupId = chatId.endsWith("@g.us")
+      ? chatId
+      : msg.from;
     const groupName = chat.name || "Unnamed Group";
     const targetGroupId = config.GROUP_ID;
 
     // ── #link command ───────────────────────────────────────────────────
-    if (messageText.trim().toLowerCase() === "#link") {
+    const normalizedText = messageText.trim().toLowerCase();
+    if (normalizedText === "#link" || normalizedText === "link") {
       console.log("   🔗 #link command detected - sending group ID");
       await sendLinkMessage(client, whatsappGroupId, groupName);
       return;
@@ -61,11 +69,12 @@ async function onMessage(msg, client) {
 
     console.log("   ✅ Processing: Group message detected!\n");
 
-    // ── Reply detection ─────────────────────────────────────────────────
+    // ── Reply detection (legacy DB only) ────────────────────────────────
     let quotedMessage = null;
     let deliveryFromReply = null;
-    try {
-      if (msg.hasQuotedMsg) {
+    if (!config.USE_CORE_API) {
+      try {
+        if (msg.hasQuotedMsg) {
         quotedMessage = await msg.getQuotedMessage();
         console.log("   💬 This is a REPLY to a previous message");
 
@@ -102,21 +111,47 @@ async function onMessage(msg, client) {
       console.log("   ℹ️  Not a reply or couldn't get quoted message");
       console.log(`   ⚠️  Error details: ${replyError.message}`);
     }
+    }
 
-    // ── Group DB lookup ─────────────────────────────────────────────────
+    // ── Group / client resolution ───────────────────────────────────────
     let group = null;
     let agencyId = null;
-    try {
-      group = await getGroup(whatsappGroupId);
-      if (!group) {
-        console.log(`   ⏭️  Skipped: Group not registered in database`);
+    let linkedClient = null;
+
+    if (config.USE_CORE_API) {
+      try {
+        linkedClient = await coreApi.getClientByWhatsappGroup(whatsappGroupId);
+        if (!linkedClient) {
+          console.log(`   ⏭️  Skipped: No client linked to WhatsApp group`);
+          try {
+            await msg.reply(
+              "⚠️ Ce groupe WhatsApp n'est pas lié à un client. Un admin doit coller l'ID du groupe (#link) dans le profil client."
+            );
+          } catch {
+            /* ignore send errors */
+          }
+          return;
+        }
+        console.log(
+          `   📋 Linked client keycloakId: ${linkedClient.keycloakId} (${linkedClient.source})`
+        );
+      } catch (lookupErr) {
+        console.error(`   ⚠️  Core API client lookup failed: ${lookupErr.message}`);
         return;
       }
-      agencyId = group.agency_id;
-      console.log(`   📋 Group: ${group.name} (DB ID: ${group.id}, Agency: ${agencyId})`);
-    } catch (groupError) {
-      console.error(`   ⚠️  Error checking group: ${groupError.message}`);
-      return;
+    } else {
+      try {
+        group = await getGroup(whatsappGroupId);
+        if (!group) {
+          console.log(`   ⏭️  Skipped: Group not registered in database`);
+          return;
+        }
+        agencyId = group.agency_id;
+        console.log(`   📋 Group: ${group.name} (DB ID: ${group.id}, Agency: ${agencyId})`);
+      } catch (groupError) {
+        console.error(`   ⚠️  Error checking group: ${groupError.message}`);
+        return;
+      }
     }
 
     // ── Contact info ────────────────────────────────────────────────────
@@ -135,9 +170,14 @@ async function onMessage(msg, client) {
     console.log("   Full Message:", messageText);
     console.log("   Message Length:", messageText.length);
 
-    // ── Status update path ──────────────────────────────────────────────
+    // ── Status update path (legacy DB only) ─────────────────────────────
     const isStatus = isStatusUpdate(messageText) || deliveryFromReply;
     if (isStatus) {
+      if (config.USE_CORE_API) {
+        console.log("   ⏭️  Status updates via WhatsApp not yet wired to core API");
+        console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+        return;
+      }
       console.log("   🔄 Detected as STATUS UPDATE");
 
       let delivery = deliveryFromReply;
@@ -173,6 +213,7 @@ async function onMessage(msg, client) {
       msg,
       group,
       agencyId,
+      linkedClient,
       client,
       config,
       whatsappGroupId,
@@ -194,7 +235,7 @@ async function sendLinkMessage(client, whatsappGroupId, groupName) {
   const text =
     `📋 ID du groupe WhatsApp:\n\n` +
     `\`${whatsappGroupId}\`\n\n` +
-    `💡 Copiez cet ID et collez-le dans votre tableau de bord pour lier ce groupe à votre agence.\n\n` +
+    `💡 Copiez cet ID et collez-le dans le profil client (dashboard LivSight).\n\n` +
     `📝 Nom du groupe: ${groupName}`;
 
   let messageSent = false;

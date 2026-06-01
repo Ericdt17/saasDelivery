@@ -97,6 +97,10 @@ if (config.AI_DELIVERY_FALLBACK_ENABLED && !config.OPENAI_API_KEY) {
   botAlerts.notifyProcessError("config", new Error("AI_DELIVERY_FALLBACK_ENABLED=true but OPENAI_API_KEY is not set — AI fallback disabled"));
 }
 
+client.on("loading_screen", (percent, message) => {
+  console.log(`   ⏳ Loading WhatsApp Web: ${percent}% — ${message || ""}`);
+});
+
 client.on("qr", async (qr) => {
   if (!qrShown) {
     console.log("\n" + "=".repeat(60));
@@ -173,7 +177,50 @@ client.on("qr", async (qr) => {
 
 // When client is ready
 let remindersWorker = null;
-client.on("ready", () => {
+let clientReady = false;
+
+function logListenerDiagnostics(label) {
+  const messageListeners = client.listenerCount("message");
+  const messageCreateListeners = client.listenerCount("message_create");
+  console.log(`📊 [${label}] message listeners: ${messageListeners}, message_create: ${messageCreateListeners}`);
+  if (messageListeners === 0 && messageCreateListeners === 0) {
+    console.error("❌ WARNING: No message listeners registered!");
+  } else {
+    console.log("✅ Message listeners registered");
+  }
+}
+
+async function forceChatSync(label) {
+  try {
+    const chats = await client.getChats();
+    const groups = chats.filter((c) => c.isGroup);
+    console.log(`   🔄 Chat sync (${label}): ${chats.length} chats, ${groups.length} groups`);
+    return chats.length;
+  } catch (err) {
+    console.warn(`   ⚠️  Chat sync failed (${label}): ${err.message}`);
+    return 0;
+  }
+}
+
+function startRemindersWorkerIfEnabled() {
+  if (!config.REMINDERS_ENABLED) {
+    console.log(
+      "📭 Reminders worker disabled (no bot reminder tables / USE_CORE_API mode)"
+    );
+    return;
+  }
+  if (remindersWorker) return;
+  remindersWorker = createRemindersWorker({
+    client,
+    pollIntervalMs: Number(process.env.REMINDERS_POLL_MS) || 60000,
+    batchSize: Number(process.env.REMINDERS_BATCH_SIZE) || 50,
+    logger: console,
+  });
+  remindersWorker.start();
+}
+
+client.on("ready", async () => {
+  clientReady = true;
   botAlerts.notifyReady();
   const startupDuration = ((Date.now() - startupStartTime) / 1000).toFixed(1);
   botAlerts.notifyStartup(startupDuration);
@@ -183,33 +230,14 @@ client.on("ready", () => {
   console.log(`⏱️  Startup time: ${startupDuration} seconds`);
   console.log("📋 Listening for messages...");
 
-  // Verify message event listener is registered
-  const listeners = client.listenerCount("message");
-  console.log(`📊 Message event listeners: ${listeners}`);
-
-  if (listeners === 0) {
-    console.error("❌ WARNING: No message event listeners found!");
-    console.error("   This means the bot won't receive messages.");
-  } else {
-    console.log("✅ Message event listener is registered");
-  }
+  logListenerDiagnostics("ready");
+  await forceChatSync("ready");
 
   console.log("=".repeat(60) + "\n");
-  qrShown = false; // Reset for next time
+  qrShown = false;
 
-  // Setup daily report scheduler
   setupDailyReportScheduler();
-
-  // Start reminders worker (scheduled WhatsApp reminders)
-  if (!remindersWorker) {
-    remindersWorker = createRemindersWorker({
-      client,
-      pollIntervalMs: Number(process.env.REMINDERS_POLL_MS) || 60000,
-      batchSize: Number(process.env.REMINDERS_BATCH_SIZE) || 50,
-      logger: console,
-    });
-    remindersWorker.start();
-  }
+  startRemindersWorkerIfEnabled();
 });
 
 // Additional check: Sometimes ready event doesn't fire, check state manually
@@ -232,40 +260,26 @@ client.on("authenticated", async () => {
       if (state === "CONNECTED") {
         botAlerts.notifyReady();
         console.log("\n" + "=".repeat(60));
-        console.log("✅ CLIENT STATE: CONNECTED");
+        console.log(`✅ CLIENT STATE: CONNECTED${clientReady ? " (ready event fired)" : " (ready event NOT fired yet)"}`);
         console.log("=".repeat(60));
         console.log("📋 Bot should be listening for messages now.");
 
-        // Verify message event listener is registered
-        const listeners = client.listenerCount("message");
-        console.log(`📊 Message event listeners: ${listeners}`);
+        logListenerDiagnostics("authenticated");
 
-        if (listeners === 0) {
-          console.error("❌ WARNING: No message event listeners found!");
-          console.error("   This means the bot won't receive messages.");
-        } else {
-          console.log("✅ Message event listener is registered");
+        if (!clientReady) {
+          console.log("   ⚠️  Waiting for full sync — forcing chat load...");
+          await forceChatSync("authenticated-fallback");
         }
 
-        // Setup daily report scheduler if ready event didn't fire
         if (typeof setupDailyReportScheduler === "function") {
           console.log("📅 Setting up daily report scheduler...");
           setupDailyReportScheduler();
         }
 
-        // Start reminders worker if ready event didn't fire
-        if (!remindersWorker) {
-          remindersWorker = createRemindersWorker({
-            client,
-            pollIntervalMs: Number(process.env.REMINDERS_POLL_MS) || 60000,
-            batchSize: Number(process.env.REMINDERS_BATCH_SIZE) || 50,
-            logger: console,
-          });
-          remindersWorker.start();
-        }
+        startRemindersWorkerIfEnabled();
 
         console.log(
-          "\n💡 Test: Send a message in the group and check for 'MESSAGE EVENT FIRED'\n"
+          "\n💡 Test: send #link in a group where THIS phone is a member\n"
         );
         console.log("=".repeat(60) + "\n");
       } else {
@@ -305,11 +319,65 @@ client.on("disconnected", (reason) => {
   }, 5000);
 });
 
-// Listen to all incoming messages
+// Listen to all incoming messages (message_create is required on some whatsapp-web.js builds)
 console.log("📋 Registering message event listener...");
-console.log("🔍 Listening for 'message' events");
+console.log("🔍 Listening for 'message' and 'message_create' events");
 
-client.on("message", (msg) => onMessage(msg, client));
+const recentMessageIds = new Set();
+/** @type {Map<string, { timer: NodeJS.Timeout, msg: object }>} */
+const pendingMessageCreate = new Map();
+
+function processIncomingMessage(msg, source) {
+  if (source === "message_create") {
+    console.log("🔔 MESSAGE_CREATE EVENT FIRED - forwarding to handler");
+  }
+  onMessage(msg, client).catch((err) => {
+    console.error("⚠️  onMessage error:", err.message);
+    botAlerts.notifyMessageError(err, msg?.from);
+  });
+}
+
+function handleIncomingMessage(msg, source) {
+  const id = msg?.id?._serialized;
+
+  // Prefer `message` over `message_create` — create often fires first with incomplete data.
+  if (source === "message") {
+    if (id && pendingMessageCreate.has(id)) {
+      clearTimeout(pendingMessageCreate.get(id).timer);
+      pendingMessageCreate.delete(id);
+    }
+    if (id) {
+      if (recentMessageIds.has(id)) return;
+      recentMessageIds.add(id);
+      if (recentMessageIds.size > 500) recentMessageIds.clear();
+    }
+    return processIncomingMessage(msg, source);
+  }
+
+  // message_create: wait briefly in case `message` arrives with full body/chat
+  if (id && recentMessageIds.has(id)) return;
+
+  if (id && pendingMessageCreate.has(id)) {
+    clearTimeout(pendingMessageCreate.get(id).timer);
+  }
+
+  const timer = setTimeout(() => {
+    pendingMessageCreate.delete(id);
+    if (recentMessageIds.has(id)) return;
+    recentMessageIds.add(id);
+    if (recentMessageIds.size > 500) recentMessageIds.clear();
+    processIncomingMessage(msg, "message_create");
+  }, 400);
+
+  if (id) {
+    pendingMessageCreate.set(id, { timer, msg });
+  } else {
+    processIncomingMessage(msg, "message_create");
+  }
+}
+
+client.on("message", (msg) => handleIncomingMessage(msg, "message"));
+client.on("message_create", (msg) => handleIncomingMessage(msg, "message_create"));
 
 
 // Handle errors
