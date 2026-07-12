@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - 'server/**'
+      - '.github/workflows/cd.yml'
   workflow_dispatch:
 
 jobs:
@@ -29,17 +30,27 @@ jobs:
 
             cd /opt/saasDelivery/server
 
+            echo "→ Backing up .env before pull..."
+            if [ -f wwebjs-bot/.env ]; then
+              cp wwebjs-bot/.env /tmp/livsight-server.env
+            elif [ -f server/.env ]; then
+              cp server/.env /tmp/livsight-server.env
+            fi
+
             echo "→ Pulling latest code..."
             git remote set-url origin https://${GH_USERNAME}:${GH_TOKEN}@github.com/Ericdt17/saasDelivery.git
             git fetch origin main
             git reset --hard origin/main
 
-            # One-time migration: inner folder renamed wwebjs-bot → server
-            if [ -d wwebjs-bot ] && [ ! -d server ]; then
-              echo "→ Migrating wwebjs-bot/ to server/..."
-              cp wwebjs-bot/.env /tmp/livsight-server.env 2>/dev/null || true
-              mv wwebjs-bot server
-              cp /tmp/livsight-server.env server/.env 2>/dev/null || true
+            echo "→ Restoring .env if missing..."
+            if [ ! -f server/.env ] && [ -f /tmp/livsight-server.env ]; then
+              cp /tmp/livsight-server.env server/.env
+              chmod 600 server/.env
+            fi
+
+            if [ ! -f server/.env ]; then
+              echo "ERROR: server/.env missing — restore DATABASE_URL and secrets on VPS"
+              exit 1
             fi
 
             echo "→ Installing dependencies..."
