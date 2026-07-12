@@ -167,6 +167,7 @@ const api = {
   recruitmentListAdminApplications: queries.recruitmentListAdminApplications,
   recruitmentGetApplicationDetail: queries.recruitmentGetApplicationDetail,
   recruitmentUpdateApplication: queries.recruitmentUpdateApplication,
+  recruitmentDeleteApplication: queries.recruitmentDeleteApplication,
   recruitmentCreateApplicationWithAnswers: queries.recruitmentCreateApplicationWithAnswers,
   close: queries.close,
   getRawDb: queries.getRawDb,

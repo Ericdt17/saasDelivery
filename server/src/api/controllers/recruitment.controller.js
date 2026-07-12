@@ -6,6 +6,7 @@ const { z } = require("zod");
 const logger = require("../../logger");
 const { Readable } = require("node:stream");
 const { notifyNewApplication } = require("../../lib/botAlerts");
+const { deleteCloudinaryAsset } = require("../../config/cloudinary");
 const {
   recruitmentListOpenJobs,
   recruitmentGetOpenJobOfferById,
@@ -22,6 +23,7 @@ const {
   recruitmentListAdminApplications,
   recruitmentGetApplicationDetail,
   recruitmentUpdateApplication,
+  recruitmentDeleteApplication,
   recruitmentCreateApplicationWithAnswers,
 } = require("../../db");
 
@@ -886,6 +888,36 @@ async function patchAdminApplication(req, res, next) {
   }
 }
 
+async function deleteAdminApplication(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) {
+      return res.status(400).json({ success: false, error: "Invalid id" });
+    }
+
+    const detail = await recruitmentGetApplicationDetail(id);
+    if (!detail) {
+      return res.status(404).json({ success: false, error: "Application not found" });
+    }
+
+    const result = await recruitmentDeleteApplication(id);
+    if (!result.deleted) {
+      return res.status(404).json({ success: false, error: "Application not found" });
+    }
+
+    const app = detail.application;
+    await Promise.allSettled([
+      deleteCloudinaryAsset(app.photo_url),
+      deleteCloudinaryAsset(app.cv_url),
+      deleteCloudinaryAsset(app.cover_letter_url),
+    ]);
+
+    return res.json({ success: true, data: { id: result.id } });
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   listOpenJobs,
   getOpenJobPublic,
@@ -904,4 +936,5 @@ module.exports = {
   getAdminApplicationCv,
   getAdminApplicationCoverLetter,
   patchAdminApplication,
+  deleteAdminApplication,
 };

@@ -205,3 +205,8 @@ export async function updateApplication(
   const res = await apiPatch<ApplicationRow>(`${BASE}/applications/${id}`, data);
   return unwrap(res, "Impossible de mettre à jour la candidature");
 }
+
+export async function deleteApplication(id: number): Promise<{ id: number }> {
+  const res = await apiDelete<{ id: number }>(`${BASE}/applications/${id}`);
+  return unwrap(res, "Impossible de supprimer la candidature");
+}

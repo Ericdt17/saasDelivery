@@ -1939,6 +1939,17 @@ function createPostgresQueries(pool) {
     return result.rows[0] || null;
   }
 
+  async function recruitmentDeleteApplication(id) {
+    const result = await pool.query(
+      `DELETE FROM job_applications WHERE id = $1 RETURNING id`,
+      [id]
+    );
+    if (!result.rows[0]) {
+      return { deleted: false, reason: "not_found" };
+    }
+    return { deleted: true, id: result.rows[0].id };
+  }
+
   async function recruitmentCreateApplicationWithAnswers({
     job_offer_id,
     full_name,
@@ -2131,6 +2142,7 @@ function createPostgresQueries(pool) {
     recruitmentListAdminApplications,
     recruitmentGetApplicationDetail,
     recruitmentUpdateApplication,
+    recruitmentDeleteApplication,
     recruitmentCreateApplicationWithAnswers,
     close: async () => pool.end(),
     getRawDb: () => pool,

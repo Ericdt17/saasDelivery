@@ -8,8 +8,10 @@ import {
   useApplications,
   useApplicationDetail,
   useUpdateApplication,
+  useDeleteApplication,
   useAdminJobs,
 } from "@/hooks/useRecruitment";
+import { useAuth } from "@/contexts/AuthContext";
 import type {
   ApplicationRow,
   ApplicationStatus,
@@ -49,8 +51,18 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { Users, Eye, ExternalLink, Rows3 } from "lucide-react";
+import { Users, Eye, ExternalLink, Rows3, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   recruitmentThClass,
@@ -246,6 +258,7 @@ function EvaluationForm({ detail, onSave, isSaving }: EvalFormProps) {
 }
 
 export default function ApplicationsPage() {
+  const { isSuperAdmin } = useAuth();
   const [density, setDensity] = useRecruitmentTableDensity(
     APPLICATIONS_TABLE_DENSITY_KEY
   );
@@ -274,6 +287,7 @@ export default function ApplicationsPage() {
   const [cvPreviewOpen, setCvPreviewOpen] = useState(false);
   const [coverLetterPreviewOpen, setCoverLetterPreviewOpen] = useState(false);
   const [photoPreviewOpen, setPhotoPreviewOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   const { data: detail, isLoading: detailLoading } = useApplicationDetail(
     selectedId ?? undefined,
@@ -281,6 +295,7 @@ export default function ApplicationsPage() {
   );
 
   const updateApp = useUpdateApplication();
+  const deleteApp = useDeleteApplication();
 
   function openDetail(row: ApplicationRow) {
     setSelectedId(row.id);
@@ -298,6 +313,18 @@ export default function ApplicationsPage() {
       id: selectedId,
       data: payload,
     });
+  }
+
+  async function handleConfirmDelete() {
+    if (!selectedId) return;
+    try {
+      await deleteApp.mutateAsync(selectedId);
+      setDeleteDialogOpen(false);
+      setSheetOpen(false);
+      setSelectedId(null);
+    } catch {
+      // toast handled in hook
+    }
   }
 
   return (
@@ -738,6 +765,21 @@ export default function ApplicationsPage() {
                 onSave={handleSaveEval}
                 isSaving={updateApp.isPending}
               />
+
+              {isSuperAdmin && (
+                <div className="border-t pt-4">
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => setDeleteDialogOpen(true)}
+                    disabled={deleteApp.isPending}
+                  >
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Supprimer la candidature
+                  </Button>
+                </div>
+              )}
             </div>
           )}
         </SheetContent>
@@ -818,6 +860,33 @@ export default function ApplicationsPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Supprimer cette candidature ?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Cette action est irréversible. La candidature de{" "}
+              <strong>{detail?.application.full_name ?? "ce candidat"}</strong>,
+              ainsi que les fichiers associés (photo, CV, lettre), seront
+              définitivement supprimés.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={(e) => {
+                e.preventDefault();
+                void handleConfirmDelete();
+              }}
+              disabled={deleteApp.isPending}
+            >
+              Supprimer
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

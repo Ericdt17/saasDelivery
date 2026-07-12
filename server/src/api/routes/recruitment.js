@@ -5,7 +5,7 @@
 const express = require("express");
 const multer = require("multer");
 const { upload } = require("../../config/cloudinary");
-const { authenticateToken, authorizeRole } = require("../middleware/auth");
+const { authenticateToken, authorizeRole, requireSuperAdmin } = require("../middleware/auth");
 const controller = require("../controllers/recruitment.controller");
 
 const router = express.Router();
@@ -96,6 +96,7 @@ admin.get("/applications/:id", controller.getAdminApplication);
 admin.get("/applications/:id/cv", controller.getAdminApplicationCv);
 admin.get("/applications/:id/cover-letter", controller.getAdminApplicationCoverLetter);
 admin.patch("/applications/:id", controller.patchAdminApplication);
+admin.delete("/applications/:id", requireSuperAdmin, controller.deleteAdminApplication);
 
 router.use("/admin", admin);
 

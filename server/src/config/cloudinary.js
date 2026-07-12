@@ -99,8 +99,51 @@ function requireUploadMiddleware() {
   return upload;
 }
 
+function publicIdFromCloudinaryUrl(url) {
+  if (!url || typeof url !== "string" || !url.includes("cloudinary.com")) {
+    return null;
+  }
+  try {
+    const segments = new URL(url).pathname.split("/").filter(Boolean);
+    const uploadIdx = segments.indexOf("upload");
+    if (uploadIdx === -1) return null;
+    let rest = segments.slice(uploadIdx + 1);
+    if (rest[0] && /^v\d+$/.test(rest[0])) {
+      rest = rest.slice(1);
+    }
+    if (!rest.length) return null;
+    const last = rest[rest.length - 1];
+    rest[rest.length - 1] = last.replace(/\.[^/.]+$/, "");
+    return rest.join("/");
+  } catch {
+    return null;
+  }
+}
+
+function resourceTypeFromCloudinaryUrl(url) {
+  if (url && url.includes("/image/upload/")) return "image";
+  return "raw";
+}
+
+async function deleteCloudinaryAsset(url) {
+  if (!cloudName || !apiKey || !apiSecret || !url) return;
+
+  const publicId = publicIdFromCloudinaryUrl(url);
+  if (!publicId) return;
+
+  try {
+    await cloudinary.uploader.destroy(publicId, {
+      resource_type: resourceTypeFromCloudinaryUrl(url),
+    });
+  } catch (err) {
+    console.warn("[cloudinary] delete failed:", err.message);
+  }
+}
+
 module.exports = {
   cloudinary,
   upload,
   requireUploadMiddleware,
+  publicIdFromCloudinaryUrl,
+  deleteCloudinaryAsset,
 };

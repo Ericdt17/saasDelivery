@@ -17,6 +17,7 @@ import {
   getApplications,
   getApplicationById,
   updateApplication,
+  deleteApplication,
   type CreateJobPayload,
   type UpdateJobPayload,
   type CreateQuestionPayload,
@@ -240,6 +241,23 @@ export function useUpdateApplication() {
     onError: (e: unknown) => {
       toast.error("Erreur", {
         description: e instanceof Error ? e.message : "Mise à jour impossible",
+      });
+    },
+  });
+}
+
+export function useDeleteApplication() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => deleteApplication(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["recruitment", "applications"] });
+      qc.invalidateQueries({ queryKey: recruitmentKeys.adminJobs });
+      toast.success("Candidature supprimée");
+    },
+    onError: (e: unknown) => {
+      toast.error("Erreur", {
+        description: e instanceof Error ? e.message : "Suppression impossible",
       });
     },
   });

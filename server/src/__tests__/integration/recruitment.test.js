@@ -14,6 +14,7 @@ jest.mock('../../config/cloudinary', () => {
     cloudinary: {},
     upload: multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } }),
     requireUploadMiddleware: jest.fn(),
+    deleteCloudinaryAsset: jest.fn().mockResolvedValue(undefined),
   };
 });
 
@@ -35,6 +36,7 @@ const mockRecruitmentGetQuestionById         = jest.fn();
 const mockRecruitmentListAdminApplications   = jest.fn();
 const mockRecruitmentGetApplicationDetail    = jest.fn();
 const mockRecruitmentUpdateApplication       = jest.fn();
+const mockRecruitmentDeleteApplication       = jest.fn();
 const mockRecruitmentCreateApplicationWithAnswers = jest.fn();
 
 jest.mock('../../db', () => ({
@@ -56,6 +58,7 @@ jest.mock('../../db', () => ({
   recruitmentListAdminApplications:       mockRecruitmentListAdminApplications,
   recruitmentGetApplicationDetail:        mockRecruitmentGetApplicationDetail,
   recruitmentUpdateApplication:           mockRecruitmentUpdateApplication,
+  recruitmentDeleteApplication:           mockRecruitmentDeleteApplication,
   recruitmentCreateApplicationWithAnswers: mockRecruitmentCreateApplicationWithAnswers,
   // Stubs for other mounted routes
   getAllDeliveries:            jest.fn(),
@@ -1001,5 +1004,51 @@ describe('PATCH /api/v1/recruitment/admin/applications/:id', () => {
       .send({ score: 15, notes: 'Bon candidat' });
     expect(res.status).toBe(200);
     expect(res.body.data.score).toBe(15);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Admin — DELETE /api/v1/recruitment/admin/applications/:id
+// ---------------------------------------------------------------------------
+describe('DELETE /api/v1/recruitment/admin/applications/:id', () => {
+  it('returns 401 without token', async () => {
+    const res = await request(app).delete('/api/v1/recruitment/admin/applications/100');
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 403 for agency user', async () => {
+    const res = await request(app)
+      .delete('/api/v1/recruitment/admin/applications/100')
+      .set('Authorization', `Bearer ${agencyToken}`);
+    expect(res.status).toBe(403);
+  });
+
+  it('returns 404 when application does not exist', async () => {
+    mockRecruitmentGetApplicationDetail.mockResolvedValueOnce(null);
+    const res = await request(app)
+      .delete('/api/v1/recruitment/admin/applications/999')
+      .set('Authorization', `Bearer ${superToken}`);
+    expect(res.status).toBe(404);
+  });
+
+  it('deletes application for super_admin', async () => {
+    const detail = {
+      application: {
+        ...applicationFixture,
+        photo_url: 'https://res.cloudinary.com/demo/image/upload/v1/livsight/recruitment/photos/p.jpg',
+        cv_url: 'https://res.cloudinary.com/demo/raw/upload/v1/livsight/recruitment/cv.pdf',
+        cover_letter_url: 'https://res.cloudinary.com/demo/raw/upload/v1/livsight/recruitment/lm.pdf',
+      },
+      answers: [],
+    };
+    mockRecruitmentGetApplicationDetail.mockResolvedValueOnce(detail);
+    mockRecruitmentDeleteApplication.mockResolvedValueOnce({ deleted: true, id: 100 });
+    const res = await request(app)
+      .delete('/api/v1/recruitment/admin/applications/100')
+      .set('Authorization', `Bearer ${superToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.id).toBe(100);
+    expect(mockRecruitmentDeleteApplication).toHaveBeenCalledWith(100);
   });
 });
