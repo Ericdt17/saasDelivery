@@ -52,6 +52,8 @@ jobs:
               echo "ERROR: server/.env missing — restore DATABASE_URL and secrets on VPS"
               exit 1
             fi
+            cp server/.env /tmp/livsight-server.env
+            chmod 600 /tmp/livsight-server.env
 
             echo "→ Installing dependencies..."
             cd server
@@ -61,12 +63,20 @@ jobs:
             npm run migrate
 
             echo "→ Restarting API server..."
-            pm2 restart api-server || pm2 start ecosystem.config.js || pm2 start src/api/server.js --name api-server
+            pm2 delete api-server 2>/dev/null || true
+            pm2 start ecosystem.config.js
             pm2 save
 
             echo "→ Verifying service..."
-            sleep 3
-            pm2 list | grep api-server
-            curl -fsS http://127.0.0.1:3001/api/v1/health
-
-            echo "✓ Deploy complete"
+            for i in $(seq 1 20); do
+              if curl -fsS "http://127.0.0.1:3001/api/v1/health" > /tmp/health.json; then
+                cat /tmp/health.json
+                pm2 list | grep api-server
+                echo "✓ Deploy complete"
+                exit 0
+              fi
+              sleep 1
+            done
+            echo "API health endpoint did not become ready in time"
+            pm2 logs api-server --lines 30 --nostream || true
+            exit 1
