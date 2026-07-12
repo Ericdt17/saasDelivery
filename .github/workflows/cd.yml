@@ -63,6 +63,7 @@ jobs:
             npm run migrate
 
             echo "→ Restarting API server..."
+            export DEPLOY_GIT_SHA=$(git -C /opt/saasDelivery/server rev-parse --short HEAD)
             pm2 delete api-server 2>/dev/null || true
             pm2 start ecosystem.config.js
             pm2 save

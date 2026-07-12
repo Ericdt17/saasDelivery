@@ -13,6 +13,7 @@ module.exports = {
       env: {
         NODE_ENV: "production",
         PORT: 3001,
+        DEPLOY_GIT_SHA: process.env.DEPLOY_GIT_SHA || "",
       },
       autorestart: true,
       watch: false,

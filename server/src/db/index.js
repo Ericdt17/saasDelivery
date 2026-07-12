@@ -27,14 +27,15 @@ logger.info({ host, db: dbName, durationMs: Date.now() - dbStartTime }, "Postgre
 setImmediate(async () => {
   if (process.env.SKIP_MIGRATIONS === "true") {
     logger.info("SKIP_MIGRATIONS=true — bot schema migrations skipped (shared livsight DB)");
-    return;
-  }
-  try {
-    const migrationStartTime = Date.now();
-    await runMigrations();
-    logger.info({ durationMs: Date.now() - migrationStartTime }, "Migrations completed");
-  } catch (error) {
-    logger.error({ err: error }, "Migration failed — run 'npm run migrate' manually");
+  } else {
+    try {
+      const migrationStartTime = Date.now();
+      await runMigrations();
+      logger.info({ durationMs: Date.now() - migrationStartTime }, "Migrations completed");
+    } catch (error) {
+      logger.error({ err: error }, "Migration failed — run 'npm run migrate' manually");
+      return;
+    }
   }
 
   // Verify DB with a quick sanity check
@@ -42,6 +43,12 @@ setImmediate(async () => {
     const result = await queries.query("SELECT COUNT(*) as total FROM groups WHERE is_active = true");
     const count = Array.isArray(result) ? parseInt(result[0]?.total) : parseInt(result?.total);
     logger.info({ activeGroups: count }, "Database ready");
+
+    const { notifyApiStartup } = require("../lib/botAlerts");
+    const port = process.env.PORT || process.env.API_PORT || 3000;
+    notifyApiStartup({ port, activeGroups: count }).catch((err) => {
+      logger.warn({ err }, "API startup webhook failed");
+    });
   } catch (error) {
     logger.error({ err: error }, "Database sanity check failed");
   }

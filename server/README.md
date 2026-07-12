@@ -62,7 +62,9 @@ npm run dev        # API with auto-reload
 | `API_PORT` | Server port (default: 3000) |
 | `ALLOWED_ORIGINS` | Comma-separated CORS origins |
 | `AUTH_HEADER_FALLBACK` | When `true`, allows `Authorization: Bearer <token>` auth (needed for mobile vendor clients that can't use HTTP-only cookies) |
-| `BOT_ALERT_WEBHOOK_URL` | Optional Discord/Slack webhook for API error alerts |
+| `BOT_ALERT_WEBHOOK_URL` | Optional Discord/Slack webhook for API error + startup alerts |
+| `BOT_ALERT_STARTUP_ENABLED` | Post startup alert to `BOT_ALERT_WEBHOOK_URL` (default: `true`) |
+| `DEPLOY_GIT_SHA` | Optional commit label in startup alerts (set by CD on deploy) |
 | `RECRUITMENT_ALERT_WEBHOOK_URL` | Optional Discord/Slack webhook for new recruitment applications |
 | `RECRUITMENT_DASHBOARD_URL` | Optional dashboard URL in recruitment Discord alerts (defaults to first `ALLOWED_ORIGINS`) |
 

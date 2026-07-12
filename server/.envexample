@@ -35,8 +35,14 @@ AUTH_HEADER_FALLBACK=true
 # ---------------------------
 # Alerts / Webhooks (optional)
 # ---------------------------
-# Example: Discord webhook URL for API error alerts
+# Example: Discord webhook URL for API error alerts and startup notifications
 BOT_ALERT_WEBHOOK_URL=
+
+# Post to BOT_ALERT_WEBHOOK_URL when the API finishes startup (default: true)
+# BOT_ALERT_STARTUP_ENABLED=true
+
+# Optional commit label in startup alerts (set automatically by CD on deploy)
+# DEPLOY_GIT_SHA=
 
 # Discord webhook for new recruitment applications (separate channel)
 RECRUITMENT_ALERT_WEBHOOK_URL=

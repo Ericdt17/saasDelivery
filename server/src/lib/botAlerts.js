@@ -16,6 +16,11 @@ function config() {
   };
 }
 
+function startupAlertsEnabled() {
+  const flag = (process.env.BOT_ALERT_STARTUP_ENABLED || "true").toLowerCase();
+  return flag !== "false" && flag !== "0";
+}
+
 function inferWebhookType(url) {
   const explicit = (process.env.BOT_ALERT_WEBHOOK_TYPE || "").toLowerCase();
   if (explicit === "slack" || explicit === "discord") return explicit;
@@ -209,7 +214,42 @@ async function notifyNewApplication(app) {
   await postToWebhook(webhookUrl, buildRecruitmentAlertMessage(app));
 }
 
+function buildApiStartupMessage({ port, activeGroups, gitSha } = {}) {
+  const lines = ["✅ **LivSight API démarrée**"];
+
+  if (port != null) {
+    lines.push(`Port : ${port}`);
+  }
+
+  const sha = (gitSha || process.env.DEPLOY_GIT_SHA || "").trim();
+  if (sha) {
+    lines.push(`Commit : ${sha}`);
+  }
+
+  if (activeGroups != null) {
+    lines.push(`DB : ok · ${activeGroups} groupes actifs`);
+  } else {
+    lines.push("DB : ok");
+  }
+
+  lines.push(`Env : ${process.env.NODE_ENV || "development"}`);
+
+  return lines.join("\n");
+}
+
+/** API finished startup (migrations + DB ready) — fire-and-forget. */
+async function notifyApiStartup({ port, activeGroups, gitSha } = {}) {
+  if (!startupAlertsEnabled() || !config().webhookUrl) return;
+
+  await postToWebhook(
+    config().webhookUrl,
+    buildApiStartupMessage({ port, activeGroups, gitSha })
+  );
+}
+
 module.exports = {
   notifyApiError,
   notifyNewApplication,
+  notifyApiStartup,
+  buildApiStartupMessage,
 };
