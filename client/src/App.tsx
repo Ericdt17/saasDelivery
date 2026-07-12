@@ -25,6 +25,8 @@ import Reminders from "./pages/admin/Reminders";
 import Waitlist from "./pages/admin/Waitlist";
 import JobsPage from "./pages/recruitment/JobsPage";
 import ApplicationsPage from "./pages/recruitment/ApplicationsPage";
+import RecruitmentLandingPage from "./pages/recruitment/public/RecruitmentLandingPage";
+import ApplyPage from "./pages/recruitment/public/ApplyPage";
 import NotFound from "./pages/NotFound";
 import ServerError from "./pages/ServerError";
 import ErrorNetworkPreview from "./pages/dev/ErrorNetworkPreview";
@@ -75,6 +77,8 @@ const App = () => (
         <Routes>
           {/* Public route */}
           <Route path="/login" element={<Login />} />
+          <Route path="/recrutement" element={<RecruitmentLandingPage />} />
+          <Route path="/recrutement/:jobId/postuler" element={<ApplyPage />} />
           <Route path="/erreur" element={<ServerError />} />
           {import.meta.env.DEV ? (
             <>

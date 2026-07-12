@@ -6,12 +6,12 @@ on:
       - '**'
     paths:
       - 'client/**'
-      - 'wwebjs-bot/**'
+      - 'server/**'
       - '.github/workflows/**'
   pull_request:
     paths:
       - 'client/**'
-      - 'wwebjs-bot/**'
+      - 'server/**'
       - '.github/workflows/**'
 
 jobs:
@@ -62,14 +62,14 @@ jobs:
         with:
           node-version: 18
           cache: 'npm'
-          cache-dependency-path: wwebjs-bot/package-lock.json
+          cache-dependency-path: server/package-lock.json
 
       - name: Install dependencies
-        working-directory: wwebjs-bot
+        working-directory: server
         run: npm ci
 
       - name: Run Jest tests with coverage
-        working-directory: wwebjs-bot
+        working-directory: server
         run: npm run test:coverage -- --ci
 
   backend-ci:
@@ -104,27 +104,27 @@ jobs:
         with:
           node-version: 18
           cache: 'npm'
-          cache-dependency-path: wwebjs-bot/package-lock.json
+          cache-dependency-path: server/package-lock.json
 
       - name: Install dependencies
-        working-directory: wwebjs-bot
+        working-directory: server
         run: npm ci
 
       - name: Run migrations
-        working-directory: wwebjs-bot
+        working-directory: server
         run: npm run migrate
 
       - name: Run real-DB integration tests
-        working-directory: wwebjs-bot
+        working-directory: server
         run: npm run test:db:integration
 
       - name: Verify core tables exist
-        working-directory: wwebjs-bot
+        working-directory: server
         run: |
           node -e "const { Client } = require('pg'); (async () => { const client = new Client({ connectionString: process.env.DATABASE_URL }); await client.connect(); const { rows } = await client.query(\"SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('schema_migrations','agencies','groups','deliveries','agency_reminder_contacts','reminders','job_offers','job_questions','job_applications','job_answers')\"); const found = rows.map(r => r.table_name); const required = ['schema_migrations','agencies','groups','deliveries','agency_reminder_contacts','reminders','job_offers','job_questions','job_applications','job_answers']; const missing = required.filter(t => !found.includes(t)); if (missing.length) { throw new Error('Missing tables: ' + missing.join(', ')); } console.log('Core tables present:', found.sort().join(', ')); await client.end(); })().catch((err) => { console.error(err); process.exit(1); });"
 
       - name: Start API server
-        working-directory: wwebjs-bot
+        working-directory: server
         run: node src/api/server.js &
 
       - name: API health smoke test

@@ -365,7 +365,7 @@ async function runAllTests() {
   const healthOk = await testHealthCheck();
   if (!healthOk) {
     log('\n❌ Backend server is not reachable. Please start the server first.', 'red');
-    log('   Run: cd wwebjs-bot && node src/api/server.js\n', 'yellow');
+    log('   Run: cd server && node src/api/server.js\n', 'yellow');
     process.exit(1);
   }
   

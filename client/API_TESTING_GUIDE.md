@@ -6,7 +6,7 @@ This guide helps you verify that all API endpoints are working correctly, test e
 
 1. **Backend server running:**
    ```bash
-   cd wwebjs-bot
+   cd server
    node src/api/server.js
    # Should see: 🚀 API Server running on http://localhost:3000
    ```

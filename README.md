@@ -3,7 +3,9 @@
 This folder contains the **LivSight** delivery management system:
 
 - A **web dashboard** (React) for agencies and super admins
-- A **backend API + WhatsApp bot** (Node/Express + whatsapp-web.js)
+- A **backend REST API** (Node/Express)
+
+The WhatsApp bot lives in a separate repository.
 
 If you’re new here, start with the Quickstart below, then use the deeper READMEs for each sub-app.
 
@@ -13,21 +15,17 @@ If you’re new here, start with the Quickstart below, then use the deeper READM
 
 ```mermaid
 flowchart LR
-  WhatsAppGroups[WhatsApp_Groups]
-  Bot[wwebjs-bot/src/index.js]
-  Api[wwebjs-bot/src/api/server.js]
+  Api[server/src/api/server.js]
   Db[(SQLite_or_Postgres)]
   Web[client_(React_Dashboard)]
 
-  WhatsAppGroups -->|messages| Bot
-  Bot -->|create_update| Db
   Web -->|HTTP_(cookies)| Api
   Api -->|queries| Db
 ```
 
 Key ideas:
 - **UI “Prestataire” = backend `groups`**.
-- **Deliveries** are created either via WhatsApp parsing (bot) or via REST API calls (dashboard / vendor routes).
+- **Deliveries** are created via REST API calls (dashboard / vendor routes).
 - The API uses **JWT in an HTTP-only cookie** by default; mobile clients can use **Bearer tokens** when enabled (see `API.md`).
 
 ---
@@ -36,7 +34,7 @@ Key ideas:
 
 Top-level sub-apps:
 - `client/`: web dashboard (Vite + React + TypeScript + shadcn/ui + Tailwind)
-- `wwebjs-bot/`: WhatsApp bot + REST API + DB layer (Node + Express)
+- `server/`: REST API + DB layer (Node + Express)
 
 Reference docs (already in this folder):
 - `REPO_DOCUMENTATION.md`: full system overview and data model
@@ -50,9 +48,9 @@ Reference docs (already in this folder):
 
 ## Quickstart (local development)
 
-### 1) Backend (`wwebjs-bot/`)
+### 1) Backend (`server/`)
 
-From `saasDelivery/wwebjs-bot/`:
+From `saasDelivery/server/`:
 
 ```bash
 npm install
@@ -67,16 +65,16 @@ cp env.local.postgres.example .env
 # Create tables
 npm run migrate
 
-# Run API + bot (dev)
+# Run API (dev)
 npm run dev
 
-# Or run API only (no WhatsApp)
+# Or explicitly:
 npm run api:dev
 ```
 
 Notes:
-- In production, the API refuses to start without `ALLOWED_ORIGINS` (see `wwebjs-bot/src/api/server.js`).
-- **Do not commit** `wwebjs-bot/.env` (it contains secrets). Use the `env.*.example` files as templates.
+- In production, the API refuses to start without `ALLOWED_ORIGINS` (see `server/src/api/server.js`).
+- **Do not commit** `server/.env` (it contains secrets). Use the `env.*.example` files as templates.
 
 ### 2) Web dashboard (`client/`)
 
@@ -111,5 +109,5 @@ By default, the Vite dev server proxies `/api/*` to `http://localhost:3000` (see
 
 1) Read `REPO_DOCUMENTATION.md` for the end-to-end flow.
 2) Use `client/README.md` to learn the dashboard structure and conventions.
-3) Use `wwebjs-bot/README.md` for backend scripts, env setup, migrations, and production notes.
+3) Use `server/README.md` for backend scripts, env setup, migrations, and production notes.
 

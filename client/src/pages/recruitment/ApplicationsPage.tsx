@@ -88,6 +88,33 @@ const AVAIL_LABELS: Record<string, string> = {
   weekend: "Week-end",
 };
 
+const EDUCATION_LABELS: Record<string, string> = {
+  bac: "Bac",
+  licence: "Licence",
+  master: "Master",
+  doctorat: "Doctorat",
+};
+
+const LANGUAGE_LABELS: Record<string, string> = {
+  francais: "Français",
+  anglais: "Anglais",
+};
+
+function formatLanguages(value: string | null | undefined): string {
+  if (!value) return "—";
+  return value
+    .split(",")
+    .map((code) => LANGUAGE_LABELS[code.trim()] ?? code.trim())
+    .join(", ");
+}
+
+function formatYesNo(value: string | null | undefined): string {
+  if (!value) return "—";
+  if (value === "oui") return "Oui";
+  if (value === "non") return "Non";
+  return value;
+}
+
 function statusBadgeClass(s: ApplicationStatus) {
   switch (s) {
     case "new":
@@ -545,8 +572,39 @@ export default function ApplicationsPage() {
                   {detail.application.phone}
                 </p>
                 <p>
+                  <span className="text-muted-foreground">Email : </span>
+                  {detail.application.email ?? "—"}
+                </p>
+                <p>
                   <span className="text-muted-foreground">Quartier : </span>
                   {detail.application.quartier ?? "—"}
+                </p>
+                <p>
+                  <span className="text-muted-foreground">Niveau d&apos;études : </span>
+                  {detail.application.education_level
+                    ? EDUCATION_LABELS[detail.application.education_level] ??
+                      detail.application.education_level
+                    : "—"}
+                </p>
+                <p>
+                  <span className="text-muted-foreground">Filière : </span>
+                  {detail.application.field_of_study ?? "—"}
+                </p>
+                <p>
+                  <span className="text-muted-foreground">École / université : </span>
+                  {detail.application.school_name ?? "—"}
+                </p>
+                <p>
+                  <span className="text-muted-foreground">Langues parlées : </span>
+                  {formatLanguages(detail.application.languages)}
+                </p>
+                <p>
+                  <span className="text-muted-foreground">En poste actuellement : </span>
+                  {formatYesNo(detail.application.currently_employed)}
+                </p>
+                <p>
+                  <span className="text-muted-foreground">Dans une autre boîte : </span>
+                  {formatYesNo(detail.application.in_other_company)}
                 </p>
                 <p>
                   <span className="text-muted-foreground">Transport : </span>

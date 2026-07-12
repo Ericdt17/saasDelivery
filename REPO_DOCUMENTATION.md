@@ -9,7 +9,7 @@ If you’re new to the codebase, use this section to get productive fast.
 - **Backend API (recommended for dashboard work)**:
 
 ```bash
-cd saasDelivery/wwebjs-bot
+cd saasDelivery/server
 npm install
 cp env.local.postgres.example .env   # or env.local.sqlite.example
 npm run migrate
@@ -30,8 +30,8 @@ npm run dev
 - **Sidebar / routes**: `client/src/components/layout/Sidebar.tsx` and `client/src/App.tsx`
 - **Prestataire list** (UI label “Prestataire” = backend `groups`): `client/src/pages/operations/Groups.tsx`
 - **Prestataire details**: `client/src/pages/operations/GroupDetail.tsx`
-- **API routes**: `wwebjs-bot/src/api/routes/*`
-- **DB queries**: `wwebjs-bot/src/db/*` (Postgres queries live in `src/db/postgres-queries.js`)
+- **API routes**: `server/src/api/routes/*`
+- **DB queries**: `server/src/db/*` (Postgres queries live in `src/db/postgres-queries.js`)
 
 ### Reference docs (don’t reinvent)
 
@@ -55,7 +55,7 @@ This repository implements a multi-agency delivery management system with:
 Top-level:
 
 - `client/` — React frontend (Vite + shadcn/ui + Tailwind + React Query)
-- `wwebjs-bot/` — WhatsApp bot + API server + DB layer (Node/Express + SQL adapters)
+- `server/` — WhatsApp bot + API server + DB layer (Node/Express + SQL adapters)
 - Root docs:
   - `API.md` — HTTP API reference (includes `/api/v1/vendor` and push tokens)
   - `PRODUCTION_DEPLOYMENT_CHECKLIST.md`
@@ -65,8 +65,8 @@ Top-level:
 
 Key entrypoints:
 
-- WhatsApp bot: `wwebjs-bot/src/index.js`
-- API server: `wwebjs-bot/src/api/server.js`
+- WhatsApp bot: `server/src/index.js`
+- API server: `server/src/api/server.js`
 - Frontend router/pages: `client/src/App.tsx` and `client/src/pages/*`
 
 ## System Architecture
@@ -90,9 +90,9 @@ Key entrypoints:
 ```mermaid
 flowchart LR
   WhatsApp[WhatsApp Groups]
-  Bot[WhatsApp Bot: wwebjs-bot/src/index.js]
+  Bot[WhatsApp Bot: server/src/index.js]
   DB[(DB: SQLite/Postgres)]
-  API[REST API: wwebjs-bot/src/api/server.js]
+  API[REST API: server/src/api/server.js]
   FE[Frontend: client/src/*]
 
   WhatsApp -->|message| Bot
@@ -117,7 +117,7 @@ The backend uses JWT tokens stored in an HTTP-only cookie named `auth_token`.
 - Logout:
   - `POST /api/v1/auth/logout` (cookie cleared)
 
-Backend middleware: `wwebjs-bot/src/api/middleware/auth.js`
+Backend middleware: `server/src/api/middleware/auth.js`
 
 Key points:
 
@@ -130,7 +130,7 @@ Key points:
 
 ### CORS (frontend -> API)
 
-API CORS is configured in `wwebjs-bot/src/api/server.js`:
+API CORS is configured in `server/src/api/server.js`:
 
 - In development: allows all origins.
 - In production: uses `ALLOWED_ORIGINS` (comma-separated) and matches normalized origins.
@@ -164,8 +164,8 @@ Base migrations define these tables:
 
 Migration files:
 
-- `wwebjs-bot/db/migrations/20250101000000_initial_schema.sql`
-- `wwebjs-bot/db/migrations/20250101010000_create_tariffs_table.sql`
+- `server/db/migrations/20250101000000_initial_schema.sql`
+- `server/db/migrations/20250101010000_create_tariffs_table.sql`
 - and subsequent migrations updating schema (e.g. `delivery_fee`, `agency_code`, etc.)
 
 ### Relationships
@@ -202,11 +202,11 @@ Notable mapping behavior:
   - `0` for delivered/pickup/cancelled/postponed/unreachable/no_answer and present_ne_decroche_* statuses
   - otherwise `max(0, montant_total - montant_encaisse)` (backend amount_due - amount_paid)
 
-## WhatsApp Bot (wwebjs-bot/src/index.js)
+## WhatsApp Bot (server/src/index.js)
 
 ### Runtime & session handling
 
-Bot entrypoint: `wwebjs-bot/src/index.js`
+Bot entrypoint: `server/src/index.js`
 
 The bot:
 
@@ -228,7 +228,7 @@ In the `message` handler:
 
 Group lookup is done via:
 
-- `getGroup()` in `wwebjs-bot/src/utils/group-manager.js`
+- `getGroup()` in `server/src/utils/group-manager.js`
 - and called from the bot’s message handler.
 
 Result:
@@ -239,7 +239,7 @@ Result:
 
 Delivery parsing is implemented in:
 
-- `wwebjs-bot/src/parser.js`
+- `server/src/parser.js`
 
 The bot tries multiple structured formats:
 
@@ -260,7 +260,7 @@ If parsing succeeds, the bot:
 
 Status parsing is implemented in:
 
-- `wwebjs-bot/src/statusParser.js`
+- `server/src/statusParser.js`
 
 Status update handling in the bot:
 
@@ -293,10 +293,10 @@ Tariff logic during status updates is applied through:
 
 Daily report generation is implemented in:
 
-- `wwebjs-bot/src/daily-report.js`
-- `wwebjs-bot/src/send-report.js`
+- `server/src/daily-report.js`
+- `server/src/send-report.js`
 
-The bot schedules daily reports in `setupDailyReportScheduler()` inside `wwebjs-bot/src/index.js`.
+The bot schedules daily reports in `setupDailyReportScheduler()` inside `server/src/index.js`.
 
 Config toggles:
 
@@ -307,7 +307,7 @@ Config toggles:
 
 The daily report computation uses delivery stats from DB queries (delivered/pending/pickup/failed counts and amounts).
 
-## REST API (wwebjs-bot/src/api/server.js and routes)
+## REST API (server/src/api/server.js and routes)
 
 ### Base paths
 
@@ -317,22 +317,22 @@ The API serves under:
 
 Entry file:
 
-- `wwebjs-bot/src/api/server.js`
+- `server/src/api/server.js`
 
 Routes are registered from:
 
-- `wwebjs-bot/src/api/routes/auth.js`
-- `wwebjs-bot/src/api/routes/agencies.js`
-- `wwebjs-bot/src/api/routes/groups.js`
-- `wwebjs-bot/src/api/routes/tariffs.js`
-- `wwebjs-bot/src/api/routes/deliveries.js`
-- `wwebjs-bot/src/api/routes/expeditions.js`
-- `wwebjs-bot/src/api/routes/stats.js`
-- `wwebjs-bot/src/api/routes/search.js`
-- `wwebjs-bot/src/api/routes/reports.js`
-- `wwebjs-bot/src/api/routes/reminder-contacts.js` / `reminders.js` (if enabled in your deployment)
-- `wwebjs-bot/src/api/routes/vendors.js` — **agency admin** CRUD for vendor *accounts* (`/api/v1/vendors`)
-- `wwebjs-bot/src/api/routes/vendor.js` — **vendor JWT** mobile namespace (`/api/v1/vendor`)
+- `server/src/api/routes/auth.js`
+- `server/src/api/routes/agencies.js`
+- `server/src/api/routes/groups.js`
+- `server/src/api/routes/tariffs.js`
+- `server/src/api/routes/deliveries.js`
+- `server/src/api/routes/expeditions.js`
+- `server/src/api/routes/stats.js`
+- `server/src/api/routes/search.js`
+- `server/src/api/routes/reports.js`
+- `server/src/api/routes/reminder-contacts.js` / `reminders.js` (if enabled in your deployment)
+- `server/src/api/routes/vendors.js` — **agency admin** CRUD for vendor *accounts* (`/api/v1/vendors`)
+- `server/src/api/routes/vendor.js` — **vendor JWT** mobile namespace (`/api/v1/vendor`)
 
 ### Unauthenticated endpoints
 
@@ -350,7 +350,7 @@ Vendor mobile routes (`/api/v1/vendor/*`) use the same `authenticateToken` middl
 The backend also exposes a schema/migration status endpoint:
 
 - `GET /api/v1/schema/status`
-  - checks pending migrations by reading `schema_migrations` and migration files under `wwebjs-bot/db/migrations/`.
+  - checks pending migrations by reading `schema_migrations` and migration files under `server/db/migrations/`.
 
 ### Authentication API
 
@@ -367,7 +367,7 @@ The backend also exposes a schema/migration status endpoint:
 
 ### Agencies API (super admin management)
 
-File: `wwebjs-bot/src/api/routes/agencies.js`
+File: `server/src/api/routes/agencies.js`
 
 Common patterns:
 
@@ -387,7 +387,7 @@ Endpoints (as implemented):
 
 ### Groups API
 
-File: `wwebjs-bot/src/api/routes/groups.js`
+File: `server/src/api/routes/groups.js`
 
 Endpoints:
 
@@ -408,7 +408,7 @@ Endpoints:
 
 ### Tariffs API (pricing per quartier)
 
-File: `wwebjs-bot/src/api/routes/tariffs.js`
+File: `server/src/api/routes/tariffs.js`
 
 Endpoints:
 
@@ -433,7 +433,7 @@ Endpoints:
 
 ### Deliveries API
 
-File: `wwebjs-bot/src/api/routes/deliveries.js`
+File: `server/src/api/routes/deliveries.js`
 
 All deliveries routes are cookie-authenticated (`router.use(authenticateToken)`).
 
@@ -481,7 +481,7 @@ Response:
   - accepts partial updates; the backend applies tariff adjustments for certain status transitions
   - also saves changes to `delivery_history` for each modified field
   - **vendor role** receives `403` (vendors must not change delivery status from the app; agencies do that from the dashboard)
-  - when **`status` changes** and the delivery has **`created_by_user_id`** (vendor-created row), the server sends a **non-blocking Expo push** to that vendor’s registered token(s) (implementation: `wwebjs-bot/src/lib/expoPush.js`; optional env `EXPO_ACCESS_TOKEN`)
+  - when **`status` changes** and the delivery has **`created_by_user_id`** (vendor-created row), the server sends a **non-blocking Expo push** to that vendor’s registered token(s) (implementation: `server/src/lib/expoPush.js`; optional env `EXPO_ACCESS_TOKEN`)
 
 #### Delete delivery
 
@@ -497,7 +497,7 @@ Response:
 
 ### Vendor API (mobile app)
 
-File: `wwebjs-bot/src/api/routes/vendor.js`  
+File: `server/src/api/routes/vendor.js`  
 Mounted at: **`/api/v1/vendor`**
 
 This namespace is **additive**: it does not replace `/api/v1/deliveries` or `/api/v1/vendors`. It exists so production dashboard and bot flows keep using existing routes while the mobile app uses a dedicated surface.
@@ -545,7 +545,7 @@ Full request/response shapes and examples: root **`API.md`**.
 
 ### Reports (PDF export)
 
-File: `wwebjs-bot/src/api/routes/reports.js`
+File: `server/src/api/routes/reports.js`
 
 - `GET /api/v1/reports/groups/:groupId/pdf`
   - cookie required
@@ -641,14 +641,14 @@ The frontend uses `credentials: 'include'` so cookie auth works cross-origin.
 
 ## Configuration (Environment Variables)
 
-### Backend (wwebjs-bot)
+### Backend (server)
 
 Local env templates:
 
-- `wwebjs-bot/ENV_LOCAL_EXAMPLE.txt` (SQLite default)
-- `wwebjs-bot/env.local.sqlite.example` (SQLite)
-- `wwebjs-bot/env.local.postgres.example` (Postgres)
-- `wwebjs-bot/env.render.example` (Render/Postgres production)
+- `server/ENV_LOCAL_EXAMPLE.txt` (SQLite default)
+- `server/env.local.sqlite.example` (SQLite)
+- `server/env.local.postgres.example` (Postgres)
+- `server/env.render.example` (Render/Postgres production)
 
 Key backend environment variables:
 
@@ -711,7 +711,7 @@ Reference:
 
 ### Key production commands
 
-Backend scripts (from `wwebjs-bot/package.json`):
+Backend scripts (from `server/package.json`):
 
 - `npm run api` — API only (`node src/api/server.js`)
 - `npm run dev` — bot with nodemon
@@ -745,14 +745,14 @@ Common issues addressed there:
 
 ## Testing & QA
 
-Repository includes scripts and guides under `wwebjs-bot/` such as:
+Repository includes scripts and guides under `server/` such as:
 
 - API testing:
   - `client/API_TESTING_GUIDE.md`
   - `client/test-api.js` (frontend root script exists)
 - Bot/test scenarios:
-  - `wwebjs-bot/src/test/`
-  - `wwebjs-bot/TESTING_CHECKLIST.md`
+  - `server/src/test/`
+  - `server/TESTING_CHECKLIST.md`
 
 If you rely on migrations, prefer running:
 
@@ -761,6 +761,6 @@ If you rely on migrations, prefer running:
 ## Notes, Limitations, and Assumptions (based on current code)
 
 - The bot currently ignores unknown WhatsApp groups (it checks DB for group existence and returns early if missing).
-- Group “auto-linking by agency code” utilities exist under `wwebjs-bot/src/utils/`, but the main message listener path relies on groups being created via the dashboard/API first.
+- Group “auto-linking by agency code” utilities exist under `server/src/utils/`, but the main message listener path relies on groups being created via the dashboard/API first.
 - Tariff application is centralized in backend delivery create/update routes and also applied in bot status updates using tariff lookup by `agencyId` + `quartier`.
 

@@ -1,10 +1,10 @@
-# Local Postgres for LivSight dev (matches wwebjs-bot/.envexample)
+# Local Postgres for LivSight dev (matches server/.envexample)
 #
 # Start:  docker compose up -d
 # Stop:   docker compose down
 # Logs:   docker compose logs -f postgres
 #
-# Then in wwebjs-bot:
+# Then in server:
 #   cp .envexample .env   # if needed
 #   npm run migrate
 #   npm run api:dev

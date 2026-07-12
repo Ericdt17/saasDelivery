@@ -3,7 +3,7 @@
 ## ✅ Fichier de migration créé
 
 Le fichier de migration a été créé:
-- **Fichier**: `wwebjs-bot/db/migrations/20250105000000_increase_status_column_size.sql`
+- **Fichier**: `server/db/migrations/20250105000000_increase_status_column_size.sql`
 - **Action**: Augmente la colonne `status` de `VARCHAR(20)` à `VARCHAR(50)`
 
 ---
@@ -19,7 +19,7 @@ ssh root@157.173.118.238
 ### Étape 2: Naviguer vers le répertoire du projet
 
 ```bash
-cd /opt/saasDelivery/wwebjs-bot
+cd /opt/saasDelivery/server
 ```
 
 ### Étape 3: Mettre à jour le code (si nécessaire)
@@ -28,7 +28,7 @@ Si vous avez fait des modifications locales, poussez-les d'abord:
 
 ```bash
 # Sur votre machine locale
-git add wwebjs-bot/db/migrations/20250105000000_increase_status_column_size.sql
+git add server/db/migrations/20250105000000_increase_status_column_size.sql
 git commit -m "Fix: Increase status column size to VARCHAR(50)"
 git push
 

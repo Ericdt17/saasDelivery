@@ -127,8 +127,8 @@ docker ps | grep postgres
 sudo mkdir -p /opt/saasDelivery
 cd /opt/saasDelivery
 
-git clone <your-repo-url> wwebjs-bot
-cd wwebjs-bot/wwebjs-bot
+git clone <your-repo-url> server
+cd server/server
 
 npm install --omit=dev
 ```
@@ -138,7 +138,7 @@ npm install --omit=dev
 ## Step 4: Configure Environment Variables
 
 ```bash
-nano /opt/saasDelivery/wwebjs-bot/wwebjs-bot/.env
+nano /opt/saasDelivery/server/server/.env
 ```
 
 ```env
@@ -182,7 +182,7 @@ AUTH_HEADER_FALLBACK=true
 ## Step 5: Run Database Migrations
 
 ```bash
-cd /opt/saasDelivery/wwebjs-bot/wwebjs-bot
+cd /opt/saasDelivery/server/server
 npm run migrate
 ```
 
@@ -193,7 +193,7 @@ You should see: `Database schema is up to date`
 ## Step 6: Start Services with PM2
 
 ```bash
-cd /opt/saasDelivery/wwebjs-bot/wwebjs-bot
+cd /opt/saasDelivery/server/server
 
 # Start API server
 pm2 start src/api/server.js --name api-server
@@ -425,7 +425,7 @@ If a product only supports **email**, you can still forward to Discord via a bot
 
 ### Deeper WhatsApp session alerts (webhook)
 
-Implemented in **`wwebjs-bot`** (`src/lib/botAlerts.js`): optional **Discord** or **Slack** incoming webhook when the session misbehaves. Configure **`BOT_ALERT_WEBHOOK_URL`** on the VPS (see **Step 7f**). This is **in addition to** Healthchecks (Step 7c), not a replacement.
+Implemented in **`server`** (`src/lib/botAlerts.js`): optional **Discord** or **Slack** incoming webhook when the session misbehaves. Configure **`BOT_ALERT_WEBHOOK_URL`** on the VPS (see **Step 7f**). This is **in addition to** Healthchecks (Step 7c), not a replacement.
 
 ---
 
@@ -459,7 +459,7 @@ Keep the URL **secret** (same as passwords). Do not commit it to git.
 
 ### 7f.2 — Add to `.env` on the VPS
 
-Edit the **`wwebjs-bot`** `.env` that PM2 loads for **both** `whatsapp-bot` and **`api-server`** (same directory in a typical setup). **`BOT_ALERT_WEBHOOK_URL`** is read by the **WhatsApp bot** (`src/index.js` → `botAlerts.init`) and by the **REST API** (`src/api/middleware/errorHandler.js` → `notifyApiError`) without needing a second copy, as long as both processes load this file.
+Edit the **`server`** `.env` that PM2 loads for **both** `whatsapp-bot` and **`api-server`** (same directory in a typical setup). **`BOT_ALERT_WEBHOOK_URL`** is read by the **WhatsApp bot** (`src/index.js` → `botAlerts.init`) and by the **REST API** (`src/api/middleware/errorHandler.js` → `notifyApiError`) without needing a second copy, as long as both processes load this file.
 
 ```bash
 # Required for deeper alerts (omit to disable — Healthchecks-only is fine)
@@ -495,7 +495,7 @@ All optional; defaults are sensible for production.
 ### 7f.4 — Deploy
 
 ```bash
-cd /path/to/wwebjs-bot
+cd /path/to/server
 git pull   # or your deploy flow
 # add BOT_ALERT_* to .env
 pm2 restart whatsapp-bot
@@ -537,7 +537,7 @@ Scan the QR code with WhatsApp to connect the bot.
 
 ## 🔄 CI/CD (GitHub Actions)
 
-Deploys automatically on push to `main` (backend only, triggered by changes in `wwebjs-bot/**`):
+Deploys automatically on push to `main` (backend only, triggered by changes in `server/**`):
 
 1. SSHes into VPS
 2. `git pull` latest code
@@ -582,7 +582,7 @@ docker logs postgres --tail 20
 ```bash
 pm2 logs api-server --lines 50
 # Check .env has correct DATABASE_URL
-cat /opt/saasDelivery/wwebjs-bot/wwebjs-bot/.env | grep DATABASE_URL
+cat /opt/saasDelivery/server/server/.env | grep DATABASE_URL
 ```
 
 ### Database connection error
@@ -597,7 +597,7 @@ docker exec -it postgres psql -U saas_delivery_user -d saas_delivery_db -c "SELE
 ### Dashboard showing zeros
 ```bash
 # Verify timezone is set correctly
-grep TIME_ZONE /opt/saasDelivery/wwebjs-bot/wwebjs-bot/.env
+grep TIME_ZONE /opt/saasDelivery/server/server/.env
 # Should be: TIME_ZONE=Africa/Douala
 ```
 
@@ -633,7 +633,7 @@ pm2 monit
 
 ### Run migrations manually
 ```bash
-cd /opt/saasDelivery/wwebjs-bot/wwebjs-bot && npm run migrate
+cd /opt/saasDelivery/server/server && npm run migrate
 ```
 
 ---
@@ -642,7 +642,7 @@ cd /opt/saasDelivery/wwebjs-bot/wwebjs-bot && npm run migrate
 
 - [ ] Docker installed on VPS
 - [ ] PostgreSQL Docker container running (`docker ps`)
-- [ ] Repository cloned to `/opt/saasDelivery/wwebjs-bot`
+- [ ] Repository cloned to `/opt/saasDelivery/server`
 - [ ] Dependencies installed (`npm install --omit=dev`)
 - [ ] `.env` configured with local `DATABASE_URL`, `PG_SSL=false`, `TIME_ZONE=Africa/Douala`
 - [ ] Migrations run (`npm run migrate`)
@@ -651,7 +651,7 @@ cd /opt/saasDelivery/wwebjs-bot/wwebjs-bot && npm run migrate
 - [ ] Nginx configured and enabled
 - [ ] Free API uptime monitor on `https://api.livsight.com/api/v1/health` (e.g. UptimeRobot) + **alert contact** configured (Step 7b, 7d)
 - [ ] Bot process monitor: Healthchecks.io + `/usr/local/bin/livsight-bot-ping.sh` + cron (Step 7c) + **integration** e.g. email (Step 7d)
-- [ ] Optional: `BOT_ALERT_WEBHOOK_URL` in `wwebjs-bot/.env` for bot + API webhooks (Step 7f), then `pm2 restart whatsapp-bot` and `pm2 restart api-server`
+- [ ] Optional: `BOT_ALERT_WEBHOOK_URL` in `server/.env` for bot + API webhooks (Step 7f), then `pm2 restart whatsapp-bot` and `pm2 restart api-server`
 - [ ] QR code scanned (WhatsApp connected)
 - [ ] CI/CD GitHub secrets set (VPS_HOST, VPS_USER, VPS_SSH_KEY, GH_USERNAME, GH_TOKEN)
 

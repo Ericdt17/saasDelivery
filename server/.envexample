@@ -1,0 +1,52 @@
+# LivSight - API backend environment example
+# Copy this file to `.env` and fill in real values.
+
+# ---------------------------
+# Database
+# ---------------------------
+# Postgres on staging/production server (not local Docker).
+# If unset, the API falls back to SQLite (local dev only).
+DB_TYPE=postgres
+DATABASE_URL=postgresql://USER:PASSWORD@HOST:5432/DATABASE_NAME
+PG_SSL=false
+SKIP_MIGRATIONS=false
+USE_CORE_API=false
+
+# ---------------------------
+# Server
+# ---------------------------
+API_PORT=3000
+NODE_ENV=development
+TIME_ZONE=UTC
+
+# Comma-separated list of allowed origins (CORS). Must include your frontend URL(s).
+ALLOWED_ORIGINS=http://localhost:5173
+
+# ---------------------------
+# Auth (REQUIRED)
+# ---------------------------
+# Required for login (do NOT use a placeholder in real envs)
+JWT_SECRET=CHANGE_ME_TO_A_LONG_RANDOM_SECRET
+
+# Enable Bearer token auth (Authorization header) as fallback.
+# Useful for mobile apps that cannot use HTTP-only cookies.
+AUTH_HEADER_FALLBACK=true
+
+# ---------------------------
+# Alerts / Webhooks (optional)
+# ---------------------------
+# Example: Discord webhook URL for API error alerts
+BOT_ALERT_WEBHOOK_URL=
+
+# Discord webhook for new recruitment applications (separate channel)
+RECRUITMENT_ALERT_WEBHOOK_URL=
+
+# Optional: dashboard base URL for links in recruitment alerts (defaults to first ALLOWED_ORIGINS)
+# RECRUITMENT_DASHBOARD_URL=https://app.livsight.com
+
+# ---------------------------
+# Cloudinary (optional)
+# ---------------------------
+CLOUDINARY_CLOUD_NAME=
+CLOUDINARY_API_KEY=
+CLOUDINARY_API_SECRET=

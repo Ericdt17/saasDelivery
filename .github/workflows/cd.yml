@@ -5,7 +5,7 @@ on:
     branches:
       - main
     paths:
-      - 'wwebjs-bot/**'
+      - 'server/**'
   workflow_dispatch:
 
 jobs:
@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Deploy backend & bot
+      - name: Deploy backend API
         uses: appleboy/ssh-action@v1.0.3
         env:
           GH_USERNAME: ${{ secrets.GH_USERNAME }}
@@ -27,27 +27,35 @@ jobs:
           script: |
             set -e
 
-            cd /opt/saasDelivery/wwebjs-bot
+            cd /opt/saasDelivery/server
 
             echo "→ Pulling latest code..."
             git remote set-url origin https://${GH_USERNAME}:${GH_TOKEN}@github.com/Ericdt17/saasDelivery.git
             git fetch origin main
             git reset --hard origin/main
 
+            # One-time migration: inner folder renamed wwebjs-bot → server
+            if [ -d wwebjs-bot ] && [ ! -d server ]; then
+              echo "→ Migrating wwebjs-bot/ to server/..."
+              cp wwebjs-bot/.env /tmp/livsight-server.env 2>/dev/null || true
+              mv wwebjs-bot server
+              cp /tmp/livsight-server.env server/.env 2>/dev/null || true
+            fi
+
             echo "→ Installing dependencies..."
-            cd wwebjs-bot
+            cd server
             npm install --omit=dev
 
             echo "→ Running migrations..."
             npm run migrate
 
-            echo "→ Restarting services..."
-            pm2 restart api-server || pm2 start src/api/server.js --name api-server
-            pm2 restart whatsapp-bot || pm2 start src/index.js --name whatsapp-bot
+            echo "→ Restarting API server..."
+            pm2 restart api-server || pm2 start ecosystem.config.js || pm2 start src/api/server.js --name api-server
             pm2 save
 
-            echo "→ Verifying services..."
+            echo "→ Verifying service..."
             sleep 3
-            pm2 list | grep -E "api-server|whatsapp-bot"
+            pm2 list | grep api-server
+            curl -fsS http://127.0.0.1:3001/api/v1/health
 
             echo "✓ Deploy complete"

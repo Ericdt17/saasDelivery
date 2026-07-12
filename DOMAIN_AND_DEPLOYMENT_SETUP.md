@@ -165,7 +165,7 @@ Dans Vercel Dashboard → Settings → Environment Variables :
 
 ### Variables d'environnement sur le VPS
 
-**Fichier :** `/opt/saasDelivery/wwebjs-bot/.env` (ou variables PM2)
+**Fichier :** `/opt/saasDelivery/server/.env` (ou variables PM2)
 
 ```bash
 ALLOWED_ORIGINS=https://saas-delivery-lemon.vercel.app,https://app.livsight.com
@@ -178,7 +178,7 @@ NODE_ENV=production
 
 ### Configuration CORS dans le code
 
-**Fichier :** `wwebjs-bot/src/api/server.js`
+**Fichier :** `server/src/api/server.js`
 
 La configuration CORS :
 - Autorise les origines listées dans `ALLOWED_ORIGINS`
@@ -201,11 +201,11 @@ pm2 restart api-server
 ### Configuration
 
 **Fichiers modifiés :**
-- `wwebjs-bot/src/index.js`
-- `wwebjs-bot/src/list-groups.js`
-- `wwebjs-bot/src/send-message.js`
-- `wwebjs-bot/src/send-report.js`
-- `wwebjs-bot/src/test-send.js`
+- `server/src/index.js`
+- `server/src/list-groups.js`
+- `server/src/send-message.js`
+- `server/src/send-report.js`
+- `server/src/test-send.js`
 
 **Changement :**
 ```javascript
@@ -244,7 +244,7 @@ DATABASE_URL=postgresql://...  # PostgreSQL prod
 
 ### Amélioration du QR Code pour déploiement distant
 
-**Fichier :** `wwebjs-bot/src/index.js`
+**Fichier :** `server/src/index.js`
 
 Le bot génère maintenant :
 1. QR code ASCII dans les logs
@@ -258,7 +258,7 @@ Le bot génère maintenant :
 
 ### Logique de connexion
 
-**Fichier :** `wwebjs-bot/src/db/index.js`
+**Fichier :** `server/src/db/index.js`
 
 Le système choisit automatiquement :
 - **PostgreSQL** si `DATABASE_URL` est défini
@@ -270,14 +270,14 @@ Le système choisit automatiquement :
 DATABASE_URL=postgresql://user:password@host:port/database
 
 # SQLite (local - par défaut si DATABASE_URL vide)
-# Utilise le fichier : wwebjs-bot/data/bot.db
+# Utilise le fichier : server/data/bot.db
 ```
 
 ### Correction du bug de requête PostgreSQL
 
 **Problème :** Les requêtes avec `LIMIT 1` retournaient un objet unique, mais le code traitait le résultat comme un tableau.
 
-**Fichier corrigé :** `wwebjs-bot/src/utils/group-manager.js`
+**Fichier corrigé :** `server/src/utils/group-manager.js`
 
 **Solution :** Gestion correcte du type de retour (objet unique pour PostgreSQL avec LIMIT 1).
 
@@ -285,7 +285,7 @@ DATABASE_URL=postgresql://user:password@host:port/database
 
 ### Logs de connexion base de données
 
-**Fichier :** `wwebjs-bot/src/db/index.js`
+**Fichier :** `server/src/db/index.js`
 
 Le système affiche maintenant :
 - Type de base de données (PostgreSQL/SQLite)
@@ -295,7 +295,7 @@ Le système affiche maintenant :
 
 ### Logs de configuration environnement
 
-**Fichier :** `wwebjs-bot/src/index.js`
+**Fichier :** `server/src/index.js`
 
 Affichage au démarrage :
 - `NODE_ENV`
@@ -304,7 +304,7 @@ Affichage au démarrage :
 
 ### Logs de recherche de groupe
 
-**Fichier :** `wwebjs-bot/src/utils/group-manager.js`
+**Fichier :** `server/src/utils/group-manager.js`
 
 Logs détaillés pour :
 - Recherche de groupe dans la base
@@ -326,7 +326,7 @@ Logs détaillés pour :
 1. **Push vers GitHub** (branche `dev` ou `main`)
 2. **Pull sur le VPS :**
    ```bash
-   cd /opt/saasDelivery/wwebjs-bot
+   cd /opt/saasDelivery/server
    git pull origin dev
    ```
 3. **Redémarrage avec PM2 :**
@@ -465,7 +465,7 @@ npm run build
 
 **Backend :**
 ```bash
-cd wwebjs-bot
+cd server
 npm update
 pm2 restart api-server
 ```
@@ -479,7 +479,7 @@ pg_dump $DATABASE_URL > backup_$(date +%Y%m%d).sql
 
 **SQLite :**
 ```bash
-cp wwebjs-bot/data/bot.db backup_$(date +%Y%m%d).db
+cp server/data/bot.db backup_$(date +%Y%m%d).db
 ```
 
 ---

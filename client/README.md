@@ -2,7 +2,7 @@
 
 React + TypeScript dashboard for agencies and super admins.
 
-This app talks to the backend REST API in `../wwebjs-bot` (base path `/api/v1`).
+This app talks to the backend REST API in `../server` (base path `/api/v1`).
 
 ---
 
@@ -83,7 +83,7 @@ Typical pattern:
 1) Start from a page under `src/pages/*` (e.g. `operations/Groups.tsx`)
 2) Find the service call (e.g. `getGroups` from `src/services/groups.ts`)
 3) That service calls `apiGet`/`apiPost` in `src/services/api.ts`
-4) Match the endpoint to backend route files under `../wwebjs-bot/src/api/routes/*`
+4) Match the endpoint to backend route files under `../server/src/api/routes/*`
 
 ---
 

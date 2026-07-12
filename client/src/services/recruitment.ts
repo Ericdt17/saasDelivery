@@ -71,7 +71,14 @@ export interface ApplicationRow {
   job_offer_id: number;
   full_name: string;
   phone: string;
+  email: string | null;
   quartier: string | null;
+  education_level: string | null;
+  field_of_study: string | null;
+  school_name: string | null;
+  languages: string | null;
+  currently_employed: string | null;
+  in_other_company: string | null;
   transport: string | null;
   availability: string | null;
   photo_url: string | null;
