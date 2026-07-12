@@ -1,0 +1,47 @@
+---
+description: TDD obligatoire au développement et conventions de commit Git
+alwaysApply: true
+---
+
+# TDD + commits
+
+## Test-Driven Development (obligatoire)
+
+Pour toute feature, bugfix ou changement de comportement :
+
+1. **Red** — écrire ou mettre à jour un test qui échoue (décrit le comportement attendu)
+2. **Green** — implémenter le minimum pour faire passer le test
+3. **Refactor** — nettoyer sans casser les tests
+
+Emplacements des tests :
+- **Backend** : `server/src/__tests__/` (unit + integration Jest)
+- **Frontend** : tests colocalisés ou `client/src/**/*.test.ts(x)`
+
+Avant de considérer une tâche terminée :
+- lancer les tests concernés (`cd server && npm test`, `cd client && npm test`)
+- ne pas livrer de code sans couverture du comportement nouveau ou modifié
+
+Exceptions acceptables (sans test) : renommages purs, docs, config sans logique — le mentionner brièvement.
+
+## Commits Git
+
+**Ne committer que si l'utilisateur le demande explicitement.**
+
+Avant chaque commit :
+```bash
+git status -sb
+git diff --stat
+git log -5 --oneline   # calquer le style du repo
+```
+
+Message de commit :
+- **1 ligne impérative** en anglais (comme l'historique récent : `Add …`, `Fix …`, `Allow …`)
+- **Corps optionnel** (1–2 phrases) : le *pourquoi*, pas un dump de fichiers
+- utiliser un HEREDOC : `git commit -m "$(cat <<'EOF' … EOF)"`
+
+Interdictions :
+- jamais `.env`, secrets, clés API
+- jamais `git push --force` sur `main` sans demande explicite
+- jamais `--no-verify` sauf demande explicite
+
+Push : uniquement sur demande explicite de l'utilisateur.
