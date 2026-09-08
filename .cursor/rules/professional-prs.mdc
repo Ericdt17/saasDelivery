@@ -1,0 +1,64 @@
+---
+description: Professional standard for creating GitHub pull requests
+alwaysApply: true
+---
+
+# Professional PRs
+
+Create a PR only when the user asks. Never open a draft or final PR unsolicited.
+
+## Before opening
+
+1. Branch is pushed and tracks remote (`git push -u origin HEAD` if needed).
+2. Diff vs base is reviewed: `git status -sb`, `git diff [base]...HEAD`, `git log [base]..HEAD --oneline`.
+3. Scope is one concern (feature, fix, or refactor). Split unrelated work into separate PRs.
+4. No secrets (`.env`, keys, credentials). No unrelated generated noise (e.g. `.DS_Store`) unless intentional.
+
+## Title
+
+- Imperative, concise, English — same voice as commits: `Add …`, `Fix …`, `Allow …`
+- Describe the outcome, not the file list
+- Optional prefix when useful: `hr:`, `client:`, `server:`
+
+```
+✅ Add HR face check-in geofence validation
+❌ Update stuff / WIP / fix
+```
+
+## Body (required via HEREDOC)
+
+```markdown
+## Summary
+- 1–3 bullets: what changed and why (product/behavior impact)
+- Call out breaking changes, migrations, or new env vars
+
+## Test plan
+- [ ] Concrete checks a reviewer can run (commands + expected result)
+- [ ] Cover happy path and the main failure/edge case touched
+```
+
+- Summary = *why / impact*; Test plan = *how to verify*
+- Link related issue/plan when one exists
+- Do not paste raw file dumps or commit lists into the summary
+
+## Size & quality bar
+
+- Prefer small, reviewable PRs over large mixed ones
+- Include tests for behavior changes (see TDD rule); note exceptions briefly in Summary
+- Mentions of follow-ups belong in Summary as explicit non-goals, not as unfinished code on the branch
+
+## Create with gh
+
+```bash
+gh pr create --title "…" --body "$(cat <<'EOF'
+## Summary
+- …
+
+## Test plan
+- [ ] …
+
+EOF
+)"
+```
+
+Return the PR URL when done.

@@ -19,6 +19,8 @@ const vendorsRouter = require("./routes/vendors");
 const vendorRouter = require("./routes/vendor");
 const waitlistRouter = require("./routes/waitlist");
 const recruitmentRouter = require("./routes/recruitment");
+const merchantTermsRouter = require("./routes/merchantTerms");
+const hrRouter = require("./routes/hr");
 const errorHandler = require("./middleware/errorHandler");
 
 const app = express();
@@ -145,6 +147,8 @@ app.use("/api/v1/vendors", vendorsRouter);
 app.use("/api/v1/vendor", vendorRouter);
 app.use("/api/v1/waitlist", waitlistRouter);
 app.use("/api/v1/recruitment", recruitmentRouter);
+app.use("/api/v1/merchant-terms", merchantTermsRouter);
+app.use("/api/v1/hr", hrRouter);
 
 // Health check endpoint
 app.get("/api/v1/health", async (req, res) => {
