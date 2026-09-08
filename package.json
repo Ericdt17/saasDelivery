@@ -1,0 +1,12 @@
+{
+  "name": "livsight-saas-delivery",
+  "private": true,
+  "scripts": {
+    "dev:hr-app": "npm run dev --prefix hr-app",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.0"
+  }
+}

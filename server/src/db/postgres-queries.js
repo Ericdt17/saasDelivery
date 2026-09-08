@@ -2041,6 +2041,293 @@ function createPostgresQueries(pool) {
     }
   }
 
+  async function listMerchantTerms() {
+    const rows = await query(
+      `SELECT id, title, content, is_active, created_at, updated_at
+       FROM merchant_terms
+       ORDER BY created_at DESC`
+    );
+    return Array.isArray(rows) ? rows : rows ? [rows] : [];
+  }
+
+  async function getMerchantTermsById(id) {
+    const row = await query(
+      `SELECT id, title, content, is_active, created_at, updated_at
+       FROM merchant_terms
+       WHERE id = $1
+       LIMIT 1`,
+      [id]
+    );
+    return row || null;
+  }
+
+  async function createMerchantTerms({
+    title,
+    content = null,
+    is_active = true,
+  }) {
+    const result = await pool.query(
+      `INSERT INTO merchant_terms (title, content, is_active)
+       VALUES ($1, $2, $3)
+       RETURNING *`,
+      [title, content, is_active]
+    );
+    return result.rows[0] || null;
+  }
+
+  async function updateMerchantTerms(id, updates = {}) {
+    const allowed = ["title", "content", "is_active"];
+    const fields = [];
+    const values = [];
+    let i = 1;
+    for (const [key, value] of Object.entries(updates)) {
+      if (!allowed.includes(key)) continue;
+      if (value === undefined) continue;
+      fields.push(`${key} = $${i++}`);
+      values.push(value);
+    }
+    if (!fields.length) {
+      return getMerchantTermsById(id);
+    }
+    fields.push(`updated_at = NOW()`);
+    values.push(id);
+    const result = await pool.query(
+      `UPDATE merchant_terms SET ${fields.join(", ")} WHERE id = $${i} RETURNING *`,
+      values
+    );
+    return result.rows[0] || null;
+  }
+
+  async function deleteMerchantTerms(id) {
+    const res = await query(
+      `DELETE FROM merchant_terms WHERE id = $1 RETURNING id`,
+      [id]
+    );
+    if (!res || !res.id) {
+      return { deleted: false, reason: "not_found" };
+    }
+    return { deleted: true, id: res.id };
+  }
+
+  const EMPLOYEE_PUBLIC_COLUMNS = `
+    id, application_id, job_offer_id, full_name, phone, email, photo_url,
+    gender, quartier, job_title, job_type, education_level, field_of_study,
+    school_name, transport, availability, status, hired_at, notes, salary,
+    poste, salary_base, is_active, enrolled_at, created_at, updated_at,
+    (enrolled_at IS NOT NULL) AS is_enrolled
+  `;
+
+  async function listEmployees() {
+    const rows = await query(
+      `SELECT ${EMPLOYEE_PUBLIC_COLUMNS}
+       FROM employees
+       ORDER BY created_at DESC`
+    );
+    return Array.isArray(rows) ? rows : rows ? [rows] : [];
+  }
+
+  async function getEmployeeById(id) {
+    const row = await query(
+      `SELECT ${EMPLOYEE_PUBLIC_COLUMNS}
+       FROM employees
+       WHERE id = $1
+       LIMIT 1`,
+      [id]
+    );
+    return row || null;
+  }
+
+  async function getEmployeeByIdWithDescriptor(id) {
+    const row = await query(
+      `SELECT ${EMPLOYEE_PUBLIC_COLUMNS}, face_descriptor
+       FROM employees
+       WHERE id = $1
+       LIMIT 1`,
+      [id]
+    );
+    return row || null;
+  }
+
+  async function createEmployee({
+    full_name,
+    email,
+    phone = null,
+    poste = null,
+    salary_base = null,
+  }) {
+    const normalizedEmail = String(email).trim().toLowerCase();
+    const result = await pool.query(
+      `INSERT INTO employees (full_name, email, phone, poste, salary_base, application_id)
+       VALUES ($1, $2, $3, $4, $5, NULL)
+       RETURNING ${EMPLOYEE_PUBLIC_COLUMNS}`,
+      [full_name, normalizedEmail, phone ?? null, poste ?? null, salary_base ?? null]
+    );
+    return result.rows[0] || null;
+  }
+
+  async function updateEmployee(id, updates = {}) {
+    const allowed = [
+      "full_name",
+      "email",
+      "phone",
+      "poste",
+      "salary_base",
+      "is_active",
+    ];
+    const fields = [];
+    const values = [];
+    let i = 1;
+    for (const [key, value] of Object.entries(updates)) {
+      if (!allowed.includes(key)) continue;
+      if (value === undefined) continue;
+      let nextValue = value;
+      if (key === "email" && value != null) {
+        nextValue = String(value).trim().toLowerCase();
+      }
+      fields.push(`${key} = $${i++}`);
+      values.push(nextValue);
+    }
+    if (!fields.length) {
+      return getEmployeeById(id);
+    }
+    fields.push(`updated_at = NOW()`);
+    values.push(id);
+    const result = await pool.query(
+      `UPDATE employees SET ${fields.join(", ")} WHERE id = $${i}
+       RETURNING ${EMPLOYEE_PUBLIC_COLUMNS}`,
+      values
+    );
+    return result.rows[0] || null;
+  }
+
+  async function enrollEmployeeFace(id, faceDescriptor) {
+    const result = await pool.query(
+      `UPDATE employees
+       SET face_descriptor = $1::jsonb,
+           enrolled_at = NOW(),
+           updated_at = NOW()
+       WHERE id = $2
+       RETURNING ${EMPLOYEE_PUBLIC_COLUMNS}`,
+      [JSON.stringify(faceDescriptor), id]
+    );
+    return result.rows[0] || null;
+  }
+
+  async function getEmployeeByEmailWithDescriptor(email) {
+    const normalizedEmail = String(email).trim().toLowerCase();
+    const row = await query(
+      `SELECT ${EMPLOYEE_PUBLIC_COLUMNS}, face_descriptor
+       FROM employees
+       WHERE lower(email) = $1
+       LIMIT 1`,
+      [normalizedEmail]
+    );
+    return row || null;
+  }
+
+  async function getAttendanceByEmployeeAndDate(employeeId, date) {
+    const row = await query(
+      `SELECT id, employee_id, date, check_in_time, status,
+              face_verified, gps_verified, latitude, longitude, created_at
+       FROM attendances
+       WHERE employee_id = $1 AND date = $2::date
+       LIMIT 1`,
+      [employeeId, date]
+    );
+    return row || null;
+  }
+
+  async function createAttendance({
+    employee_id,
+    date,
+    check_in_time,
+    status,
+    face_verified = false,
+    gps_verified = false,
+    latitude = null,
+    longitude = null,
+  }) {
+    const result = await pool.query(
+      `INSERT INTO attendances (
+         employee_id, date, check_in_time, status,
+         face_verified, gps_verified, latitude, longitude
+       ) VALUES ($1, $2::date, $3, $4, $5, $6, $7, $8)
+       RETURNING id, employee_id, date, check_in_time, status,
+                 face_verified, gps_verified, latitude, longitude, created_at`,
+      [
+        employee_id,
+        date,
+        check_in_time,
+        status,
+        face_verified,
+        gps_verified,
+        latitude,
+        longitude,
+      ]
+    );
+    return result.rows[0] || null;
+  }
+
+  async function listAttendances({
+    employee_id = null,
+    date = null,
+    month = null,
+    year = null,
+  } = {}) {
+    const conditions = [];
+    const params = [];
+    let i = 1;
+
+    if (employee_id != null) {
+      conditions.push(`a.employee_id = $${i++}`);
+      params.push(employee_id);
+    }
+    if (date) {
+      conditions.push(`a.date = $${i++}::date`);
+      params.push(date);
+    }
+    if (month != null && year != null) {
+      conditions.push(
+        `EXTRACT(MONTH FROM a.date) = $${i++} AND EXTRACT(YEAR FROM a.date) = $${i++}`
+      );
+      params.push(month, year);
+    }
+
+    const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+    const rows = await query(
+      `SELECT a.id, a.employee_id, a.date, a.check_in_time, a.status,
+              a.face_verified, a.gps_verified, a.latitude, a.longitude, a.created_at,
+              e.full_name, e.email, e.poste
+       FROM attendances a
+       INNER JOIN employees e ON e.id = a.employee_id
+       ${where}
+       ORDER BY a.date DESC, a.check_in_time DESC NULLS LAST`,
+      params
+    );
+    return Array.isArray(rows) ? rows : rows ? [rows] : [];
+  }
+
+  async function summarizeAttendances({ month, year }) {
+    const rows = await query(
+      `SELECT e.id AS employee_id,
+              e.full_name,
+              e.email,
+              e.poste,
+              COALESCE(SUM(CASE WHEN a.status = 'present' THEN 1 ELSE 0 END), 0)::int AS days_present,
+              COALESCE(SUM(CASE WHEN a.status = 'late' THEN 1 ELSE 0 END), 0)::int AS days_late
+       FROM employees e
+       LEFT JOIN attendances a
+         ON a.employee_id = e.id
+        AND EXTRACT(MONTH FROM a.date) = $1
+        AND EXTRACT(YEAR FROM a.date) = $2
+       WHERE e.is_active = true
+       GROUP BY e.id, e.full_name, e.email, e.poste
+       ORDER BY e.full_name ASC`,
+      [month, year]
+    );
+    return Array.isArray(rows) ? rows : rows ? [rows] : [];
+  }
+
   return {
     type: "postgres",
     query,
@@ -2144,6 +2431,24 @@ function createPostgresQueries(pool) {
     recruitmentUpdateApplication,
     recruitmentDeleteApplication,
     recruitmentCreateApplicationWithAnswers,
+    // Merchant terms (conditions marchands)
+    listMerchantTerms,
+    getMerchantTermsById,
+    createMerchantTerms,
+    updateMerchantTerms,
+    deleteMerchantTerms,
+    // HR employees
+    listEmployees,
+    getEmployeeById,
+    getEmployeeByIdWithDescriptor,
+    getEmployeeByEmailWithDescriptor,
+    createEmployee,
+    updateEmployee,
+    enrollEmployeeFace,
+    getAttendanceByEmployeeAndDate,
+    createAttendance,
+    listAttendances,
+    summarizeAttendances,
     close: async () => pool.end(),
     getRawDb: () => pool,
     TIME_ZONE,

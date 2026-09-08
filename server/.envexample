@@ -51,6 +51,21 @@ RECRUITMENT_ALERT_WEBHOOK_URL=
 # RECRUITMENT_DASHBOARD_URL=https://app.livsight.com
 
 # ---------------------------
+# HR check-in office GPS (defaults = Hippodrome Yaoundé)
+# Override for local testing (e.g. your location in France):
+# HR_OFFICE_LAT=48.8566
+# HR_OFFICE_LNG=2.3522
+# HR_OFFICE_RADIUS_M=500
+# ---------------------------
+# HR_OFFICE_LAT=3.8721
+# HR_OFFICE_LNG=11.5137
+# HR_OFFICE_RADIUS_M=300
+
+# Local testing only — skip Douala time window (always "present")
+# HR_CHECKIN_IGNORE_TIME=true
+# HR_CHECKIN_RATE_MAX=10
+
+# ---------------------------
 # Cloudinary (optional)
 # ---------------------------
 CLOUDINARY_CLOUD_NAME=
