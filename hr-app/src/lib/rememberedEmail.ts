@@ -5,11 +5,12 @@
 
 const STORAGE_KEY = "livsight.hr.checkin.email";
 
-/** @typedef {{ getItem(key: string): string | null; setItem(key: string, value: string): void; removeItem(key: string): void }} KvStorage */
+type KvStorage = {
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+  removeItem(key: string): void;
+};
 
-/**
- * @param {KvStorage} [storage]
- */
 export function getRememberedEmail(storage?: KvStorage): string {
   const store = storage ?? (typeof localStorage !== "undefined" ? localStorage : null);
   if (!store) return "";
@@ -20,10 +21,6 @@ export function getRememberedEmail(storage?: KvStorage): string {
   }
 }
 
-/**
- * @param {string} email
- * @param {KvStorage} [storage]
- */
 export function setRememberedEmail(email: string, storage?: KvStorage): void {
   const store = storage ?? (typeof localStorage !== "undefined" ? localStorage : null);
   if (!store) return;
