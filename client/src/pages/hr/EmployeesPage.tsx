@@ -1,5 +1,5 @@
 /**
- * RH — liste employés, création, modification, enrollment facial (super_admin)
+ * RH — liste employés, création, modification, suppression (soft), enrollment facial (super_admin)
  */
 
 import { useState } from "react";
@@ -7,6 +7,7 @@ import {
   useHrEmployees,
   useCreateHrEmployee,
   useUpdateHrEmployee,
+  useDeleteHrEmployee,
   useEnrollHrEmployeeFace,
 } from "@/hooks/useHr";
 import type { HrEmployee } from "@/services/hr";
@@ -39,16 +40,28 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { UserCog, Plus, ScanFace, Pencil } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { UserCog, Plus, ScanFace, Pencil, Trash2 } from "lucide-react";
 
 export default function EmployeesPage() {
   const { data: employees = [], isLoading } = useHrEmployees();
   const createEmployee = useCreateHrEmployee();
   const updateEmployee = useUpdateHrEmployee();
+  const deleteEmployee = useDeleteHrEmployee();
   const enrollFace = useEnrollHrEmployeeFace();
 
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<HrEmployee | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<HrEmployee | null>(null);
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -125,6 +138,12 @@ export default function EmployeesPage() {
     setEditTarget(null);
   }
 
+  async function handleConfirmDelete() {
+    if (!deleteTarget) return;
+    await deleteEmployee.mutateAsync(deleteTarget.id);
+    setDeleteTarget(null);
+  }
+
   const formDisabled =
     !fullName.trim() ||
     !email.trim() ||
@@ -160,7 +179,7 @@ export default function EmployeesPage() {
                 <TableHead>Salaire base</TableHead>
                 <TableHead className="w-[100px]">Statut</TableHead>
                 <TableHead className="w-[120px]">Enrollment</TableHead>
-                <TableHead className="text-right w-[100px]">Actions</TableHead>
+                <TableHead className="text-right w-[140px]">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -221,6 +240,17 @@ export default function EmployeesPage() {
                             onClick={() => setEnrollTarget(row)}
                           >
                             <ScanFace className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="text-destructive"
+                            title="Supprimer"
+                            aria-label="Supprimer"
+                            disabled={!row.is_active || deleteEmployee.isPending}
+                            onClick={() => setDeleteTarget(row)}
+                          >
+                            <Trash2 className="w-4 h-4" />
                           </Button>
                         </div>
                       </TableCell>
@@ -314,6 +344,36 @@ export default function EmployeesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog
+        open={deleteTarget != null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Désactiver cet employé ?</AlertDialogTitle>
+            <AlertDialogDescription>
+              « {deleteTarget?.full_name} » ne pourra plus pointer. L’historique
+              de présence est conservé ; vous pourrez le réactiver plus tard.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                void handleConfirmDelete();
+              }}
+              disabled={deleteEmployee.isPending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteEmployee.isPending ? "Désactivation…" : "Désactiver"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <FaceEnrollDialog
         open={enrollTarget != null}

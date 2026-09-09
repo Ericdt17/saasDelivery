@@ -2200,6 +2200,11 @@ function createPostgresQueries(pool) {
     return result.rows[0] || null;
   }
 
+  async function deleteEmployee(id) {
+    // Soft delete: keep attendance history, block check-in
+    return await updateEmployee(id, { is_active: false });
+  }
+
   async function enrollEmployeeFace(id, faceDescriptor) {
     const result = await pool.query(
       `UPDATE employees
@@ -2495,6 +2500,7 @@ function createPostgresQueries(pool) {
     getEmployeeByEmailWithDescriptor,
     createEmployee,
     updateEmployee,
+    deleteEmployee,
     enrollEmployeeFace,
     getAttendanceByEmployeeAndDate,
     createAttendance,

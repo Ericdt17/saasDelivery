@@ -9,6 +9,7 @@ import {
   listEmployees,
   createEmployee,
   updateEmployee,
+  deleteEmployee,
   enrollEmployeeFace,
   listAttendances,
   getAttendancesSummary,
@@ -74,6 +75,22 @@ export function useUpdateHrEmployee() {
     onError: (e: unknown) => {
       toast.error("Erreur", {
         description: e instanceof Error ? e.message : "Mise à jour impossible",
+      });
+    },
+  });
+}
+
+export function useDeleteHrEmployee() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => deleteEmployee(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: hrKeys.employees });
+      toast.success("Employé désactivé");
+    },
+    onError: (e: unknown) => {
+      toast.error("Erreur", {
+        description: e instanceof Error ? e.message : "Suppression impossible",
       });
     },
   });

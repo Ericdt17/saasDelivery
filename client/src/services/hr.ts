@@ -2,7 +2,7 @@
  * HR API — employees, enroll, attendances (super_admin)
  */
 
-import { apiGet, apiPost, apiPatch } from "./api";
+import { apiGet, apiPost, apiPatch, apiDelete } from "./api";
 import type { ApiResponse } from "@/types/api";
 
 const BASE = "/api/v1/hr";
@@ -98,6 +98,11 @@ export async function updateEmployee(
 ): Promise<HrEmployee> {
   const res = await apiPatch<HrEmployee>(`${BASE}/employees/${id}`, data);
   return unwrap(res, "Impossible de mettre à jour l'employé");
+}
+
+export async function deleteEmployee(id: number): Promise<HrEmployee> {
+  const res = await apiDelete<HrEmployee>(`${BASE}/employees/${id}`);
+  return unwrap(res, "Impossible de supprimer l'employé");
 }
 
 export async function enrollEmployeeFace(
