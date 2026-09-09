@@ -16,8 +16,10 @@ import * as apiModule from "@/services/api";
 import {
   listEmployees,
   createEmployee,
+  updateEmployee,
   enrollEmployeeFace,
   listAttendances,
+  createManualAttendance,
   getAttendancesSummary,
   type HrEmployee,
   type HrAttendance,
@@ -25,6 +27,7 @@ import {
 
 const mockApiGet = apiModule.apiGet as unknown as MockInstance;
 const mockApiPost = apiModule.apiPost as unknown as MockInstance;
+const mockApiPatch = apiModule.apiPatch as unknown as MockInstance;
 
 const employeeFixture: HrEmployee = {
   id: 1,
@@ -99,6 +102,25 @@ describe("createEmployee", () => {
   });
 });
 
+describe("updateEmployee", () => {
+  it("patches /employees/:id with partial fields", async () => {
+    mockApiPatch.mockResolvedValueOnce({
+      success: true,
+      data: { ...employeeFixture, poste: "Superviseur", is_active: false },
+    });
+    const row = await updateEmployee(1, {
+      poste: "Superviseur",
+      is_active: false,
+    });
+    expect(mockApiPatch).toHaveBeenCalledWith("/api/v1/hr/employees/1", {
+      poste: "Superviseur",
+      is_active: false,
+    });
+    expect(row.poste).toBe("Superviseur");
+    expect(row.is_active).toBe(false);
+  });
+});
+
 describe("enrollEmployeeFace", () => {
   it("posts face_descriptor array", async () => {
     const descriptor = Array.from({ length: 128 }, (_, i) => i * 0.01);
@@ -127,6 +149,33 @@ describe("listAttendances", () => {
       year: 2026,
     });
     expect(rows[0].status).toBe("present");
+  });
+});
+
+describe("createManualAttendance", () => {
+  it("posts employee_id, date and status to /attendances", async () => {
+    mockApiPost.mockResolvedValueOnce({
+      success: true,
+      data: {
+        ...attendanceFixture,
+        face_verified: false,
+        gps_verified: false,
+        latitude: null,
+        longitude: null,
+      },
+    });
+    const row = await createManualAttendance({
+      employee_id: 1,
+      date: "2026-09-08",
+      status: "present",
+    });
+    expect(mockApiPost).toHaveBeenCalledWith("/api/v1/hr/attendances", {
+      employee_id: 1,
+      date: "2026-09-08",
+      status: "present",
+    });
+    expect(row.face_verified).toBe(false);
+    expect(row.gps_verified).toBe(false);
   });
 });
 

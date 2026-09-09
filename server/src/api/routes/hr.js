@@ -26,5 +26,6 @@ router.post("/employees/:id/enroll", controller.enrollAdminEmployeeFace);
 
 router.get("/attendances/summary", controller.getAttendancesSummary);
 router.get("/attendances", controller.listAdminAttendances);
+router.post("/attendances", controller.createAdminAttendance);
 
 module.exports = router;

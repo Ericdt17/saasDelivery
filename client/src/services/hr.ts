@@ -74,6 +74,12 @@ export interface ListAttendancesParams {
   year?: number;
 }
 
+export interface ManualAttendancePayload {
+  employee_id: number;
+  date: string;
+  status: "present" | "late";
+}
+
 export async function listEmployees(): Promise<HrEmployee[]> {
   const res = await apiGet<HrEmployee[]>(`${BASE}/employees`);
   return unwrap(res, "Impossible de charger les employés");
@@ -114,6 +120,13 @@ export async function listAttendances(
     year: params.year,
   });
   return unwrap(res, "Impossible de charger les présences");
+}
+
+export async function createManualAttendance(
+  data: ManualAttendancePayload
+): Promise<HrAttendance> {
+  const res = await apiPost<HrAttendance>(`${BASE}/attendances`, data);
+  return unwrap(res, "Impossible d'enregistrer la présence manuelle");
 }
 
 export async function getAttendancesSummary(params: {

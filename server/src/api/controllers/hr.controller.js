@@ -13,6 +13,7 @@ const {
   getEmployeeByEmailWithDescriptor,
   getAttendanceByEmployeeAndDate,
   createAttendance,
+  upsertAttendance,
   listAttendances,
   summarizeAttendances,
 } = require("../../db");
@@ -79,6 +80,12 @@ const listAttendancesQuerySchema = z
 const summaryAttendancesQuerySchema = z.object({
   month: z.coerce.number().int().min(1).max(12),
   year: z.coerce.number().int().min(2020),
+});
+
+const manualAttendanceSchema = z.object({
+  employee_id: z.coerce.number().int().positive(),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  status: z.enum(["present", "late"]),
 });
 
 function stripFaceDescriptor(row) {
@@ -433,6 +440,46 @@ async function listAdminAttendances(req, res, next) {
   }
 }
 
+async function createAdminAttendance(req, res, next) {
+  try {
+    const parsed = manualAttendanceSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({
+        success: false,
+        error: "Validation failed",
+        details: parsed.error.flatten(),
+      });
+    }
+    const { employee_id, date, status } = parsed.data;
+    const employee = await getEmployeeById(employee_id);
+    if (!employee) {
+      return res.status(404).json({ success: false, error: "Employee not found" });
+    }
+    if (!employee.is_active) {
+      return res.status(400).json({
+        success: false,
+        error: "Employee inactive",
+        message: "Impossible de pointer un employé inactif",
+      });
+    }
+
+    const row = await upsertAttendance({
+      employee_id,
+      date,
+      check_in_time: new Date().toISOString(),
+      status,
+      face_verified: false,
+      gps_verified: false,
+      latitude: null,
+      longitude: null,
+    });
+
+    return res.json({ success: true, data: stripFaceDescriptor(row) });
+  } catch (err) {
+    next(err);
+  }
+}
+
 async function getAttendancesSummary(req, res, next) {
   try {
     const parsed = summaryAttendancesQuerySchema.safeParse(req.query);
@@ -475,5 +522,6 @@ module.exports = {
   publicSelfEnroll,
   publicCheckin,
   listAdminAttendances,
+  createAdminAttendance,
   getAttendancesSummary,
 };

@@ -12,9 +12,11 @@ import {
   enrollEmployeeFace,
   listAttendances,
   getAttendancesSummary,
+  createManualAttendance,
   type CreateHrEmployeePayload,
   type UpdateHrEmployeePayload,
   type ListAttendancesParams,
+  type ManualAttendancePayload,
 } from "@/services/hr";
 
 export const hrKeys = {
@@ -100,7 +102,9 @@ export function useEnrollHrEmployeeFace() {
 }
 
 export function useHrAttendances(filters: ListAttendancesParams) {
-  const enabled = filters.month != null && filters.year != null;
+  const enabled =
+    Boolean(filters.date) ||
+    (filters.month != null && filters.year != null);
   const result = useQuery({
     queryKey: hrKeys.attendances(filters),
     queryFn: () => listAttendances(filters),
@@ -117,6 +121,24 @@ export function useHrAttendances(filters: ListAttendancesParams) {
   }, [result.isError, result.error]);
 
   return result;
+}
+
+export function useCreateManualAttendance() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: ManualAttendancePayload) => createManualAttendance(data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["hr", "attendances"] });
+      qc.invalidateQueries({ queryKey: ["hr", "summary"] });
+      toast.success("Présence enregistrée");
+    },
+    onError: (e: unknown) => {
+      toast.error("Erreur", {
+        description:
+          e instanceof Error ? e.message : "Enregistrement impossible",
+      });
+    },
+  });
 }
 
 export function useHrAttendancesSummary(month: number, year: number) {
