@@ -172,8 +172,16 @@ describe("canSetAttendanceStatus", () => {
 describe("normalizeAttendanceDate", () => {
   it("keeps YYYY-MM-DD and fixes timezone-shifted ISO timestamps", () => {
     expect(normalizeAttendanceDate("2026-09-08")).toBe("2026-09-08");
-    // node-pg DATE for 2026-09-08 in UTC+2 → previous UTC day in JSON
+    // node-pg DATE for 2026-09-08 in UTC+2 → previous UTC evening in JSON
     expect(normalizeAttendanceDate("2026-09-07T22:00:00.000Z")).toBe(
+      "2026-09-08"
+    );
+    // UTC+1 shift
+    expect(normalizeAttendanceDate("2026-09-07T23:00:00.000Z")).toBe(
+      "2026-09-08"
+    );
+    // UTC server / CI: midnight UTC stays the same calendar day
+    expect(normalizeAttendanceDate("2026-09-08T00:00:00.000Z")).toBe(
       "2026-09-08"
     );
   });

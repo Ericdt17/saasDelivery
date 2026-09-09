@@ -106,8 +106,25 @@ export function isManualAttendance(row: {
 }
 
 /**
+ * Recover YYYY-MM-DD from a JS Date that may be a timezone-shifted SQL DATE.
+ * node-pg used to parse DATE as local midnight; JSON then emits previous UTC evening
+ * (e.g. 2026-09-08 → 2026-09-07T22:00:00.000Z in UTC+2). UTC runners keep T00:00:00.000Z.
+ */
+function calendarDateFromPossiblyShiftedInstant(d: Date): string {
+  const ms =
+    d.getUTCHours() >= 12
+      ? d.getTime() + 24 * 60 * 60 * 1000
+      : d.getTime();
+  const fixed = new Date(ms);
+  const y = fixed.getUTCFullYear();
+  const m = String(fixed.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(fixed.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+/**
  * Normalize attendance `date` from API (YYYY-MM-DD or ISO timestamp).
- * node-pg used to shift DATE by timezone when serialized to JSON.
+ * Timezone-independent — safe on UTC CI and local UTC+N machines.
  */
 export function normalizeAttendanceDate(value: unknown): string {
   if (value == null || value === "") return "";
@@ -117,19 +134,13 @@ export function normalizeAttendanceDate(value: unknown): string {
     if (dateOnly) return dateOnly[1];
     const parsed = new Date(trimmed);
     if (!Number.isNaN(parsed.getTime())) {
-      const y = parsed.getFullYear();
-      const m = String(parsed.getMonth() + 1).padStart(2, "0");
-      const d = String(parsed.getDate()).padStart(2, "0");
-      return `${y}-${m}-${d}`;
+      return calendarDateFromPossiblyShiftedInstant(parsed);
     }
     const prefix = /^(\d{4}-\d{2}-\d{2})/.exec(trimmed);
     return prefix ? prefix[1] : trimmed;
   }
   if (value instanceof Date && !Number.isNaN(value.getTime())) {
-    const y = value.getFullYear();
-    const m = String(value.getMonth() + 1).padStart(2, "0");
-    const d = String(value.getDate()).padStart(2, "0");
-    return `${y}-${m}-${d}`;
+    return calendarDateFromPossiblyShiftedInstant(value);
   }
   return String(value).slice(0, 10);
 }
