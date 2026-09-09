@@ -17,6 +17,7 @@ import {
   listEmployees,
   createEmployee,
   updateEmployee,
+  deleteEmployee,
   enrollEmployeeFace,
   listAttendances,
   createManualAttendance,
@@ -28,6 +29,7 @@ import {
 const mockApiGet = apiModule.apiGet as unknown as MockInstance;
 const mockApiPost = apiModule.apiPost as unknown as MockInstance;
 const mockApiPatch = apiModule.apiPatch as unknown as MockInstance;
+const mockApiDelete = apiModule.apiDelete as unknown as MockInstance;
 
 const employeeFixture: HrEmployee = {
   id: 1,
@@ -118,6 +120,26 @@ describe("updateEmployee", () => {
     });
     expect(row.poste).toBe("Superviseur");
     expect(row.is_active).toBe(false);
+  });
+});
+
+describe("deleteEmployee", () => {
+  it("deletes /employees/:id and unwraps soft-deleted employee", async () => {
+    mockApiDelete.mockResolvedValueOnce({
+      success: true,
+      data: { ...employeeFixture, is_active: false },
+    });
+    const row = await deleteEmployee(1);
+    expect(mockApiDelete).toHaveBeenCalledWith("/api/v1/hr/employees/1");
+    expect(row.is_active).toBe(false);
+  });
+
+  it("throws when success is false", async () => {
+    mockApiDelete.mockResolvedValueOnce({
+      success: false,
+      error: "not found",
+    });
+    await expect(deleteEmployee(999)).rejects.toThrow(/not found|Impossible/);
   });
 });
 

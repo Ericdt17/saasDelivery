@@ -23,6 +23,7 @@ router.use(requireSuperAdmin);
 router.get("/employees", controller.listAdminEmployees);
 router.post("/employees", controller.createAdminEmployee);
 router.patch("/employees/:id", controller.patchAdminEmployee);
+router.delete("/employees/:id", controller.deleteAdminEmployee);
 router.post("/employees/:id/enroll", controller.enrollAdminEmployeeFace);
 
 router.get("/attendances/summary", controller.getAttendancesSummary);

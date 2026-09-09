@@ -9,6 +9,7 @@ const {
   getEmployeeById,
   createEmployee,
   updateEmployee,
+  deleteEmployee,
   enrollEmployeeFace,
   getEmployeeByEmailWithDescriptor,
   getAttendanceByEmployeeAndDate,
@@ -184,6 +185,23 @@ async function patchAdminEmployee(req, res, next) {
       return res.status(404).json({ success: false, error: "Employee not found" });
     }
     const row = await updateEmployee(id, parsed.data);
+    return res.json({ success: true, data: stripFaceDescriptor(row) });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function deleteAdminEmployee(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) {
+      return res.status(400).json({ success: false, error: "Invalid id" });
+    }
+    const existing = await getEmployeeById(id);
+    if (!existing) {
+      return res.status(404).json({ success: false, error: "Employee not found" });
+    }
+    const row = await deleteEmployee(id);
     return res.json({ success: true, data: stripFaceDescriptor(row) });
   } catch (err) {
     next(err);
@@ -622,6 +640,7 @@ module.exports = {
   listAdminEmployees,
   createAdminEmployee,
   patchAdminEmployee,
+  deleteAdminEmployee,
   enrollAdminEmployeeFace,
   verifyCheckinEmail,
   publicSelfEnroll,

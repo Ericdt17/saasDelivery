@@ -9,6 +9,7 @@ const mockListEmployees = jest.fn();
 const mockGetEmployeeById = jest.fn();
 const mockCreateEmployee = jest.fn();
 const mockUpdateEmployee = jest.fn();
+const mockDeleteEmployee = jest.fn();
 const mockEnrollEmployeeFace = jest.fn();
 const mockGetEmployeeByEmailWithDescriptor = jest.fn();
 const mockGetAttendanceByEmployeeAndDate = jest.fn();
@@ -23,6 +24,7 @@ jest.mock('../../db', () => ({
   getEmployeeById: mockGetEmployeeById,
   createEmployee: mockCreateEmployee,
   updateEmployee: mockUpdateEmployee,
+  deleteEmployee: mockDeleteEmployee,
   enrollEmployeeFace: mockEnrollEmployeeFace,
   getEmployeeByEmailWithDescriptor: mockGetEmployeeByEmailWithDescriptor,
   getAttendanceByEmployeeAndDate: mockGetAttendanceByEmployeeAndDate,
@@ -243,6 +245,47 @@ describe('PATCH /api/v1/hr/employees/:id', () => {
     expect(res.status).toBe(200);
     expect(res.body.data.poste).toBe('Agent');
     expect(res.body.data).not.toHaveProperty('face_descriptor');
+  });
+});
+
+describe('DELETE /api/v1/hr/employees/:id', () => {
+  it('returns 401 without a token', async () => {
+    const res = await request(app).delete('/api/v1/hr/employees/1');
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 403 for agency user', async () => {
+    const res = await request(app)
+      .delete('/api/v1/hr/employees/1')
+      .set('Authorization', `Bearer ${agencyToken}`);
+    expect(res.status).toBe(403);
+  });
+
+  it('returns 404 when employee not found', async () => {
+    mockGetEmployeeById.mockResolvedValueOnce(null);
+    const res = await request(app)
+      .delete('/api/v1/hr/employees/999')
+      .set('Authorization', `Bearer ${superToken}`);
+    expect(res.status).toBe(404);
+    expect(res.body.success).toBe(false);
+    expect(mockDeleteEmployee).not.toHaveBeenCalled();
+  });
+
+  it('soft-deletes employee (is_active false) and returns 200 without face_descriptor', async () => {
+    mockGetEmployeeById.mockResolvedValueOnce(employeeFixture);
+    mockDeleteEmployee.mockResolvedValueOnce({
+      ...employeeFixture,
+      is_active: false,
+      face_descriptor: faceDescriptor128(),
+    });
+    const res = await request(app)
+      .delete('/api/v1/hr/employees/1')
+      .set('Authorization', `Bearer ${superToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.is_active).toBe(false);
+    expect(res.body.data).not.toHaveProperty('face_descriptor');
+    expect(mockDeleteEmployee).toHaveBeenCalledWith(1);
   });
 });
 

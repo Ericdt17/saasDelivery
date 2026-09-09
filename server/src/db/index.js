@@ -180,6 +180,7 @@ const api = {
   getEmployeeByEmailWithDescriptor: queries.getEmployeeByEmailWithDescriptor,
   createEmployee: queries.createEmployee,
   updateEmployee: queries.updateEmployee,
+  deleteEmployee: queries.deleteEmployee,
   enrollEmployeeFace: queries.enrollEmployeeFace,
   getAttendanceByEmployeeAndDate: queries.getAttendanceByEmployeeAndDate,
   createAttendance: queries.createAttendance,
