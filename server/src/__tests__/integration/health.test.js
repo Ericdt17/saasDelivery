@@ -41,7 +41,7 @@ describe('GET /api/v1/health', () => {
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('ok');
     expect(res.body).toHaveProperty('timestamp');
-    expect(res.body.service).toBe('delivery-bot-api');
+    expect(res.body.service).toBe('livsight-api');
   });
 });
 

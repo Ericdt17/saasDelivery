@@ -1,6 +1,6 @@
 /**
  * RH — présences / pointages (super_admin)
- * Liste des employés actifs pour une date + bouton marquer présent si absent/retard.
+ * Liste des employés actifs pour une date + présent / retard / absent.
  */
 
 import { useMemo, useState } from "react";
@@ -13,14 +13,15 @@ import {
   attendanceStatusClassName,
   attendanceStatusLabel,
   buildDayAttendanceRows,
-  canMarkPresentManually,
+  canSetAttendanceStatus,
   formatCheckInTime,
   isManualAttendance,
   todayDateStringDouala,
+  type AttendanceStatus,
 } from "@/pages/hr/hrUi";
+import { HrDatePicker } from "@/pages/hr/HrDatePicker";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -31,11 +32,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { CalendarCheck, UserCheck } from "lucide-react";
+import { CalendarCheck, Clock, UserCheck, UserX } from "lucide-react";
 
 export default function AttendancesPage() {
   const [date, setDate] = useState(todayDateStringDouala);
-  const [pendingId, setPendingId] = useState<number | null>(null);
+  const [pendingKey, setPendingKey] = useState<string | null>(null);
 
   const { data: employees = [], isLoading: loadingEmployees } = useHrEmployees();
   const filters = useMemo(() => ({ date }), [date]);
@@ -50,16 +51,17 @@ export default function AttendancesPage() {
 
   const isLoading = loadingEmployees || loadingAttendances;
 
-  async function markPresent(employeeId: number) {
-    setPendingId(employeeId);
+  async function setStatus(employeeId: number, status: AttendanceStatus) {
+    const key = `${employeeId}:${status}`;
+    setPendingKey(key);
     try {
       await createManual.mutateAsync({
         employee_id: employeeId,
         date,
-        status: "present",
+        status,
       });
     } finally {
-      setPendingId(null);
+      setPendingKey(null);
     }
   }
 
@@ -71,8 +73,8 @@ export default function AttendancesPage() {
           <div>
             <h1 className="text-3xl font-bold tracking-tight">Présences</h1>
             <p className="text-muted-foreground">
-              Pointages du jour — marquez présent si besoin (absent ou en
-              retard)
+              Pointage app jusqu’à midi (présent / retard). Sans badge → absent.
+              Corrigez présent, retard ou absent (jours passés inclus).
             </p>
           </div>
         </div>
@@ -80,12 +82,10 @@ export default function AttendancesPage() {
           <Label htmlFor="attendance-date" className="sr-only">
             Date
           </Label>
-          <Input
+          <HrDatePicker
             id="attendance-date"
-            type="date"
-            className="w-full sm:w-[180px]"
             value={date}
-            onChange={(e) => setDate(e.target.value)}
+            onChange={setDate}
           />
         </div>
       </div>
@@ -100,7 +100,7 @@ export default function AttendancesPage() {
                 <TableHead>Heure</TableHead>
                 <TableHead>Statut</TableHead>
                 <TableHead>Source</TableHead>
-                <TableHead className="text-right w-[72px]">Actions</TableHead>
+                <TableHead className="text-right w-[140px]">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -125,9 +125,17 @@ export default function AttendancesPage() {
                 </TableRow>
               ) : (
                 rows.map((row) => {
-                  const showMark = canMarkPresentManually(row.status);
                   const manual = isManualAttendance(row);
-                  const busy = pendingId === row.employee_id;
+                  const busy = pendingKey?.startsWith(`${row.employee_id}:`);
+                  const showPresent = canSetAttendanceStatus(
+                    row.status,
+                    "present"
+                  );
+                  const showLate = canSetAttendanceStatus(row.status, "late");
+                  const showAbsent = canSetAttendanceStatus(
+                    row.status,
+                    "absent"
+                  );
                   return (
                     <TableRow
                       key={row.employee_id}
@@ -148,27 +156,59 @@ export default function AttendancesPage() {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        {row.status === "absent" ? (
-                          <span className="text-muted-foreground">—</span>
-                        ) : manual ? (
+                        {row.status === "absent" && !row.attendance_id ? (
+                          <Badge variant="outline">Non pointé</Badge>
+                        ) : manual || row.status === "absent" ? (
                           <Badge variant="secondary">Manuel</Badge>
                         ) : (
                           <Badge variant="outline">App</Badge>
                         )}
                       </TableCell>
                       <TableCell className="text-right">
-                        {showMark ? (
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            title="Marquer présent"
-                            aria-label={`Marquer ${row.full_name} présent`}
-                            disabled={busy || createManual.isPending}
-                            onClick={() => void markPresent(row.employee_id)}
-                          >
-                            <UserCheck className="w-4 h-4" />
-                          </Button>
-                        ) : null}
+                        <div className="inline-flex items-center gap-0.5">
+                          {showPresent ? (
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              title="Marquer présent"
+                              aria-label={`Marquer ${row.full_name} présent`}
+                              disabled={busy || createManual.isPending}
+                              onClick={() =>
+                                void setStatus(row.employee_id, "present")
+                              }
+                            >
+                              <UserCheck className="w-4 h-4" />
+                            </Button>
+                          ) : null}
+                          {showLate ? (
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              title="Marquer en retard"
+                              aria-label={`Marquer ${row.full_name} en retard`}
+                              disabled={busy || createManual.isPending}
+                              onClick={() =>
+                                void setStatus(row.employee_id, "late")
+                              }
+                            >
+                              <Clock className="w-4 h-4" />
+                            </Button>
+                          ) : null}
+                          {showAbsent ? (
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              title="Marquer absent"
+                              aria-label={`Marquer ${row.full_name} absent`}
+                              disabled={busy || createManual.isPending}
+                              onClick={() =>
+                                void setStatus(row.employee_id, "absent")
+                              }
+                            >
+                              <UserX className="w-4 h-4" />
+                            </Button>
+                          ) : null}
+                        </div>
                       </TableCell>
                     </TableRow>
                   );

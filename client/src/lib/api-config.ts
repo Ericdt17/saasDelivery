@@ -9,16 +9,10 @@ export function buildApiUrl(path: string): string {
 }
 
 export const API_ENDPOINTS = {
-  DELIVERIES: "/api/v1/deliveries",
-  DELIVERIES_BULK: "/api/v1/deliveries/bulk",
-  DELIVERY_BY_ID: (id: number | string) => `/api/v1/deliveries/${id}`,
-  DELIVERY_HISTORY: (id: number | string) => `/api/v1/deliveries/${id}/history`,
-  EXPEDITIONS: "/api/v1/expeditions",
-  EXPEDITION_BY_ID: (id: number | string) => `/api/v1/expeditions/${id}`,
-  EXPEDITIONS_STATS: "/api/v1/expeditions/stats/summary",
-  STATS_DAILY: "/api/v1/stats/daily",
-  SEARCH: "/api/v1/search",
-  REMINDER_CONTACTS: "/api/v1/reminder-contacts",
-  REMINDERS: "/api/v1/reminders",
   WAITLIST: "/api/v1/waitlist",
+  HR_EMPLOYEES: "/api/v1/hr/employees",
+  HR_ATTENDANCES: "/api/v1/hr/attendances",
+  RECRUITMENT: "/api/v1/recruitment",
+  MERCHANT_TERMS: "/api/v1/merchant-terms",
+  AGENCIES: "/api/v1/agencies",
 };

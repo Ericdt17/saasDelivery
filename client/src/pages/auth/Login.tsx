@@ -40,7 +40,7 @@ const Login = () => {
             <div className="w-full max-w-sm">
               <h1 className="text-3xl font-bold text-foreground">Se connecter</h1>
               <p className="mt-1 text-sm text-muted-foreground">
-                Connectez-vous pour accéder à votre tableau de bord des opérations de livraison.
+                Connectez-vous pour accéder à votre tableau de bord LivSight.
               </p>
 
               <form onSubmit={handleSubmit} className="mt-8 space-y-4">
@@ -142,7 +142,7 @@ const Login = () => {
               De belles opportunités vous attendent.
             </h2>
             <p className="mt-4 max-w-md text-base text-primary-foreground/90">
-              Gérez les livraisons, paiements et partenaires dans un seul endroit, rapidement et en toute confiance.
+              Gérez le recrutement, les équipes et les présences dans un seul endroit.
             </p>
 
             <div className="absolute left-10 top-56 h-28 w-1 rounded-full bg-white/50" />

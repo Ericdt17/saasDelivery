@@ -87,7 +87,7 @@ const summaryAttendancesQuerySchema = z.object({
 const manualAttendanceSchema = z.object({
   employee_id: z.coerce.number().int().positive(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  status: z.enum(["present", "late"]),
+  status: z.enum(["present", "late", "absent"]),
 });
 
 const clientErrorSchema = z.object({
@@ -589,7 +589,7 @@ async function createAdminAttendance(req, res, next) {
     const row = await upsertAttendance({
       employee_id,
       date,
-      check_in_time: new Date().toISOString(),
+      check_in_time: status === "absent" ? null : new Date().toISOString(),
       status,
       face_verified: false,
       gps_verified: false,

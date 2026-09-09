@@ -17,6 +17,10 @@ import type {
   ApplicationStatus,
   ApplicationDetail,
 } from "@/services/recruitment";
+import {
+  getApplicationCvBlob,
+  getApplicationCoverLetterBlob,
+} from "@/services/recruitment";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -255,6 +259,120 @@ function EvaluationForm({ detail, onSave, isSaving }: EvalFormProps) {
       </Button>
     </form>
   );
+}
+
+/**
+ * Loads a PDF via authenticated API (cookies + VITE_API_BASE_URL) and
+ * previews it from a blob URL. Relative /api iframe src fails on Vercel
+ * because the frontend host is not the API.
+ */
+function AuthenticatedPdfPreviewDialog({
+  open,
+  onOpenChange,
+  title,
+  applicationId,
+  hasFile,
+  fetchBlob,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  title: string;
+  applicationId: number | null;
+  hasFile: boolean;
+  fetchBlob: (
+    id: number
+  ) => Promise<{ blob: Blob; filename: string | null }>;
+}) {
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open || !applicationId || !hasFile) {
+      return;
+    }
+
+    let cancelled = false;
+    let objectUrl: string | null = null;
+
+    setLoading(true);
+    setError(null);
+    setBlobUrl(null);
+
+    fetchBlob(applicationId)
+      .then(({ blob }) => {
+        if (cancelled) return;
+        objectUrl = URL.createObjectURL(blob);
+        setBlobUrl(objectUrl);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        const message =
+          err instanceof Error ? err.message : "Impossible de charger le PDF";
+        setError(message);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [open, applicationId, hasFile, fetchBlob]);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-4xl">
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>
+            Si l&apos;aperçu ne s&apos;affiche pas, utilisez « Ouvrir ».
+          </DialogDescription>
+        </DialogHeader>
+        <div className="h-[75vh] overflow-hidden rounded-md border bg-muted/20">
+          {!hasFile ? (
+            <div className="grid h-full w-full place-items-center text-sm text-muted-foreground">
+              Document indisponible.
+            </div>
+          ) : loading ? (
+            <div className="grid h-full w-full place-items-center text-sm text-muted-foreground">
+              Chargement du PDF…
+            </div>
+          ) : error ? (
+            <div className="grid h-full w-full place-items-center px-4 text-center text-sm text-destructive">
+              {error}
+            </div>
+          ) : blobUrl ? (
+            <iframe title={title} src={blobUrl} className="h-full w-full" />
+          ) : (
+            <div className="grid h-full w-full place-items-center text-sm text-muted-foreground">
+              Document indisponible.
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+async function openAuthenticatedPdf(
+  id: number,
+  fetchBlob: (
+    id: number
+  ) => Promise<{ blob: Blob; filename: string | null }>
+) {
+  try {
+    const { blob } = await fetchBlob(id);
+    const url = URL.createObjectURL(blob);
+    window.open(url, "_blank", "noopener,noreferrer");
+    // Revoke after the tab has a chance to load the blob.
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  } catch (err: unknown) {
+    toast.error(
+      err instanceof Error ? err.message : "Impossible d'ouvrir le PDF"
+    );
+  }
 }
 
 export default function ApplicationsPage() {
@@ -701,15 +819,19 @@ export default function ApplicationsPage() {
                         <Eye className="w-4 h-4 mr-2" />
                         Aperçu CV
                       </Button>
-                      <Button variant="ghost" size="sm" asChild>
-                        <a
-                          href={detail.application.cv_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
-                          <ExternalLink className="w-4 h-4 mr-2" />
-                          Ouvrir
-                        </a>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        type="button"
+                        onClick={() =>
+                          openAuthenticatedPdf(
+                            detail.application.id,
+                            getApplicationCvBlob
+                          )
+                        }
+                      >
+                        <ExternalLink className="w-4 h-4 mr-2" />
+                        Ouvrir
                       </Button>
                     </div>
                   </div>
@@ -725,15 +847,19 @@ export default function ApplicationsPage() {
                         <Eye className="w-4 h-4 mr-2" />
                         Aperçu lettre
                       </Button>
-                      <Button variant="ghost" size="sm" asChild>
-                        <a
-                          href={detail.application.cover_letter_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
-                          <ExternalLink className="w-4 h-4 mr-2" />
-                          Ouvrir
-                        </a>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        type="button"
+                        onClick={() =>
+                          openAuthenticatedPdf(
+                            detail.application.id,
+                            getApplicationCoverLetterBlob
+                          )
+                        }
+                      >
+                        <ExternalLink className="w-4 h-4 mr-2" />
+                        Ouvrir
                       </Button>
                     </div>
                   </div>
@@ -810,56 +936,23 @@ export default function ApplicationsPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={cvPreviewOpen} onOpenChange={setCvPreviewOpen}>
-        <DialogContent className="sm:max-w-4xl">
-          <DialogHeader>
-            <DialogTitle>Aperçu du CV</DialogTitle>
-            <DialogDescription>
-              Si l&apos;aperçu ne s&apos;affiche pas, utilisez « Ouvrir ».
-            </DialogDescription>
-          </DialogHeader>
-          <div className="h-[75vh] overflow-hidden rounded-md border bg-muted/20">
-            {detail?.application.cv_url ? (
-              <iframe
-                title="Aperçu CV"
-                src={`/api/v1/recruitment/admin/applications/${detail.application.id}/cv`}
-                className="h-full w-full"
-              />
-            ) : (
-              <div className="grid h-full w-full place-items-center text-sm text-muted-foreground">
-                CV indisponible.
-              </div>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
+      <AuthenticatedPdfPreviewDialog
+        open={cvPreviewOpen}
+        onOpenChange={setCvPreviewOpen}
+        title="Aperçu du CV"
+        applicationId={selectedId}
+        hasFile={!!detail?.application.cv_url}
+        fetchBlob={getApplicationCvBlob}
+      />
 
-      <Dialog
+      <AuthenticatedPdfPreviewDialog
         open={coverLetterPreviewOpen}
         onOpenChange={setCoverLetterPreviewOpen}
-      >
-        <DialogContent className="sm:max-w-4xl">
-          <DialogHeader>
-            <DialogTitle>Aperçu de la lettre de motivation</DialogTitle>
-            <DialogDescription>
-              Si l&apos;aperçu ne s&apos;affiche pas, utilisez « Ouvrir ».
-            </DialogDescription>
-          </DialogHeader>
-          <div className="h-[75vh] overflow-hidden rounded-md border bg-muted/20">
-            {detail?.application.cover_letter_url ? (
-              <iframe
-                title="Aperçu lettre de motivation"
-                src={`/api/v1/recruitment/admin/applications/${detail.application.id}/cover-letter`}
-                className="h-full w-full"
-              />
-            ) : (
-              <div className="grid h-full w-full place-items-center text-sm text-muted-foreground">
-                Lettre indisponible.
-              </div>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
+        title="Aperçu de la lettre de motivation"
+        applicationId={selectedId}
+        hasFile={!!detail?.application.cover_letter_url}
+        fetchBlob={getApplicationCoverLetterBlob}
+      />
 
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>

@@ -23,10 +23,10 @@ const queries = createPostgresQueries(pool);
 
 logger.info({ host, db: dbName, durationMs: Date.now() - dbStartTime }, "PostgreSQL connected");
 
-// Run migrations on startup unless skipped (shared core DB — do not add bot tables)
+// Run migrations on startup unless skipped
 setImmediate(async () => {
   if (process.env.SKIP_MIGRATIONS === "true") {
-    logger.info("SKIP_MIGRATIONS=true — bot schema migrations skipped (shared livsight DB)");
+    logger.info("SKIP_MIGRATIONS=true — migrations skipped");
   } else {
     try {
       const migrationStartTime = Date.now();
@@ -40,13 +40,17 @@ setImmediate(async () => {
 
   // Verify DB with a quick sanity check
   try {
-    const result = await queries.query("SELECT COUNT(*) as total FROM groups WHERE is_active = true");
-    const count = Array.isArray(result) ? parseInt(result[0]?.total) : parseInt(result?.total);
-    logger.info({ activeGroups: count }, "Database ready");
+    const result = await queries.query(
+      "SELECT COUNT(*) as total FROM agencies WHERE is_active = true"
+    );
+    const count = Array.isArray(result)
+      ? parseInt(result[0]?.total)
+      : parseInt(result?.total);
+    logger.info({ activeAgencies: count }, "Database ready");
 
     const { notifyApiStartup } = require("../lib/botAlerts");
     const port = process.env.PORT || process.env.API_PORT || 3000;
-    notifyApiStartup({ port, activeGroups: count }).catch((err) => {
+    notifyApiStartup({ port, activeAgencies: count }).catch((err) => {
       logger.warn({ err }, "API startup webhook failed");
     });
   } catch (error) {
@@ -64,33 +68,6 @@ const adapter = {
 const api = {
   db: queries.getRawDb(),
   adapter,
-  insertDelivery: queries.insertDelivery,
-  createDelivery: queries.insertDelivery,
-  bulkCreateDeliveries: queries.bulkCreateDeliveries,
-  updateDelivery: queries.updateDelivery,
-  updateDeliveryByMessageId: queries.updateDeliveryByMessageId,
-  getDeliveries: queries.getDeliveries,
-  getAllDeliveries: queries.getDeliveries,
-  getDeliveryById: queries.getDeliveryById,
-  createExpedition: queries.createExpedition,
-  getExpeditions: queries.getExpeditions,
-  getExpeditionById: queries.getExpeditionById,
-  updateExpedition: queries.updateExpedition,
-  deleteExpedition: queries.deleteExpedition,
-  getExpeditionStats: queries.getExpeditionStats,
-  getDailyStats: queries.getDailyStats,
-  getDeliveryStats: queries.getDailyStats,
-  getDeliveryHistory: queries.getDeliveryHistory,
-  getTodayDeliveries: queries.getTodayDeliveries,
-  findDeliveryByPhone: queries.findDeliveryByPhone,
-  findDeliveryByPhoneForUpdate: queries.findDeliveryByPhoneForUpdate,
-  findDeliveryByMessageId: queries.findDeliveryByMessageId,
-  searchDeliveries: queries.searchDeliveries,
-  saveHistory: queries.saveHistory,
-  deleteDelivery: queries.deleteDelivery,
-  addHistory: (deliveryId, action, details, actor = "bot") =>
-    queries.saveHistory({ delivery_id: deliveryId, action, details, actor }),
-  // Agency queries
   createAgency: queries.createAgency,
   getAgencyById: queries.getAgencyById,
   getAgencyByEmail: queries.getAgencyByEmail,
@@ -98,59 +75,8 @@ const api = {
   getAllAgencies: queries.getAllAgencies,
   updateAgency: queries.updateAgency,
   deleteAgency: queries.deleteAgency,
-  getVendorsByAgency: queries.getVendorsByAgency,
-  // Reminders (contacts + scheduled reminders)
-  createAgencyReminderContact: queries.createAgencyReminderContact,
-  getAgencyReminderContacts: queries.getAgencyReminderContacts,
-  getAgencyReminderContactById: queries.getAgencyReminderContactById,
-  updateAgencyReminderContact: queries.updateAgencyReminderContact,
-  deleteAgencyReminderContact: queries.deleteAgencyReminderContact,
-  createReminder: queries.createReminder,
-  createReminderCampaign: queries.createReminderCampaign,
-  getReminders: queries.getReminders,
-  getReminderById: queries.getReminderById,
-  getReminderTargets: queries.getReminderTargets,
-  cancelReminder: queries.cancelReminder,
-  deleteReminder: queries.deleteReminder,
-  retryReminderFailed: queries.retryReminderFailed,
-  pollQueuedReminderTargets: queries.pollQueuedReminderTargets,
-  markReminderTargetProcessing: queries.markReminderTargetProcessing,
-  updateReminderTargetStatus: queries.updateReminderTargetStatus,
-  markReminderSent: queries.markReminderSent,
-  markReminderFailed: queries.markReminderFailed,
-  getDueReminders: queries.getDueReminders,
-  setReminderTotals: queries.setReminderTotals,
-  // Group queries
-  createGroup: queries.createGroup,
-  getGroupById: queries.getGroupById,
-  getGroupsByAgency: queries.getGroupsByAgency,
-  getAllGroups: queries.getAllGroups,
-  getAllActiveGroupsForBroadcast: queries.getAllActiveGroupsForBroadcast,
-  updateGroup: queries.updateGroup,
-  deleteGroup: queries.deleteGroup,
-  hardDeleteGroup: queries.hardDeleteGroup,
-  // Tariff queries
-  createTariff: queries.createTariff,
-  getTariffById: queries.getTariffById,
-  getTariffByAgencyAndQuartier: queries.getTariffByAgencyAndQuartier,
-  getTariffsByAgency: queries.getTariffsByAgency,
-  getAllTariffs: queries.getAllTariffs,
-  updateTariff: queries.updateTariff,
-  deleteTariff: queries.deleteTariff,
-  // Stock items (vendor inventory)
-  getStockItems: queries.getStockItems,
-  getStockItemById: queries.getStockItemById,
-  createStockItem: queries.createStockItem,
-  updateStockItemQuantity: queries.updateStockItemQuantity,
-  setStockItemQuantity: queries.setStockItemQuantity,
-  deleteStockItem: queries.deleteStockItem,
-  upsertVendorPushToken: queries.upsertVendorPushToken,
-  deleteVendorPushToken: queries.deleteVendorPushToken,
-  deleteAllVendorPushTokens: queries.deleteAllVendorPushTokens,
-  getExpoPushTokensForVendorUserIds: queries.getExpoPushTokensForVendorUserIds,
   getWaitlistEntries: queries.getWaitlistEntries,
   insertWaitlistEntry: queries.insertWaitlistEntry,
-  // Recruitment
   recruitmentListOpenJobs: queries.recruitmentListOpenJobs,
   recruitmentGetJobOfferById: queries.recruitmentGetJobOfferById,
   recruitmentGetOpenJobOfferById: queries.recruitmentGetOpenJobOfferById,

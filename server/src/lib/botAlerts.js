@@ -282,7 +282,7 @@ async function notifyHrCheckinAlert({
   await postToWebhook(webhookUrl, text);
 }
 
-function buildApiStartupMessage({ port, activeGroups, gitSha } = {}) {
+function buildApiStartupMessage({ port, activeAgencies, gitSha } = {}) {
   const lines = ["✅ **LivSight API démarrée**"];
 
   if (port != null) {
@@ -294,8 +294,8 @@ function buildApiStartupMessage({ port, activeGroups, gitSha } = {}) {
     lines.push(`Commit : ${sha}`);
   }
 
-  if (activeGroups != null) {
-    lines.push(`DB : ok · ${activeGroups} groupes actifs`);
+  if (activeAgencies != null) {
+    lines.push(`DB : ok · ${activeAgencies} agences actives`);
   } else {
     lines.push("DB : ok");
   }
@@ -306,12 +306,12 @@ function buildApiStartupMessage({ port, activeGroups, gitSha } = {}) {
 }
 
 /** API finished startup (migrations + DB ready) — fire-and-forget. */
-async function notifyApiStartup({ port, activeGroups, gitSha } = {}) {
+async function notifyApiStartup({ port, activeAgencies, gitSha } = {}) {
   if (!startupAlertsEnabled() || !config().webhookUrl) return;
 
   await postToWebhook(
     config().webhookUrl,
-    buildApiStartupMessage({ port, activeGroups, gitSha })
+    buildApiStartupMessage({ port, activeAgencies, gitSha })
   );
 }
 

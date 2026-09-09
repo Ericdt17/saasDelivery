@@ -2,9 +2,11 @@
  * RH — liste employés, création, modification, suppression (soft), enrollment facial (super_admin)
  */
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   useHrEmployees,
+  useHrAttendancesSummary,
   useCreateHrEmployee,
   useUpdateHrEmployee,
   useDeleteHrEmployee,
@@ -12,12 +14,17 @@ import {
 } from "@/hooks/useHr";
 import type { HrEmployee } from "@/services/hr";
 import {
+  buildEmployeeDetailStats,
   buildEmployeeUpdatePayload,
+  currentMonthYearDouala,
   enrollmentBadgeLabel,
   enrollmentBadgeVariant,
+  formatMonthLabelFr,
+  formatPayrollAmount,
   formatSalary,
 } from "@/pages/hr/hrUi";
 import { FaceEnrollDialog } from "@/pages/hr/FaceEnrollDialog";
+import { HrMonthPicker } from "@/pages/hr/HrMonthPicker";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -50,14 +57,38 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { UserCog, Plus, ScanFace, Pencil, Trash2 } from "lucide-react";
+import { UserCog, Plus, ScanFace, Pencil, Trash2, Eye } from "lucide-react";
 
 export default function EmployeesPage() {
+  const [{ year, month }, setPeriod] = useState(currentMonthYearDouala);
+
   const { data: employees = [], isLoading } = useHrEmployees();
+  const { data: monthSummary = [], isLoading: loadingSummary } =
+    useHrAttendancesSummary(month, year);
   const createEmployee = useCreateHrEmployee();
   const updateEmployee = useUpdateHrEmployee();
   const deleteEmployee = useDeleteHrEmployee();
   const enrollFace = useEnrollHrEmployeeFace();
+
+  const statsByEmployee = useMemo(() => {
+    const map = new Map<
+      number,
+      ReturnType<typeof buildEmployeeDetailStats>
+    >();
+    for (const emp of employees) {
+      const empId = Number(emp.id);
+      const summary =
+        monthSummary.find((r) => Number(r.employee_id) === empId) ?? null;
+      map.set(
+        empId,
+        buildEmployeeDetailStats({
+          salaryBase: emp.salary_base,
+          summary,
+        })
+      );
+    }
+    return map;
+  }, [employees, monthSummary]);
 
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<HrEmployee | null>(null);
@@ -158,14 +189,29 @@ export default function EmployeesPage() {
           <div>
             <h1 className="text-3xl font-bold tracking-tight">Employés</h1>
             <p className="text-muted-foreground">
-              Roster RH — création, modification et enrollment facial
+              Roster RH —{" "}
+              <span className="capitalize">{formatMonthLabelFr(year, month)}</span>{" "}
+              (lun–sam) et enrollment facial
             </p>
           </div>
         </div>
-        <Button onClick={openCreate}>
-          <Plus className="w-4 h-4 mr-2" />
-          Ajouter un employé
-        </Button>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <div className="space-y-1">
+            <Label htmlFor="employees-month" className="sr-only">
+              Mois
+            </Label>
+            <HrMonthPicker
+              id="employees-month"
+              year={year}
+              month={month}
+              onChange={setPeriod}
+            />
+          </div>
+          <Button onClick={openCreate}>
+            <Plus className="w-4 h-4 mr-2" />
+            Ajouter un employé
+          </Button>
+        </div>
       </div>
 
       <div className="stat-card overflow-hidden p-0">
@@ -175,18 +221,20 @@ export default function EmployeesPage() {
               <TableRow className="hover:bg-transparent">
                 <TableHead>Nom</TableHead>
                 <TableHead>Poste</TableHead>
-                <TableHead>Email</TableHead>
                 <TableHead>Salaire base</TableHead>
+                <TableHead className="text-right">Présents</TableHead>
+                <TableHead className="text-right">Retards</TableHead>
+                <TableHead className="text-right">À payer</TableHead>
                 <TableHead className="w-[100px]">Statut</TableHead>
                 <TableHead className="w-[120px]">Enrollment</TableHead>
-                <TableHead className="text-right w-[140px]">Actions</TableHead>
+                <TableHead className="text-right w-[160px]">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {isLoading ? (
+              {isLoading || loadingSummary ? (
                 Array.from({ length: 4 }).map((_, i) => (
                   <TableRow key={i}>
-                    {Array.from({ length: 7 }).map((__, j) => (
+                    {Array.from({ length: 9 }).map((__, j) => (
                       <TableCell key={j}>
                         <Skeleton className="h-4 w-24" />
                       </TableCell>
@@ -196,7 +244,7 @@ export default function EmployeesPage() {
               ) : employees.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={7}
+                    colSpan={9}
                     className="p-8 text-center text-muted-foreground"
                   >
                     Aucun employé pour le moment.
@@ -205,12 +253,30 @@ export default function EmployeesPage() {
               ) : (
                 employees.map((row) => {
                   const enrolled = Boolean(row.is_enrolled || row.enrolled_at);
+                  const stats = statsByEmployee.get(Number(row.id));
                   return (
                     <TableRow key={row.id} className="hover:bg-muted/50">
-                      <TableCell className="font-medium">{row.full_name}</TableCell>
+                      <TableCell className="font-medium">
+                        <Link
+                          to={`/hr/employees/${row.id}`}
+                          className="hover:underline text-foreground"
+                        >
+                          {row.full_name}
+                        </Link>
+                      </TableCell>
                       <TableCell>{row.poste ?? "—"}</TableCell>
-                      <TableCell>{row.email}</TableCell>
                       <TableCell>{formatSalary(row.salary_base)}</TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {row.is_active ? (stats?.daysPresent ?? "—") : "—"}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {row.is_active ? (stats?.daysLate ?? "—") : "—"}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {row.is_active
+                          ? formatPayrollAmount(stats?.estimatedPay ?? null)
+                          : "—"}
+                      </TableCell>
                       <TableCell>
                         <Badge variant={row.is_active ? "default" : "secondary"}>
                           {row.is_active ? "Actif" : "Inactif"}
@@ -223,6 +289,17 @@ export default function EmployeesPage() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="inline-flex items-center gap-1">
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            title="Voir la fiche"
+                            aria-label="Voir la fiche"
+                            asChild
+                          >
+                            <Link to={`/hr/employees/${row.id}`}>
+                              <Eye className="w-4 h-4" />
+                            </Link>
+                          </Button>
                           <Button
                             size="icon"
                             variant="ghost"

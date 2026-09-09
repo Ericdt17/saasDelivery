@@ -53,6 +53,7 @@ export function useCreateHrEmployee() {
     mutationFn: (data: CreateHrEmployeePayload) => createEmployee(data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: hrKeys.employees });
+      qc.invalidateQueries({ queryKey: ["hr", "summary"] });
       toast.success("Employé créé");
     },
     onError: (e: unknown) => {
@@ -70,6 +71,8 @@ export function useUpdateHrEmployee() {
       updateEmployee(id, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: hrKeys.employees });
+      qc.invalidateQueries({ queryKey: ["hr", "attendances"] });
+      qc.invalidateQueries({ queryKey: ["hr", "summary"] });
       toast.success("Employé mis à jour");
     },
     onError: (e: unknown) => {
@@ -86,6 +89,8 @@ export function useDeleteHrEmployee() {
     mutationFn: (id: number) => deleteEmployee(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: hrKeys.employees });
+      qc.invalidateQueries({ queryKey: ["hr", "attendances"] });
+      qc.invalidateQueries({ queryKey: ["hr", "summary"] });
       toast.success("Employé désactivé");
     },
     onError: (e: unknown) => {
@@ -147,12 +152,12 @@ export function useCreateManualAttendance() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["hr", "attendances"] });
       qc.invalidateQueries({ queryKey: ["hr", "summary"] });
-      toast.success("Présence enregistrée");
+      toast.success("Présence mise à jour");
     },
     onError: (e: unknown) => {
       toast.error("Erreur", {
         description:
-          e instanceof Error ? e.message : "Enregistrement impossible",
+          e instanceof Error ? e.message : "Mise à jour impossible",
       });
     },
   });

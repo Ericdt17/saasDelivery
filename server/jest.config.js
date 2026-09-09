@@ -14,10 +14,6 @@ module.exports = {
     '!src/scripts/**',
     '!src/seed-*.js',
     '!src/db/**',                       // DB layer is validated by real-DB tests (jest.db.config.js)
-    '!src/api/routes/vendor.js',        // vendor API — smoke-tested via running server; add Jest when stable
-    '!src/api/routes/vendors.js',
-    '!src/lib/expoPush.js',             // push helper — thin wrapper around fetch; exercised in staging
-    '!src/lib/pdfReport.js',           // PDF rendering — PDFKit output verified manually/e2e; not unit-testable
     '!src/lib/botAlerts.js',            // webhook alert sender — requires live webhook endpoint
     '!src/view-*.js',
     '!src/migrate-existing-data.js',

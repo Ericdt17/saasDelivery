@@ -29,8 +29,9 @@ describe('CHECKIN_MESSAGES (employé-facing)', () => {
     expect(CHECKIN_MESSAGES.FACE_MISMATCH).toMatch(/réessayez/i);
   });
 
-  it('explains closed window without jargon', () => {
+  it('explains closed window and that missing check-in counts as absent', () => {
     expect(CHECKIN_MESSAGES.CLOSED).toMatch(/midi/i);
+    expect(CHECKIN_MESSAGES.CLOSED).toMatch(/absent/i);
     expect(CHECKIN_MESSAGES.CLOSED).not.toMatch(/null|UTC|Douala time/i);
   });
 });

@@ -2,7 +2,7 @@
  * Recruitment API — admin dashboard (offres, questions, candidatures)
  */
 
-import { apiGet, apiPost, apiPatch, apiDelete } from "./api";
+import { apiGet, apiPost, apiPatch, apiDelete, apiGetBlob } from "./api";
 import type { ApiResponse } from "@/types/api";
 
 const BASE = "/api/v1/recruitment/admin";
@@ -196,6 +196,18 @@ export async function getApplications(
 export async function getApplicationById(id: number): Promise<ApplicationDetail> {
   const res = await apiGet<ApplicationDetail>(`${BASE}/applications/${id}`);
   return unwrap(res, "Impossible de charger la candidature");
+}
+
+export async function getApplicationCvBlob(
+  id: number
+): Promise<{ blob: Blob; filename: string | null }> {
+  return apiGetBlob(`${BASE}/applications/${id}/cv`);
+}
+
+export async function getApplicationCoverLetterBlob(
+  id: number
+): Promise<{ blob: Blob; filename: string | null }> {
+  return apiGetBlob(`${BASE}/applications/${id}/cover-letter`);
 }
 
 export async function updateApplication(

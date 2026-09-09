@@ -21,7 +21,7 @@ const CHECKIN_MESSAGES = {
   OUT_OF_RANGE:
     "Vous n'êtes pas au bureau. Rapprochez-vous du site pour pouvoir pointer.",
   CLOSED:
-    "Le pointage est terminé pour aujourd'hui. Il est ouvert chaque jour jusqu'à midi (heure du Cameroun).",
+    "Le pointage est terminé pour aujourd'hui (ouvert jusqu'à midi, heure du Cameroun). Sans pointage, vous êtes compté(e) absent(e). Contactez les ressources humaines si besoin.",
   ALREADY_CHECKED_IN:
     "Vous avez déjà pointé aujourd'hui. Aucune autre action n'est nécessaire.",
   RATE_LIMITED:
