@@ -364,18 +364,149 @@ export type HrDashboardStats = {
 /** Late days count as half a paid day toward estimated payroll. */
 export const LATE_PAY_FACTOR = 0.5;
 
+/**
+ * Estimated pay for the month (full Mon–Sat month as basis):
+ * base salary minus penalties for recorded absences / lates.
+ * Null when the month has no workdays.
+ */
 export function estimateEmployeePayDue(input: {
   salaryBase: number | null;
   daysPresent: number;
   daysLate: number;
-  weekdaysElapsed: number;
+  workdaysInMonth: number;
+  daysAbsent?: number;
+  /** @deprecated ignored — kept for call-site compatibility during rename */
+  weekdaysElapsed?: number;
 }): number | null {
+  const penalties = estimateEmployeePenalties(input);
+  if (penalties == null) return null;
   const salary = input.salaryBase ?? 0;
-  if (input.weekdaysElapsed <= 0) return null;
   if (salary <= 0) return 0;
-  const paidDays =
-    input.daysPresent + LATE_PAY_FACTOR * input.daysLate;
-  return Math.round((salary * paidDays) / input.weekdaysElapsed);
+  return Math.max(0, Math.round(salary - penalties));
+}
+
+/**
+ * Unpaid portion of base salary on a full-month day rate:
+ * absent = full day, late = half day.
+ * Null when the month has no workdays.
+ */
+export function estimateEmployeePenalties(input: {
+  salaryBase: number | null;
+  daysPresent: number;
+  daysLate: number;
+  workdaysInMonth: number;
+  daysAbsent?: number;
+  weekdaysElapsed?: number;
+}): number | null {
+  const breakdown = estimateEmployeePenaltyBreakdown(input);
+  return breakdown?.total ?? null;
+}
+
+export type EmployeePenaltyBreakdown = {
+  /** Half-day deductions for late check-ins. */
+  late: number;
+  /** Full-day deductions for absences. */
+  absent: number;
+  total: number;
+};
+
+/**
+ * Mon–Sat workdays in a full calendar month (1–12).
+ */
+export function countWorkdaysInMonth(year: number, month: number): number {
+  if (
+    !Number.isInteger(year) ||
+    !Number.isInteger(month) ||
+    month < 1 ||
+    month > 12
+  ) {
+    return 0;
+  }
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  let count = 0;
+  for (let d = 1; d <= lastDay; d++) {
+    if (new Date(Date.UTC(year, month - 1, d)).getUTCDay() !== 0) count += 1;
+  }
+  return count;
+}
+
+/**
+ * Unit costs for 1 late day / 1 absent day this month (employee-facing).
+ */
+export function estimateDayPenaltyRates(input: {
+  salaryBase: number | null;
+  workdaysInMonth: number;
+}): { costLateDay: number; costAbsentDay: number } | null {
+  if (input.workdaysInMonth <= 0) return null;
+  const salary = input.salaryBase ?? 0;
+  if (salary <= 0) return { costLateDay: 0, costAbsentDay: 0 };
+  const dayRate = salary / input.workdaysInMonth;
+  return {
+    costLateDay: Math.round(dayRate * LATE_PAY_FACTOR),
+    costAbsentDay: Math.round(dayRate),
+  };
+}
+
+export function formatDayPenaltyRateLines(
+  rates: { costLateDay: number; costAbsentDay: number } | null
+): string[] {
+  if (rates == null) {
+    return [
+      "1 jour de retard = —",
+      "1 jour d'absence = —",
+    ];
+  }
+  return [
+    `1 jour de retard = ${formatPayrollAmount(rates.costLateDay)}`,
+    `1 jour d'absence = ${formatPayrollAmount(rates.costAbsentDay)}`,
+  ];
+}
+
+/**
+ * Penalty amounts on full-month day rates (same as "coût d'un jour").
+ * Null when the month has no workdays.
+ */
+export function estimateEmployeePenaltyBreakdown(input: {
+  salaryBase: number | null;
+  daysPresent: number;
+  daysLate: number;
+  workdaysInMonth: number;
+  daysAbsent?: number;
+  /** Used only to infer daysAbsent when not provided. */
+  weekdaysElapsed?: number;
+}): EmployeePenaltyBreakdown | null {
+  if (input.workdaysInMonth <= 0) return null;
+  const salary = input.salaryBase ?? 0;
+  if (salary <= 0) return { late: 0, absent: 0, total: 0 };
+
+  const elapsed = input.weekdaysElapsed;
+  const daysAbsent =
+    input.daysAbsent ??
+    (elapsed != null
+      ? Math.max(0, elapsed - input.daysPresent - input.daysLate)
+      : 0);
+  const dayRate = salary / input.workdaysInMonth;
+  const late = Math.round(dayRate * LATE_PAY_FACTOR * input.daysLate);
+  const absent = Math.round(dayRate * daysAbsent);
+  return { late, absent, total: late + absent };
+}
+
+/** Lines for map-style display: "Pénalité retard = …". */
+export function formatPenaltyBreakdownLines(
+  breakdown: EmployeePenaltyBreakdown | null
+): string[] {
+  if (breakdown == null) {
+    return [
+      "Pénalité retard = —",
+      "Pénalité absence = —",
+      "Total pénalités = —",
+    ];
+  }
+  return [
+    `Pénalité retard = ${formatPayrollAmount(breakdown.late)}`,
+    `Pénalité absence = ${formatPayrollAmount(breakdown.absent)}`,
+    `Total pénalités = ${formatPayrollAmount(breakdown.total)}`,
+  ];
 }
 
 export function buildHrDashboardStats(input: {
@@ -392,8 +523,11 @@ export function buildHrDashboardStats(input: {
     employee_id?: number;
     days_present: number;
     days_late: number;
+    days_absent?: number;
     weekdays_elapsed: number;
   }>;
+  /** Full Mon–Sat days in the selected month (payroll / penalties basis). */
+  workdaysInMonth: number;
 }): HrDashboardStats {
   const activeEmployees = input.employees.filter((e) => e.is_active);
   const activeIds = new Set(activeEmployees.map((e) => Number(e.id)));
@@ -441,12 +575,13 @@ export function buildHrDashboardStats(input: {
   let estimatedSum = 0;
   for (const emp of activeEmployees) {
     const row = summaryByEmployee.get(Number(emp.id));
-    const weekdays = row?.weekdays_elapsed ?? 0;
     const due = estimateEmployeePayDue({
       salaryBase: emp.salary_base ?? null,
       daysPresent: row?.days_present ?? 0,
       daysLate: row?.days_late ?? 0,
-      weekdaysElapsed: weekdays,
+      daysAbsent: row?.days_absent,
+      weekdaysElapsed: row?.weekdays_elapsed,
+      workdaysInMonth: input.workdaysInMonth,
     });
     if (due == null) continue;
     anyWorkdays = true;
@@ -482,6 +617,10 @@ export type EmployeeDetailStats = {
   attendanceRatePct: number | null;
   salaryBase: number;
   estimatedPay: number | null;
+  /** Base salary minus estimated pay (absences + half late days). */
+  penalties: number | null;
+  penaltyLate: number | null;
+  penaltyAbsent: number | null;
 };
 
 export function buildEmployeeDetailStats(input: {
@@ -492,6 +631,8 @@ export function buildEmployeeDetailStats(input: {
     days_absent: number;
     weekdays_elapsed: number;
   } | null;
+  /** Full Mon–Sat days in the selected month (payroll / penalties). */
+  workdaysInMonth: number;
 }): EmployeeDetailStats {
   const daysPresent = input.summary?.days_present ?? 0;
   const daysLate = input.summary?.days_late ?? 0;
@@ -506,12 +647,16 @@ export function buildEmployeeDetailStats(input: {
       : null;
 
   const salaryBase = input.salaryBase ?? 0;
-  const estimatedPay = estimateEmployeePayDue({
+  const payInput = {
     salaryBase: input.salaryBase,
     daysPresent,
     daysLate,
+    daysAbsent,
     weekdaysElapsed,
-  });
+    workdaysInMonth: input.workdaysInMonth,
+  };
+  const estimatedPay = estimateEmployeePayDue(payInput);
+  const breakdown = estimateEmployeePenaltyBreakdown(payInput);
 
   return {
     daysPresent,
@@ -521,6 +666,9 @@ export function buildEmployeeDetailStats(input: {
     attendanceRatePct,
     salaryBase,
     estimatedPay,
+    penalties: breakdown?.total ?? null,
+    penaltyLate: breakdown?.late ?? null,
+    penaltyAbsent: breakdown?.absent ?? null,
   };
 }
 

@@ -23,10 +23,26 @@ const {
   isFaceMatch,
   getCheckInStatus,
   getDoualaDateString,
+  getDoualaParts,
   countWeekdaysElapsed,
+  countWeekdaysInMonth,
+  estimateDayPenaltyRates,
 } = require("../../lib/hrCheckin");
 const { CHECKIN_MESSAGES } = require("../../lib/hrCheckinMessages");
 const { notifyHrCheckinAlert } = require("../../lib/botAlerts");
+
+function publicEmployeeCheckinPayload(employee) {
+  const parts = getDoualaParts(new Date());
+  const workdays = countWeekdaysInMonth(parts.year, Number(parts.month));
+  const rates = estimateDayPenaltyRates(employee.salary_base, workdays);
+  return {
+    full_name: employee.full_name,
+    email: employee.email,
+    is_enrolled: isEmployeeEnrolled(employee),
+    cost_late_day: rates?.cost_late_day ?? null,
+    cost_absent_day: rates?.cost_absent_day ?? null,
+  };
+}
 
 const createEmployeeSchema = z.object({
   full_name: z.string().trim().min(1),
@@ -268,24 +284,9 @@ async function verifyCheckinEmail(req, res, next) {
       });
     }
 
-    if (!isEmployeeEnrolled(employee)) {
-      return res.json({
-        success: true,
-        data: {
-          full_name: employee.full_name,
-          email: employee.email,
-          is_enrolled: false,
-        },
-      });
-    }
-
     return res.json({
       success: true,
-      data: {
-        full_name: employee.full_name,
-        email: employee.email,
-        is_enrolled: true,
-      },
+      data: publicEmployeeCheckinPayload(employee),
     });
   } catch (err) {
     next(err);
@@ -353,11 +354,7 @@ async function publicSelfEnroll(req, res, next) {
     return res.json({
       success: true,
       message: CHECKIN_MESSAGES.FACE_ENROLLED_OK,
-      data: {
-        full_name: row.full_name,
-        email: row.email,
-        is_enrolled: true,
-      },
+      data: publicEmployeeCheckinPayload({ ...row, is_enrolled: true }),
     });
   } catch (err) {
     next(err);

@@ -9,6 +9,7 @@ import {
 import { EmailStep } from "./components/EmailStep";
 import { FaceStep } from "./components/FaceStep";
 import { ResultStep } from "./components/ResultStep";
+import { DayCostReminder } from "./components/DayCostReminder";
 import { isNetworkErrorMessage, successGreeting } from "./lib/greeting";
 import { getCurrentPosition } from "./lib/geo";
 import {
@@ -54,6 +55,8 @@ export default function App() {
   const [canRetry, setCanRetry] = useState(false);
   const [checkInTime, setCheckInTime] = useState<string | null>(null);
   const [status, setStatus] = useState<"present" | "late" | null>(null);
+  const [costLateDay, setCostLateDay] = useState<number | null>(null);
+  const [costAbsentDay, setCostAbsentDay] = useState<number | null>(null);
   const lastDescriptorRef = useRef<number[] | null>(null);
 
   const reset = useCallback(() => {
@@ -68,6 +71,8 @@ export default function App() {
     setCanRetry(false);
     setCheckInTime(null);
     setStatus(null);
+    setCostLateDay(null);
+    setCostAbsentDay(null);
     lastDescriptorRef.current = null;
   }, []);
 
@@ -80,6 +85,12 @@ export default function App() {
       setEmail(data.email);
       setRememberedEmail(data.email);
       setIsEnrolled(Boolean(data.is_enrolled));
+      setCostLateDay(
+        typeof data.cost_late_day === "number" ? data.cost_late_day : null
+      );
+      setCostAbsentDay(
+        typeof data.cost_absent_day === "number" ? data.cost_absent_day : null
+      );
       setStep("face");
     } catch (e) {
       setEmailError(friendlyError(e));
@@ -167,18 +178,26 @@ export default function App() {
             loading={loading}
             busyLabel={busyLabelFor(busyPhase)}
             mode={isEnrolled ? "verify" : "enroll"}
+            costLateDay={costLateDay}
+            costAbsentDay={costAbsentDay}
             onValidated={(descriptor) => void runCheckinPipeline(descriptor)}
           />
         ) : null}
 
         {step === "confirm" ? (
-          <ResultStep
-            kind="success"
-            title={successGreeting(employeeName)}
-            employeeName={employeeName}
-            checkInTime={checkInTime}
-            status={status}
-          />
+          <div className="flex w-full flex-col items-center gap-4">
+            <ResultStep
+              kind="success"
+              title={successGreeting(employeeName)}
+              employeeName={employeeName}
+              checkInTime={checkInTime}
+              status={status}
+            />
+            <DayCostReminder
+              costLateDay={costLateDay}
+              costAbsentDay={costAbsentDay}
+            />
+          </div>
         ) : null}
 
         {step === "error" ? (

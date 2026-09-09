@@ -166,6 +166,41 @@ function countWeekdaysElapsed(year, month, asOfDate) {
   return count;
 }
 
+/**
+ * Count all Mon–Sat workdays in a calendar month (full month).
+ * @param {number} year
+ * @param {number} month 1–12
+ */
+function countWeekdaysInMonth(year, month) {
+  const y = Number(year);
+  const m = Number(month);
+  if (!Number.isInteger(y) || !Number.isInteger(m) || m < 1 || m > 12) {
+    return 0;
+  }
+  const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  const asOf = `${y}-${String(m).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+  return countWeekdaysElapsed(y, m, asOf);
+}
+
+/**
+ * Unit penalty rates for employee-facing copy (1 late day / 1 absent day).
+ * Based on salary_base ÷ Mon–Sat days in the month.
+ * @returns {{ cost_late_day: number, cost_absent_day: number } | null}
+ */
+function estimateDayPenaltyRates(salaryBase, workdaysInMonth) {
+  const salary = Number(salaryBase);
+  const days = Number(workdaysInMonth);
+  if (!Number.isFinite(days) || days <= 0) return null;
+  if (!Number.isFinite(salary) || salary <= 0) {
+    return { cost_late_day: 0, cost_absent_day: 0 };
+  }
+  const dayRate = salary / days;
+  return {
+    cost_late_day: Math.round(dayRate * 0.5),
+    cost_absent_day: Math.round(dayRate),
+  };
+}
+
 module.exports = {
   OFFICE_LAT,
   OFFICE_LNG,
@@ -183,4 +218,6 @@ module.exports = {
   getDoualaDateString,
   getCheckInStatus,
   countWeekdaysElapsed,
+  countWeekdaysInMonth,
+  estimateDayPenaltyRates,
 };

@@ -362,6 +362,12 @@ describe('GET /api/v1/hr/checkin/verify-email', () => {
     expect(res.body.data.full_name).toBe('Jean Dupont');
     expect(res.body.data.is_enrolled).toBe(true);
     expect(res.body.data).not.toHaveProperty('face_descriptor');
+    expect(res.body.data).not.toHaveProperty('salary_base');
+    expect(typeof res.body.data.cost_late_day).toBe('number');
+    expect(typeof res.body.data.cost_absent_day).toBe('number');
+    expect(res.body.data.cost_late_day).toBeLessThanOrEqual(
+      res.body.data.cost_absent_day
+    );
   });
 
   it('returns 200 with is_enrolled false when face is not enrolled yet', async () => {
@@ -372,6 +378,7 @@ describe('GET /api/v1/hr/checkin/verify-email', () => {
     expect(res.status).toBe(200);
     expect(res.body.data.is_enrolled).toBe(false);
     expect(res.body.data).not.toHaveProperty('face_descriptor');
+    expect(res.body.data.cost_absent_day).toBeGreaterThan(0);
   });
 });
 

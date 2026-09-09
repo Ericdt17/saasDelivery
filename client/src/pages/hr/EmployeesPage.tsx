@@ -21,7 +21,9 @@ import {
   enrollmentBadgeVariant,
   formatMonthLabelFr,
   formatPayrollAmount,
+  formatPenaltyBreakdownLines,
   formatSalary,
+  countWorkdaysInMonth,
 } from "@/pages/hr/hrUi";
 import { FaceEnrollDialog } from "@/pages/hr/FaceEnrollDialog";
 import { HrMonthPicker } from "@/pages/hr/HrMonthPicker";
@@ -75,6 +77,7 @@ export default function EmployeesPage() {
       number,
       ReturnType<typeof buildEmployeeDetailStats>
     >();
+    const workdaysInMonth = countWorkdaysInMonth(year, month);
     for (const emp of employees) {
       const empId = Number(emp.id);
       const summary =
@@ -84,11 +87,12 @@ export default function EmployeesPage() {
         buildEmployeeDetailStats({
           salaryBase: emp.salary_base,
           summary,
+          workdaysInMonth,
         })
       );
     }
     return map;
-  }, [employees, monthSummary]);
+  }, [employees, monthSummary, year, month]);
 
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<HrEmployee | null>(null);
@@ -225,6 +229,7 @@ export default function EmployeesPage() {
                 <TableHead className="text-right">Présents</TableHead>
                 <TableHead className="text-right">Retards</TableHead>
                 <TableHead className="text-right">À payer</TableHead>
+                <TableHead className="text-right">Pénalités</TableHead>
                 <TableHead className="w-[100px]">Statut</TableHead>
                 <TableHead className="w-[120px]">Enrollment</TableHead>
                 <TableHead className="text-right w-[160px]">Actions</TableHead>
@@ -234,7 +239,7 @@ export default function EmployeesPage() {
               {isLoading || loadingSummary ? (
                 Array.from({ length: 4 }).map((_, i) => (
                   <TableRow key={i}>
-                    {Array.from({ length: 9 }).map((__, j) => (
+                    {Array.from({ length: 10 }).map((__, j) => (
                       <TableCell key={j}>
                         <Skeleton className="h-4 w-24" />
                       </TableCell>
@@ -244,7 +249,7 @@ export default function EmployeesPage() {
               ) : employees.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={9}
+                    colSpan={10}
                     className="p-8 text-center text-muted-foreground"
                   >
                     Aucun employé pour le moment.
@@ -276,6 +281,34 @@ export default function EmployeesPage() {
                         {row.is_active
                           ? formatPayrollAmount(stats?.estimatedPay ?? null)
                           : "—"}
+                      </TableCell>
+                      <TableCell className="text-right text-xs tabular-nums">
+                        {row.is_active ? (
+                          <div className="inline-flex flex-col items-end gap-0.5 leading-snug text-muted-foreground">
+                            {formatPenaltyBreakdownLines(
+                              stats?.penalties == null
+                                ? null
+                                : {
+                                    late: stats.penaltyLate ?? 0,
+                                    absent: stats.penaltyAbsent ?? 0,
+                                    total: stats.penalties,
+                                  }
+                            ).map((line) => (
+                              <span
+                                key={line}
+                                className={
+                                  line.startsWith("Total")
+                                    ? "font-medium text-foreground"
+                                    : undefined
+                                }
+                              >
+                                {line}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          "—"
+                        )}
                       </TableCell>
                       <TableCell>
                         <Badge variant={row.is_active ? "default" : "secondary"}>
