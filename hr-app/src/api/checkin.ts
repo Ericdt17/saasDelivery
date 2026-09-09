@@ -8,6 +8,10 @@ export type VerifyEmailResult = {
   full_name: string;
   email: string;
   is_enrolled: boolean;
+  /** Cost of one late day this month (FCFA), from salary ÷ workdays. */
+  cost_late_day: number | null;
+  /** Cost of one absent day this month (FCFA). */
+  cost_absent_day: number | null;
 };
 
 export type CheckinResult = {

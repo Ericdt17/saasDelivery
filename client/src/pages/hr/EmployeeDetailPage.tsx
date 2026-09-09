@@ -15,6 +15,7 @@ import {
   Wallet,
   HandCoins,
   UserCheck,
+  Scale,
 } from "lucide-react";
 import {
   useCreateManualAttendance,
@@ -35,6 +36,10 @@ import {
   formatCheckInTime,
   formatMonthLabelFr,
   formatPayrollAmount,
+  formatPenaltyBreakdownLines,
+  formatDayPenaltyRateLines,
+  estimateDayPenaltyRates,
+  countWorkdaysInMonth,
   formatSalary,
   type AttendanceStatus,
 } from "@/pages/hr/hrUi";
@@ -87,8 +92,9 @@ export default function EmployeeDetailPage() {
       buildEmployeeDetailStats({
         salaryBase: employee?.salary_base ?? null,
         summary: summaryRow,
+        workdaysInMonth: countWorkdaysInMonth(year, month),
       }),
-    [employee, summaryRow]
+    [employee, summaryRow, year, month]
   );
 
   const dayRows = useMemo(
@@ -253,8 +259,88 @@ export default function EmployeeDetailPage() {
               value={formatPayrollAmount(stats.estimatedPay)}
               icon={HandCoins}
               variant="expedition"
-              iconTooltip="Présent (<08:30) = 1 · Retard (08:30–midi) = 0,5 · Non pointé après midi = absent (0)"
+              iconTooltip="Présent (<08:30) = 1 · Retard (08:30–midi) = 0,5 · Absent = 0 — base = mois complet (lun–sam)"
             />
+          </div>
+
+          <div className="stat-card space-y-2 p-4">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <Scale className="h-4 w-4 text-muted-foreground" />
+              Coût d’un jour (mois)
+            </div>
+            <dl className="space-y-1.5 text-sm">
+              {formatDayPenaltyRateLines(
+                estimateDayPenaltyRates({
+                  salaryBase: stats.salaryBase,
+                  workdaysInMonth: countWorkdaysInMonth(year, month),
+                })
+              ).map((line) => {
+                const [key, value] = line.split(" = ");
+                return (
+                  <div
+                    key={line}
+                    className="flex items-baseline justify-between gap-4 border-b border-dashed border-border/60 pb-1 last:border-0 last:pb-0"
+                  >
+                    <dt className="text-muted-foreground">{key}</dt>
+                    <dd className="tabular-nums font-medium text-foreground">
+                      {value}
+                    </dd>
+                  </div>
+                );
+              })}
+            </dl>
+            <p className="text-xs text-muted-foreground">
+              Tarif du mois sélectionné (lun–sam) — pour motiver l’assiduité
+            </p>
+          </div>
+
+          <div className="stat-card space-y-2 p-4">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <Scale className="h-4 w-4 text-muted-foreground" />
+              Pénalités du mois
+            </div>
+            <dl className="space-y-1.5 text-sm">
+              {formatPenaltyBreakdownLines(
+                stats.penalties == null
+                  ? null
+                  : {
+                      late: stats.penaltyLate ?? 0,
+                      absent: stats.penaltyAbsent ?? 0,
+                      total: stats.penalties,
+                    }
+              ).map((line) => {
+                const [key, value] = line.split(" = ");
+                return (
+                  <div
+                    key={line}
+                    className="flex items-baseline justify-between gap-4 border-b border-dashed border-border/60 pb-1 last:border-0 last:pb-0"
+                  >
+                    <dt
+                      className={
+                        key?.startsWith("Total")
+                          ? "font-medium text-foreground"
+                          : "text-muted-foreground"
+                      }
+                    >
+                      {key}
+                    </dt>
+                    <dd
+                      className={
+                        key?.startsWith("Total")
+                          ? "font-semibold tabular-nums"
+                          : "tabular-nums text-foreground"
+                      }
+                    >
+                      {value}
+                    </dd>
+                  </div>
+                );
+              })}
+            </dl>
+            <p className="text-xs text-muted-foreground">
+              Retard = demi-journée · Absence = journée — même tarif que « coût
+              d’un jour » (mois complet)
+            </p>
           </div>
 
           <div className="stat-card overflow-hidden p-0">

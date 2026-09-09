@@ -8,6 +8,7 @@ import {
 } from "../lib/face";
 import { cameraErrorMessage, MSG, clientErrorKindFromMessage } from "../lib/messages";
 import { reportClientError } from "../api/checkin";
+import { DayCostReminder } from "./DayCostReminder";
 
 type Props = {
   employeeName: string;
@@ -17,6 +18,8 @@ type Props = {
   busyLabel?: string | null;
   /** First connection: capture & save face. Later: match & check in. */
   mode?: "enroll" | "verify";
+  costLateDay?: number | null;
+  costAbsentDay?: number | null;
   onValidated: (descriptor: number[]) => void;
 };
 
@@ -46,6 +49,8 @@ export function FaceStep({
   loading,
   busyLabel = null,
   mode = "verify",
+  costLateDay = null,
+  costAbsentDay = null,
   onValidated,
 }: Props) {
   const isEnroll = mode === "enroll";
@@ -240,6 +245,7 @@ export function FaceStep({
         compact
       />
       <p className="-mt-2 text-center text-sm text-ink-muted">Bonjour {employeeName}</p>
+      <DayCostReminder costLateDay={costLateDay} costAbsentDay={costAbsentDay} />
       <p className="text-center text-sm leading-relaxed text-ink-muted">
         {isEnroll
           ? "C'est votre première connexion : placez votre visage dans le cercle pour l'enregistrer."

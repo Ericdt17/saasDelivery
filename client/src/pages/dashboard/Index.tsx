@@ -23,6 +23,7 @@ import {
 import {
   buildHrDashboardStats,
   currentMonthYearDouala,
+  countWorkdaysInMonth,
   formatAttendanceRatePct,
   formatMonthLabelFr,
   formatPayrollAmount,
@@ -78,8 +79,9 @@ function HrDashboardContent() {
         employees,
         todayAttendances,
         monthSummary,
+        workdaysInMonth: countWorkdaysInMonth(year, month),
       }),
-    [employees, todayAttendances, monthSummary]
+    [employees, todayAttendances, monthSummary, year, month]
   );
 
   const isLoading = loadingEmployees || loadingToday || loadingSummary;
@@ -175,7 +177,7 @@ function HrDashboardContent() {
             value={formatPayrollAmount(stats.estimatedPayroll)}
             icon={HandCoins}
             variant="expedition"
-            iconTooltip="Présent (<08:30) = 1 · Retard (08:30–midi) = 0,5 · Pas de pointage après midi = absent (0)"
+            iconTooltip="Présent = journée · Retard = demi-journée · Absent = 0 — base mois complet (lun–sam)"
           />
         </div>
       )}

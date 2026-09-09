@@ -101,3 +101,22 @@ describe('countWeekdaysElapsed', () => {
     expect(countWeekdaysElapsed(2026, 9, '2026-08-31')).toBe(0);
   });
 });
+
+describe('countWeekdaysInMonth / estimateDayPenaltyRates', () => {
+  const {
+    countWeekdaysInMonth,
+    estimateDayPenaltyRates,
+  } = require('../../lib/hrCheckin');
+
+  it('counts full-month Mon–Sat days', () => {
+    expect(countWeekdaysInMonth(2026, 9)).toBe(26);
+  });
+
+  it('computes late = half absent day cost', () => {
+    // 300000 / 26 ≈ 11538.46 → absent 11538, late 5769
+    expect(estimateDayPenaltyRates(300000, 26)).toEqual({
+      cost_late_day: 5769,
+      cost_absent_day: 11538,
+    });
+  });
+});

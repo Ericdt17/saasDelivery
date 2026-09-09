@@ -23,6 +23,12 @@ import {
   formatAttendanceRatePct,
   formatPayrollAmount,
   estimateEmployeePayDue,
+  estimateEmployeePenalties,
+  estimateEmployeePenaltyBreakdown,
+  formatPenaltyBreakdownLines,
+  countWorkdaysInMonth,
+  estimateDayPenaltyRates,
+  formatDayPenaltyRateLines,
   buildEmployeeDetailStats,
 } from "./hrUi";
 
@@ -306,13 +312,14 @@ describe("buildHrDashboardStats", () => {
         { employee_id: 99, status: "present" },
       ],
       monthSummary: [],
+      workdaysInMonth: 20,
     });
     expect(stats.activeCount).toBe(2);
     expect(stats.presentToday).toBe(2);
     expect(stats.lateDaysMonth).toBe(0);
     expect(stats.attendanceRatePct).toBeNull();
     expect(stats.basePayroll).toBe(500000);
-    expect(stats.estimatedPayroll).toBeNull();
+    expect(stats.estimatedPayroll).toBe(500000);
   });
 
   it("ignores absent and non-check-in statuses for presentToday", () => {
@@ -323,6 +330,7 @@ describe("buildHrDashboardStats", () => {
         { employee_id: 2, status: "present" },
       ],
       monthSummary: [],
+      workdaysInMonth: 20,
     });
     expect(stats.presentToday).toBe(1);
   });
@@ -345,6 +353,7 @@ describe("buildHrDashboardStats", () => {
           weekdays_elapsed: 12,
         },
       ],
+      workdaysInMonth: 20,
     });
     expect(stats.lateDaysMonth).toBe(2);
     // (8+2+10+0) / (12+12) = 20/24 ≈ 83.333 → round to 83
@@ -360,24 +369,26 @@ describe("buildHrDashboardStats", () => {
           employee_id: 1,
           days_present: 10,
           days_late: 0,
+          days_absent: 0,
           weekdays_elapsed: 10,
         },
         {
           employee_id: 3,
           days_present: 0,
           days_late: 5,
+          days_absent: 5,
           weekdays_elapsed: 10,
         },
       ],
+      workdaysInMonth: 20,
     });
     expect(stats.activeCount).toBe(2);
     expect(stats.presentToday).toBe(0);
     expect(stats.lateDaysMonth).toBe(0);
     expect(stats.attendanceRatePct).toBe(100);
     expect(stats.basePayroll).toBe(500000);
-    // Only emp 1 has workdays in summary among actives; emp 2 has no row → 0 paid days
-    // emp1: 300000 * 10/10 = 300000; emp2 weekdays 0 → skipped; estimated = 300000
-    expect(stats.estimatedPayroll).toBe(300000);
+    // emp1: no absences → full 300000; emp2: no summary → full 200000
+    expect(stats.estimatedPayroll).toBe(500000);
   });
 
   it("returns null attendance rate when weekdays_elapsed sum is 0", () => {
@@ -385,13 +396,14 @@ describe("buildHrDashboardStats", () => {
       employees: [],
       todayAttendances: [],
       monthSummary: [{ days_present: 0, days_late: 0, weekdays_elapsed: 0 }],
+      workdaysInMonth: 20,
     });
     expect(stats.attendanceRatePct).toBeNull();
   });
 
-  it("estimates payroll with late=0.5 and absent=0 (Ada example)", () => {
-    // Ada 300k: 12 present + 3 late + 5 absent over 20 workdays → 202500
-    // Jean 200k: always present 20/20 → 200000
+  it("estimates payroll with late=0.5 and absent=0 on full-month basis", () => {
+    // Ada 300k: 5 absent + 1.5 late over 20-day month → penalties 97500 → pay 202500
+    // Jean 200k: always present → 200000
     const stats = buildHrDashboardStats({
       employees,
       todayAttendances: [],
@@ -400,15 +412,18 @@ describe("buildHrDashboardStats", () => {
           employee_id: 1,
           days_present: 12,
           days_late: 3,
+          days_absent: 5,
           weekdays_elapsed: 20,
         },
         {
           employee_id: 2,
           days_present: 20,
           days_late: 0,
+          days_absent: 0,
           weekdays_elapsed: 20,
         },
       ],
+      workdaysInMonth: 20,
     });
     expect(stats.basePayroll).toBe(500000);
     expect(stats.estimatedPayroll).toBe(402500);
@@ -416,26 +431,128 @@ describe("buildHrDashboardStats", () => {
 });
 
 describe("estimateEmployeePayDue", () => {
-  it("applies half-day for late and zero for absent", () => {
+  it("is base salary minus full-month penalties", () => {
     expect(
       estimateEmployeePayDue({
         salaryBase: 300000,
         daysPresent: 12,
         daysLate: 3,
-        weekdaysElapsed: 20,
+        daysAbsent: 5,
+        workdaysInMonth: 20,
       })
     ).toBe(202500);
   });
 
-  it("returns null when no workdays elapsed", () => {
+  it("returns null when month has no workdays", () => {
     expect(
       estimateEmployeePayDue({
         salaryBase: 300000,
         daysPresent: 0,
         daysLate: 0,
-        weekdaysElapsed: 0,
+        workdaysInMonth: 0,
       })
     ).toBeNull();
+  });
+});
+
+describe("estimateEmployeePenalties", () => {
+  it("uses full-month day rate (absent + half late)", () => {
+    expect(
+      estimateEmployeePenalties({
+        salaryBase: 300000,
+        daysPresent: 12,
+        daysLate: 3,
+        daysAbsent: 5,
+        workdaysInMonth: 20,
+      })
+    ).toBe(97500);
+  });
+
+  it("matches unit cost × absences mid-month (Eric example)", () => {
+    // 100000 / 26 ≈ 3846 per day × 2 absences = 7692
+    expect(
+      estimateEmployeePenalties({
+        salaryBase: 100000,
+        daysPresent: 6,
+        daysLate: 0,
+        daysAbsent: 2,
+        weekdaysElapsed: 8,
+        workdaysInMonth: 26,
+      })
+    ).toBe(7692);
+  });
+
+  it("is zero when always present", () => {
+    expect(
+      estimateEmployeePenalties({
+        salaryBase: 200000,
+        daysPresent: 20,
+        daysLate: 0,
+        daysAbsent: 0,
+        workdaysInMonth: 20,
+      })
+    ).toBe(0);
+  });
+
+  it("returns null when month has no workdays", () => {
+    expect(
+      estimateEmployeePenalties({
+        salaryBase: 300000,
+        daysPresent: 0,
+        daysLate: 0,
+        workdaysInMonth: 0,
+      })
+    ).toBeNull();
+  });
+});
+
+describe("estimateEmployeePenaltyBreakdown", () => {
+  it("splits late vs absent amounts like a key map", () => {
+    const b = estimateEmployeePenaltyBreakdown({
+      salaryBase: 300000,
+      daysPresent: 12,
+      daysLate: 3,
+      daysAbsent: 5,
+      workdaysInMonth: 20,
+    });
+    expect(b).toEqual({ late: 22500, absent: 75000, total: 97500 });
+  });
+});
+
+describe("formatPenaltyBreakdownLines", () => {
+  it("formats key = value lines", () => {
+    const lines = formatPenaltyBreakdownLines({
+      late: 22500,
+      absent: 75000,
+      total: 97500,
+    });
+    expect(lines[0]).toMatch(/^Pénalité retard = /);
+    expect(lines[0]).toMatch(/22/);
+    expect(lines[1]).toMatch(/^Pénalité absence = /);
+    expect(lines[2]).toMatch(/^Total pénalités = /);
+  });
+
+  it("uses em dash when breakdown is null", () => {
+    const lines = formatPenaltyBreakdownLines(null);
+    expect(lines.every((l) => l.includes("—"))).toBe(true);
+  });
+});
+
+describe("day penalty rates (employee-facing)", () => {
+  it("counts full-month workdays and unit costs", () => {
+    expect(countWorkdaysInMonth(2026, 9)).toBe(26);
+    expect(
+      estimateDayPenaltyRates({ salaryBase: 300000, workdaysInMonth: 26 })
+    ).toEqual({ costLateDay: 5769, costAbsentDay: 11538 });
+  });
+
+  it("formats rate lines", () => {
+    const lines = formatDayPenaltyRateLines({
+      costLateDay: 5769,
+      costAbsentDay: 11538,
+    });
+    expect(lines[0]).toMatch(/^1 jour de retard = /);
+    expect(lines[1]).toMatch(/^1 jour d'absence = /);
   });
 });
 
@@ -458,6 +575,7 @@ describe("buildEmployeeDetailStats", () => {
   it("builds Ada month stats with payroll estimate", () => {
     const stats = buildEmployeeDetailStats({
       salaryBase: 300000,
+      workdaysInMonth: 20,
       summary: {
         days_present: 12,
         days_late: 3,
@@ -471,16 +589,40 @@ describe("buildEmployeeDetailStats", () => {
     expect(stats.attendanceRatePct).toBe(75); // (12+3)/20
     expect(stats.salaryBase).toBe(300000);
     expect(stats.estimatedPay).toBe(202500);
+    expect(stats.penalties).toBe(97500);
+    expect(stats.penaltyLate).toBe(22500);
+    expect(stats.penaltyAbsent).toBe(75000);
+  });
+
+  it("uses full-month rates for mid-month absences (Eric example)", () => {
+    const stats = buildEmployeeDetailStats({
+      salaryBase: 100000,
+      workdaysInMonth: 26,
+      summary: {
+        days_present: 6,
+        days_late: 0,
+        days_absent: 2,
+        weekdays_elapsed: 8,
+      },
+    });
+    expect(stats.attendanceRatePct).toBe(75);
+    expect(stats.penalties).toBe(7692);
+    expect(stats.penaltyAbsent).toBe(7692);
+    expect(stats.estimatedPay).toBe(92308);
   });
 
   it("handles missing summary", () => {
     const stats = buildEmployeeDetailStats({
       salaryBase: 150000,
+      workdaysInMonth: 26,
       summary: null,
     });
     expect(stats.daysPresent).toBe(0);
     expect(stats.attendanceRatePct).toBeNull();
-    expect(stats.estimatedPay).toBeNull();
+    expect(stats.estimatedPay).toBe(150000);
+    expect(stats.penalties).toBe(0);
+    expect(stats.penaltyLate).toBe(0);
+    expect(stats.penaltyAbsent).toBe(0);
     expect(stats.salaryBase).toBe(150000);
   });
 });
