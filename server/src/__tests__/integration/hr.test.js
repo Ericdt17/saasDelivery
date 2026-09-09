@@ -13,6 +13,7 @@ const mockEnrollEmployeeFace = jest.fn();
 const mockGetEmployeeByEmailWithDescriptor = jest.fn();
 const mockGetAttendanceByEmployeeAndDate = jest.fn();
 const mockCreateAttendance = jest.fn();
+const mockUpsertAttendance = jest.fn();
 const mockListAttendances = jest.fn();
 const mockSummarizeAttendances = jest.fn();
 
@@ -26,6 +27,7 @@ jest.mock('../../db', () => ({
   getEmployeeByEmailWithDescriptor: mockGetEmployeeByEmailWithDescriptor,
   getAttendanceByEmployeeAndDate: mockGetAttendanceByEmployeeAndDate,
   createAttendance: mockCreateAttendance,
+  upsertAttendance: mockUpsertAttendance,
   listAttendances: mockListAttendances,
   summarizeAttendances: mockSummarizeAttendances,
   listMerchantTerms: jest.fn(),
@@ -512,6 +514,123 @@ describe('GET /api/v1/hr/attendances', () => {
       .query({ month: 9 })
       .set('Authorization', `Bearer ${superToken}`);
     expect(res.status).toBe(400);
+  });
+});
+
+describe('POST /api/v1/hr/attendances', () => {
+  it('returns 401 without a token', async () => {
+    const res = await request(app)
+      .post('/api/v1/hr/attendances')
+      .send({ employee_id: 1, date: '2026-09-08', status: 'present' });
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 403 for agency user', async () => {
+    const res = await request(app)
+      .post('/api/v1/hr/attendances')
+      .set('Authorization', `Bearer ${agencyToken}`)
+      .send({ employee_id: 1, date: '2026-09-08', status: 'present' });
+    expect(res.status).toBe(403);
+  });
+
+  it('returns 400 for invalid body', async () => {
+    const res = await request(app)
+      .post('/api/v1/hr/attendances')
+      .set('Authorization', `Bearer ${superToken}`)
+      .send({ employee_id: 1, status: 'absent' });
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 404 when employee does not exist', async () => {
+    mockGetEmployeeById.mockResolvedValueOnce(null);
+    const res = await request(app)
+      .post('/api/v1/hr/attendances')
+      .set('Authorization', `Bearer ${superToken}`)
+      .send({ employee_id: 99, date: '2026-09-08', status: 'present' });
+    expect(res.status).toBe(404);
+  });
+
+  it('returns 400 when employee is inactive', async () => {
+    mockGetEmployeeById.mockResolvedValueOnce({
+      ...employeeFixture,
+      is_active: false,
+    });
+    const res = await request(app)
+      .post('/api/v1/hr/attendances')
+      .set('Authorization', `Bearer ${superToken}`)
+      .send({ employee_id: 1, date: '2026-09-08', status: 'present' });
+    expect(res.status).toBe(400);
+  });
+
+  it('creates a manual present attendance via upsert', async () => {
+    mockGetEmployeeById.mockResolvedValueOnce(employeeFixture);
+    mockUpsertAttendance.mockResolvedValueOnce({
+      id: 10,
+      employee_id: 1,
+      date: '2026-09-08',
+      check_in_time: '2026-09-08T08:00:00.000Z',
+      status: 'present',
+      face_verified: false,
+      gps_verified: false,
+      latitude: null,
+      longitude: null,
+      created_at: '2026-09-08T08:00:00.000Z',
+      full_name: 'Jean Dupont',
+      email: 'jean.dupont@example.com',
+      poste: 'Livreur',
+    });
+
+    const res = await request(app)
+      .post('/api/v1/hr/attendances')
+      .set('Authorization', `Bearer ${superToken}`)
+      .send({ employee_id: 1, date: '2026-09-08', status: 'present' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.status).toBe('present');
+    expect(res.body.data.face_verified).toBe(false);
+    expect(res.body.data.gps_verified).toBe(false);
+    expect(mockUpsertAttendance).toHaveBeenCalledWith(
+      expect.objectContaining({
+        employee_id: 1,
+        date: '2026-09-08',
+        status: 'present',
+        face_verified: false,
+        gps_verified: false,
+        latitude: null,
+        longitude: null,
+      })
+    );
+  });
+
+  it('overwrites an existing attendance for the same day', async () => {
+    mockGetEmployeeById.mockResolvedValueOnce(employeeFixture);
+    mockUpsertAttendance.mockResolvedValueOnce({
+      id: 10,
+      employee_id: 1,
+      date: '2026-09-08',
+      check_in_time: '2026-09-08T09:30:00.000Z',
+      status: 'late',
+      face_verified: false,
+      gps_verified: false,
+      latitude: null,
+      longitude: null,
+      created_at: '2026-09-08T07:00:00.000Z',
+      full_name: 'Jean Dupont',
+      email: 'jean.dupont@example.com',
+      poste: 'Livreur',
+    });
+
+    const res = await request(app)
+      .post('/api/v1/hr/attendances')
+      .set('Authorization', `Bearer ${superToken}`)
+      .send({ employee_id: 1, date: '2026-09-08', status: 'late' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.status).toBe('late');
+    expect(mockUpsertAttendance).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'late' })
+    );
   });
 });
 

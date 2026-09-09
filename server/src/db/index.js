@@ -183,6 +183,7 @@ const api = {
   enrollEmployeeFace: queries.enrollEmployeeFace,
   getAttendanceByEmployeeAndDate: queries.getAttendanceByEmployeeAndDate,
   createAttendance: queries.createAttendance,
+  upsertAttendance: queries.upsertAttendance,
   listAttendances: queries.listAttendances,
   summarizeAttendances: queries.summarizeAttendances,
   close: queries.close,

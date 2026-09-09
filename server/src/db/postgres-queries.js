@@ -2268,6 +2268,57 @@ function createPostgresQueries(pool) {
     return result.rows[0] || null;
   }
 
+  /**
+   * Insert or update attendance for (employee_id, date).
+   * On conflict: refresh status, check_in_time, and verification flags.
+   * Returns the row joined with employee name/email/poste (admin list shape).
+   */
+  async function upsertAttendance({
+    employee_id,
+    date,
+    check_in_time,
+    status,
+    face_verified = false,
+    gps_verified = false,
+    latitude = null,
+    longitude = null,
+  }) {
+    const result = await pool.query(
+      `INSERT INTO attendances (
+         employee_id, date, check_in_time, status,
+         face_verified, gps_verified, latitude, longitude
+       ) VALUES ($1, $2::date, $3, $4, $5, $6, $7, $8)
+       ON CONFLICT (employee_id, date) DO UPDATE SET
+         check_in_time = EXCLUDED.check_in_time,
+         status = EXCLUDED.status,
+         face_verified = EXCLUDED.face_verified,
+         gps_verified = EXCLUDED.gps_verified,
+         latitude = EXCLUDED.latitude,
+         longitude = EXCLUDED.longitude
+       RETURNING id, employee_id, date, check_in_time, status,
+                 face_verified, gps_verified, latitude, longitude, created_at`,
+      [
+        employee_id,
+        date,
+        check_in_time,
+        status,
+        face_verified,
+        gps_verified,
+        latitude,
+        longitude,
+      ]
+    );
+    const row = result.rows[0] || null;
+    if (!row) return null;
+    const employee = await getEmployeeById(employee_id);
+    return {
+      ...row,
+      full_name: employee?.full_name ?? null,
+      email: employee?.email ?? null,
+      poste: employee?.poste ?? null,
+    };
+  }
+
   async function listAttendances({
     employee_id = null,
     date = null,
@@ -2447,6 +2498,7 @@ function createPostgresQueries(pool) {
     enrollEmployeeFace,
     getAttendanceByEmployeeAndDate,
     createAttendance,
+    upsertAttendance,
     listAttendances,
     summarizeAttendances,
     close: async () => pool.end(),
