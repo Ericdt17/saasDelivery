@@ -2,6 +2,7 @@
  * Optional ops alerts: Discord or Slack incoming webhook.
  * Set BOT_ALERT_WEBHOOK_URL (and optionally BOT_ALERT_WEBHOOK_TYPE).
  * Recruitment applications: RECRUITMENT_ALERT_WEBHOOK_URL (separate channel).
+ * HR check-in errors: HR_ALERT_WEBHOOK_URL (separate channel).
  */
 
 const lastCooldownSent = new Map();
@@ -14,6 +15,11 @@ function config() {
     errorCooldownMs:
       Number(process.env.BOT_ALERT_ERROR_COOLDOWN_MS) || 15 * 60 * 1000,
   };
+}
+
+function hrCooldownMs() {
+  const n = Number(process.env.HR_ALERT_COOLDOWN_MS);
+  return Number.isFinite(n) && n >= 0 ? n : 5 * 60 * 1000;
 }
 
 function startupAlertsEnabled() {
@@ -30,6 +36,10 @@ function inferWebhookType(url) {
 
 function recruitmentWebhookUrl() {
   return (process.env.RECRUITMENT_ALERT_WEBHOOK_URL || "").trim();
+}
+
+function hrWebhookUrl() {
+  return (process.env.HR_ALERT_WEBHOOK_URL || "").trim();
 }
 
 function recruitmentDashboardUrl() {
@@ -84,9 +94,9 @@ function formatYesNo(value) {
   return value;
 }
 
-function discordLink(label, url) {
+function discordLink(labelText, url) {
   if (!url) return null;
-  return `${label} : ${url}`;
+  return `${labelText} : ${url}`;
 }
 
 function buildRecruitmentAlertMessage(app) {
@@ -158,6 +168,26 @@ function buildRecruitmentAlertMessage(app) {
   return message;
 }
 
+function buildHrCheckinAlertMessage({
+  kind,
+  email,
+  message,
+  detail,
+  path,
+} = {}) {
+  const lines = ["**[LivSight HR]**"];
+  if (kind) lines.push(`Kind : ${kind}`);
+  if (email) lines.push(`Email : ${email}`);
+  if (path) lines.push(`Path : ${path}`);
+  if (message) lines.push(`Message : ${String(message).slice(0, 500)}`);
+  if (detail) lines.push(`Detail : ${String(detail).slice(0, 500)}`);
+  let text = lines.join("\n");
+  if (text.length > 2000) {
+    text = `${text.slice(0, 1997)}...`;
+  }
+  return text;
+}
+
 async function postToWebhook(webhookUrl, text) {
   if (!webhookUrl) return;
 
@@ -195,6 +225,14 @@ function alertWithCooldown(key, text, cooldownMs) {
   sendBotAlert(text);
 }
 
+function hrAlertWithCooldown(key, cooldownMs) {
+  const now = Date.now();
+  const last = lastCooldownSent.get(key) || 0;
+  if (now - last < cooldownMs) return false;
+  lastCooldownSent.set(key, now);
+  return true;
+}
+
 /** API route threw an unexpected error (DB connection down, unhandled 500, etc.) — throttled. */
 function notifyApiError(method, path, error) {
   if (!config().webhookUrl) return;
@@ -212,6 +250,36 @@ async function notifyNewApplication(app) {
   if (!webhookUrl) return;
 
   await postToWebhook(webhookUrl, buildRecruitmentAlertMessage(app));
+}
+
+/**
+ * HR check-in / client errors — dedicated channel, throttled per kind+email|ip.
+ * Fire-and-forget; never throws to callers.
+ */
+async function notifyHrCheckinAlert({
+  kind,
+  email,
+  message,
+  detail,
+  path,
+  ip,
+} = {}) {
+  const webhookUrl = hrWebhookUrl();
+  if (!webhookUrl) return;
+
+  const identity =
+    (email && String(email).trim().toLowerCase()) || ip || "unknown";
+  const key = `hr:${kind || "other"}:${identity}`;
+  const text = buildHrCheckinAlertMessage({
+    kind,
+    email,
+    message,
+    detail,
+    path,
+  });
+  if (!hrAlertWithCooldown(key, hrCooldownMs())) return;
+
+  await postToWebhook(webhookUrl, text);
 }
 
 function buildApiStartupMessage({ port, activeGroups, gitSha } = {}) {
@@ -251,5 +319,7 @@ module.exports = {
   notifyApiError,
   notifyNewApplication,
   notifyApiStartup,
+  notifyHrCheckinAlert,
   buildApiStartupMessage,
+  buildHrCheckinAlertMessage,
 };

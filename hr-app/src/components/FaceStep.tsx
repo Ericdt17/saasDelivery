@@ -6,10 +6,12 @@ import {
   fakeDescriptor128,
   isE2EMode,
 } from "../lib/face";
-import { cameraErrorMessage, MSG } from "../lib/messages";
+import { cameraErrorMessage, MSG, clientErrorKindFromMessage } from "../lib/messages";
+import { reportClientError } from "../api/checkin";
 
 type Props = {
   employeeName: string;
+  email?: string;
   loading: boolean;
   /** Shown while check-in pipeline is running (enroll / GPS / API). */
   busyLabel?: string | null;
@@ -40,6 +42,7 @@ function arcTip(progress: number): { x: number; y: number } {
 
 export function FaceStep({
   employeeName,
+  email,
   loading,
   busyLabel = null,
   mode = "verify",
@@ -195,9 +198,20 @@ export function FaceStep({
         if (!cancelled) {
           const name = e && typeof e === "object" && "name" in e ? String((e as { name: string }).name) : "";
           if (name === "NotAllowedError" || name === "NotFoundError" || name === "NotReadableError") {
-            setError(cameraErrorMessage(e));
+            const msg = cameraErrorMessage(e);
+            setError(msg);
+            reportClientError({
+              kind: clientErrorKindFromMessage(msg),
+              email: email?.trim() || undefined,
+              message: msg,
+            });
           } else {
             setError(MSG.FACE_LOAD);
+            reportClientError({
+              kind: "other",
+              email: email?.trim() || undefined,
+              message: MSG.FACE_LOAD,
+            });
           }
         }
       }

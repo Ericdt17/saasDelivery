@@ -1,4 +1,4 @@
-/** Messages employés — français simple, action concrète. */
+/** Messages employés — français simple, action concrète (Android + iOS). */
 
 export const MSG = {
   NETWORK:
@@ -8,13 +8,15 @@ export const MSG = {
   EMAIL_FALLBACK:
     "Cet e-mail n'est pas reconnu. Vérifiez votre saisie ou demandez de l'aide aux ressources humaines.",
   GEO_UNSUPPORTED:
-    "Votre appareil ne peut pas indiquer votre position. Utilisez un téléphone ou un ordinateur avec la localisation activée.",
+    "Votre appareil ne peut pas indiquer votre position. Utilisez un téléphone avec le GPS activé.",
   GEO_DENIED:
-    "La localisation est nécessaire pour pointer. Autorisez l'accès à votre position dans le navigateur, puis réessayez.",
+    "Nous n'avons pas pu lire votre position. Activez le GPS / la localisation sur votre téléphone, autorisez-la si une fenêtre apparaît, puis appuyez sur Réessayer. Si ça continue, demandez aux RH de noter votre présence.",
+  GEO_DENIED_AFTER_ENROLL:
+    "Votre visage est bien enregistré, mais pas encore votre présence (position introuvable). Activez le GPS, autorisez la localisation, puis réessayez. Sinon demandez aux RH de vous marquer présent.",
   GEO_TIMEOUT:
-    "Impossible d'obtenir votre position assez vite. Activez le GPS, approchez-vous d'une fenêtre, puis réessayez.",
+    "La position met trop de temps à arriver. Sortez à l'air libre ou près d'une fenêtre, vérifiez que le GPS est activé, puis réessayez.",
   GEO_UNAVAILABLE:
-    "Impossible d'obtenir votre position. Activez la localisation et réessayez dans un endroit plus dégagé.",
+    "Position indisponible pour le moment. Activez le GPS, restez près d'une fenêtre, puis réessayez. Si ça continue, demandez aux RH de noter votre présence.",
   CAMERA_DENIED:
     "La caméra est nécessaire pour le pointage. Autorisez l'accès à la caméra dans le navigateur, puis réessayez.",
   CAMERA_UNAVAILABLE:
@@ -26,7 +28,7 @@ export const MSG = {
   PERMISSION_CAMERA:
     "Nous allons demander l'accès à la caméra pour reconnaître votre visage.",
   PERMISSION_GEO:
-    "Nous allons demander votre position pour vérifier que vous êtes au bureau.",
+    "Nous allons vérifier que vous êtes au bureau. Si une demande de localisation apparaît, choisissez Autoriser.",
   BUSY_ENROLL: "Enregistrement de votre visage…",
   BUSY_GEO: "Vérification de votre position…",
   BUSY_CHECKIN: "Enregistrement de votre présence…",
@@ -39,6 +41,64 @@ export function geoErrorMessage(err: GeolocationPositionError | null | undefined
   if (err.code === 1) return MSG.GEO_DENIED;
   if (err.code === 3) return MSG.GEO_TIMEOUT;
   return MSG.GEO_UNAVAILABLE;
+}
+
+/**
+ * After first-time face enroll, GPS can still fail — tell the employee
+ * their face was saved but check-in is incomplete.
+ */
+export function checkinPipelineErrorMessage(
+  baseMessage: string,
+  opts: { faceJustEnrolled: boolean }
+): string {
+  if (!opts.faceJustEnrolled) return baseMessage;
+  if (
+    baseMessage === MSG.GEO_DENIED ||
+    baseMessage === MSG.GEO_TIMEOUT ||
+    baseMessage === MSG.GEO_UNAVAILABLE ||
+    baseMessage === MSG.GEO_UNSUPPORTED
+  ) {
+    return MSG.GEO_DENIED_AFTER_ENROLL;
+  }
+  return baseMessage;
+}
+
+/** True when the user can usefully tap Réessayer (geo or network). */
+export function isRetryableCheckinMessage(message: string): boolean {
+  return (
+    message === MSG.NETWORK ||
+    message === MSG.GEO_DENIED ||
+    message === MSG.GEO_DENIED_AFTER_ENROLL ||
+    message === MSG.GEO_TIMEOUT ||
+    message === MSG.GEO_UNAVAILABLE
+  );
+}
+
+export type ClientErrorKind =
+  | "geo_denied"
+  | "geo_timeout"
+  | "geo_unavailable"
+  | "camera_denied"
+  | "camera_unavailable"
+  | "network"
+  | "other";
+
+/** Map employee-facing message → Discord client-error kind. */
+export function clientErrorKindFromMessage(message: string): ClientErrorKind {
+  if (
+    message === MSG.GEO_DENIED ||
+    message === MSG.GEO_DENIED_AFTER_ENROLL
+  ) {
+    return "geo_denied";
+  }
+  if (message === MSG.GEO_TIMEOUT) return "geo_timeout";
+  if (message === MSG.GEO_UNAVAILABLE || message === MSG.GEO_UNSUPPORTED) {
+    return "geo_unavailable";
+  }
+  if (message === MSG.CAMERA_DENIED) return "camera_denied";
+  if (message === MSG.CAMERA_UNAVAILABLE) return "camera_unavailable";
+  if (message === MSG.NETWORK) return "network";
+  return "other";
 }
 
 /** Map getUserMedia / camera failures → message clair. */
