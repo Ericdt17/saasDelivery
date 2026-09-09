@@ -25,6 +25,7 @@ const {
   countWeekdaysElapsed,
 } = require("../../lib/hrCheckin");
 const { CHECKIN_MESSAGES } = require("../../lib/hrCheckinMessages");
+const { notifyHrCheckinAlert } = require("../../lib/botAlerts");
 
 const createEmployeeSchema = z.object({
   full_name: z.string().trim().min(1),
@@ -87,6 +88,26 @@ const manualAttendanceSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   status: z.enum(["present", "late"]),
 });
+
+const clientErrorSchema = z.object({
+  kind: z.enum([
+    "geo_denied",
+    "geo_timeout",
+    "geo_unavailable",
+    "camera_denied",
+    "camera_unavailable",
+    "network",
+    "other",
+  ]),
+  email: z.string().trim().email().optional(),
+  message: z.string().trim().max(500).optional(),
+  user_agent: z.string().trim().max(300).optional(),
+  detail: z.string().trim().max(500).optional(),
+});
+
+function fireHrAlert(payload) {
+  Promise.resolve(notifyHrCheckinAlert(payload)).catch(() => {});
+}
 
 function stripFaceDescriptor(row) {
   if (!row || typeof row !== "object") return row;
@@ -216,6 +237,12 @@ async function verifyCheckinEmail(req, res, next) {
     }
 
     if (employee.is_active === false) {
+      fireHrAlert({
+        kind: "employee_inactive",
+        email: employee.email,
+        message: CHECKIN_MESSAGES.EMPLOYEE_INACTIVE,
+        path: "/api/v1/hr/checkin/verify-email",
+      });
       return res.status(400).json({
         success: false,
         error: "Inactive",
@@ -275,6 +302,12 @@ async function publicSelfEnroll(req, res, next) {
     }
 
     if (employee.is_active === false) {
+      fireHrAlert({
+        kind: "employee_inactive",
+        email: employee.email,
+        message: CHECKIN_MESSAGES.EMPLOYEE_INACTIVE,
+        path: "/api/v1/hr/checkin/enroll",
+      });
       return res.status(400).json({
         success: false,
         error: "Inactive",
@@ -337,6 +370,12 @@ async function publicCheckin(req, res, next) {
     }
 
     if (employee.is_active === false) {
+      fireHrAlert({
+        kind: "employee_inactive",
+        email: employee.email,
+        message: CHECKIN_MESSAGES.EMPLOYEE_INACTIVE,
+        path: "/api/v1/hr/checkin",
+      });
       return res.status(400).json({
         success: false,
         error: "Inactive",
@@ -346,6 +385,12 @@ async function publicCheckin(req, res, next) {
 
     const storedDescriptor = asDescriptorArray(employee.face_descriptor);
     if (!storedDescriptor || storedDescriptor.length !== 128) {
+      fireHrAlert({
+        kind: "face_not_enrolled",
+        email: employee.email,
+        message: CHECKIN_MESSAGES.FACE_NOT_ENROLLED,
+        path: "/api/v1/hr/checkin",
+      });
       return res.status(400).json({
         success: false,
         error: "Not enrolled",
@@ -354,6 +399,12 @@ async function publicCheckin(req, res, next) {
     }
 
     if (!isFaceMatch(storedDescriptor, face_descriptor)) {
+      fireHrAlert({
+        kind: "face_mismatch",
+        email: employee.email,
+        message: CHECKIN_MESSAGES.FACE_MISMATCH,
+        path: "/api/v1/hr/checkin",
+      });
       return res.status(400).json({
         success: false,
         error: "Face mismatch",
@@ -362,6 +413,13 @@ async function publicCheckin(req, res, next) {
     }
 
     if (!isWithinOffice(latitude, longitude)) {
+      fireHrAlert({
+        kind: "out_of_range",
+        email: employee.email,
+        message: CHECKIN_MESSAGES.OUT_OF_RANGE,
+        detail: `lat=${latitude},lng=${longitude}`,
+        path: "/api/v1/hr/checkin",
+      });
       return res.status(400).json({
         success: false,
         error: "Out of range",
@@ -372,6 +430,12 @@ async function publicCheckin(req, res, next) {
     const now = new Date();
     const status = getCheckInStatus(now);
     if (!status) {
+      fireHrAlert({
+        kind: "closed",
+        email: employee.email,
+        message: CHECKIN_MESSAGES.CLOSED,
+        path: "/api/v1/hr/checkin",
+      });
       return res.status(400).json({
         success: false,
         error: "Closed",
@@ -382,6 +446,12 @@ async function publicCheckin(req, res, next) {
     const date = getDoualaDateString(now);
     const existingAttendance = await getAttendanceByEmployeeAndDate(employee.id, date);
     if (existingAttendance) {
+      fireHrAlert({
+        kind: "already_checked_in",
+        email: employee.email,
+        message: CHECKIN_MESSAGES.ALREADY_CHECKED_IN,
+        path: "/api/v1/hr/checkin",
+      });
       return res.status(409).json({
         success: false,
         error: "Already checked in",
@@ -403,6 +473,12 @@ async function publicCheckin(req, res, next) {
       });
     } catch (err) {
       if (err && err.code === "23505") {
+        fireHrAlert({
+          kind: "already_checked_in",
+          email: employee.email,
+          message: CHECKIN_MESSAGES.ALREADY_CHECKED_IN,
+          path: "/api/v1/hr/checkin",
+        });
         return res.status(409).json({
           success: false,
           error: "Already checked in",
@@ -418,6 +494,35 @@ async function publicCheckin(req, res, next) {
       check_in_time: attendance.check_in_time,
       status: attendance.status,
     });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function reportClientCheckinError(req, res, next) {
+  try {
+    const parsed = clientErrorSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({
+        success: false,
+        error: "Validation failed",
+        details: parsed.error.flatten(),
+      });
+    }
+
+    const { kind, email, message, user_agent, detail } = parsed.data;
+    fireHrAlert({
+      kind,
+      email: email || undefined,
+      message: message || kind,
+      detail: [detail, user_agent ? `ua=${user_agent}` : null]
+        .filter(Boolean)
+        .join(" · "),
+      path: "/api/v1/hr/checkin/client-error",
+      ip: req.ip,
+    });
+
+    return res.status(202).json({ success: true });
   } catch (err) {
     next(err);
   }
@@ -521,6 +626,7 @@ module.exports = {
   verifyCheckinEmail,
   publicSelfEnroll,
   publicCheckin,
+  reportClientCheckinError,
   listAdminAttendances,
   createAdminAttendance,
   getAttendancesSummary,

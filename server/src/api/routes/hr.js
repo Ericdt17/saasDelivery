@@ -13,6 +13,7 @@ const router = express.Router();
 // Public check-in (rate limited)
 router.get("/checkin/verify-email", hrCheckinRateLimit, controller.verifyCheckinEmail);
 router.post("/checkin/enroll", hrCheckinRateLimit, controller.publicSelfEnroll);
+router.post("/checkin/client-error", hrCheckinRateLimit, controller.reportClientCheckinError);
 router.post("/checkin", hrCheckinRateLimit, controller.publicCheckin);
 
 // Admin

@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import {
   CheckinApiError,
+  reportClientError,
   selfEnrollFace,
   submitCheckin,
   verifyEmail,
@@ -10,7 +11,12 @@ import { FaceStep } from "./components/FaceStep";
 import { ResultStep } from "./components/ResultStep";
 import { isNetworkErrorMessage, successGreeting } from "./lib/greeting";
 import { getCurrentPosition } from "./lib/geo";
-import { MSG } from "./lib/messages";
+import {
+  MSG,
+  checkinPipelineErrorMessage,
+  clientErrorKindFromMessage,
+  isRetryableCheckinMessage,
+} from "./lib/messages";
 import { getRememberedEmail, setRememberedEmail } from "./lib/rememberedEmail";
 
 type Step = "email" | "face" | "confirm" | "error";
@@ -87,6 +93,7 @@ export default function App() {
     setErrorMessage(null);
     setCanRetry(false);
     lastDescriptorRef.current = face_descriptor;
+    let faceJustEnrolled = false;
     try {
       let enrolled = isEnrolled;
       if (!enrolled) {
@@ -94,6 +101,7 @@ export default function App() {
         await selfEnrollFace({ email, face_descriptor });
         setIsEnrolled(true);
         enrolled = true;
+        faceJustEnrolled = true;
       }
       setBusyPhase("geo");
       const position = await getCurrentPosition();
@@ -109,10 +117,30 @@ export default function App() {
       setStatus(result.status);
       setStep("confirm");
     } catch (e) {
-      const message = friendlyError(e);
+      const message = checkinPipelineErrorMessage(friendlyError(e), {
+        faceJustEnrolled,
+      });
       setErrorMessage(message);
-      setCanRetry(isNetworkErrorMessage(message));
+      setCanRetry(
+        isNetworkErrorMessage(message) || isRetryableCheckinMessage(message)
+      );
       setStep("error");
+      const kind = clientErrorKindFromMessage(message);
+      if (
+        kind === "geo_denied" ||
+        kind === "geo_timeout" ||
+        kind === "geo_unavailable" ||
+        kind === "camera_denied" ||
+        kind === "camera_unavailable" ||
+        kind === "network"
+      ) {
+        reportClientError({
+          kind,
+          email: email.trim() || undefined,
+          message,
+          detail: faceJustEnrolled ? "face_just_enrolled=1" : undefined,
+        });
+      }
     } finally {
       setBusyPhase(null);
       setLoading(false);
@@ -135,6 +163,7 @@ export default function App() {
         {step === "face" ? (
           <FaceStep
             employeeName={employeeName}
+            email={email}
             loading={loading}
             busyLabel={busyLabelFor(busyPhase)}
             mode={isEnrolled ? "verify" : "enroll"}

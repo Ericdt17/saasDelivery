@@ -81,6 +81,15 @@ jest.mock('../../lib/hrCheckin', () => {
   };
 });
 
+const mockNotifyHrCheckinAlert = jest.fn().mockResolvedValue(undefined);
+jest.mock('../../lib/botAlerts', () => {
+  const actual = jest.requireActual('../../lib/botAlerts');
+  return {
+    ...actual,
+    notifyHrCheckinAlert: (...args) => mockNotifyHrCheckinAlert(...args),
+  };
+});
+
 const app = require('../../api/server');
 const { resetHrCheckinRateLimit } = require('../../api/middleware/hrCheckinRateLimit');
 const { getCheckInStatus, OFFICE_LAT, OFFICE_LNG } = require('../../lib/hrCheckin');
@@ -115,6 +124,7 @@ const enrolledEmployee = {
 
 beforeEach(async () => {
   await resetHrCheckinRateLimit();
+  mockNotifyHrCheckinAlert.mockClear();
   getCheckInStatus.mockImplementation(
     jest.requireActual('../../lib/hrCheckin').getCheckInStatus
   );
@@ -460,6 +470,39 @@ describe('POST /api/v1/hr/checkin', () => {
     expect(res.status).toBe(429);
     process.env.HR_CHECKIN_RATE_MAX = '1000';
     await resetHrCheckinRateLimit();
+  });
+});
+
+describe('POST /api/v1/hr/checkin/client-error', () => {
+  it('returns 202 without auth and notifies Discord', async () => {
+    const res = await request(app)
+      .post('/api/v1/hr/checkin/client-error')
+      .send({
+        kind: 'geo_denied',
+        email: 'ada@example.com',
+        message: 'Position refused',
+        user_agent: 'TestAgent/1.0',
+        detail: 'code=1',
+      });
+
+    expect(res.status).toBe(202);
+    expect(res.body.success).toBe(true);
+    expect(mockNotifyHrCheckinAlert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'geo_denied',
+        email: 'ada@example.com',
+        message: 'Position refused',
+        path: '/api/v1/hr/checkin/client-error',
+      })
+    );
+  });
+
+  it('returns 400 for invalid kind', async () => {
+    const res = await request(app)
+      .post('/api/v1/hr/checkin/client-error')
+      .send({ kind: 'not_a_real_kind' });
+    expect(res.status).toBe(400);
+    expect(mockNotifyHrCheckinAlert).not.toHaveBeenCalled();
   });
 });
 

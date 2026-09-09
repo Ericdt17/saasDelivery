@@ -50,6 +50,11 @@ RECRUITMENT_ALERT_WEBHOOK_URL=
 # Optional: dashboard base URL for links in recruitment alerts (defaults to first ALLOWED_ORIGINS)
 # RECRUITMENT_DASHBOARD_URL=https://app.livsight.com
 
+# Discord webhook for HR check-in / presence errors (separate channel)
+# HR_ALERT_WEBHOOK_URL=
+# Optional throttle between identical alerts (default 5 minutes)
+# HR_ALERT_COOLDOWN_MS=300000
+
 # ---------------------------
 # HR check-in office GPS (defaults = Hippodrome Yaoundé)
 # Override for local testing (e.g. your location in France):

@@ -118,3 +118,37 @@ export async function submitCheckin(payload: {
   }
   return body;
 }
+
+export type ClientErrorKind =
+  | "geo_denied"
+  | "geo_timeout"
+  | "geo_unavailable"
+  | "camera_denied"
+  | "camera_unavailable"
+  | "network"
+  | "other";
+
+/** Fire-and-forget browser error report for Discord HR channel. Never throws. */
+export function reportClientError(payload: {
+  kind: ClientErrorKind;
+  email?: string;
+  message?: string;
+  detail?: string;
+}): void {
+  const body = {
+    kind: payload.kind,
+    email: payload.email,
+    message: payload.message,
+    detail: payload.detail,
+    user_agent:
+      typeof navigator !== "undefined" ? navigator.userAgent.slice(0, 300) : undefined,
+  };
+  void fetch(url("/api/v1/hr/checkin/client-error"), {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  }).catch(() => {
+    /* ignore — reporting must never block check-in UX */
+  });
+}
