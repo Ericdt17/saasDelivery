@@ -4,12 +4,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-LivSight — a multi-tenant SaaS delivery management system. This repo contains three sub-apps:
+LivSight — a multi-tenant SaaS for agencies, HR check-in, and recruitment. This repo contains three sub-apps:
 - **`server/`** — Node.js/Express REST API (PostgreSQL required)
 - **`client/`** — React 18 + TypeScript + Vite dashboard (port 5173)
 - **`hr-app/`** — Standalone React employee check-in app with face recognition (port 5174)
 
-The WhatsApp bot lives in a separate repository and is not part of this codebase.
+The delivery/expedition product vertical has been removed from application code (legacy DB tables may still exist). The WhatsApp bot lives in a separate repository and is not part of this codebase.
 
 ## Development Commands
 
@@ -71,29 +71,15 @@ Migration files live in `server/db/migrations/` and are run in filename-alphabet
 - Backend middleware (`server/src/api/middleware/auth.js`) exposes `authenticateToken`, `authorizeRole`, and `requireSuperAdmin`
 - Set `AUTH_HEADER_FALLBACK=true` to also accept `Authorization: Bearer` header (used in integration tests and mobile clients)
 
-### Status Vocabulary (Important)
-Backend uses English statuses; frontend displays French labels:
-
-| Backend | Frontend display |
-|---------|-----------------|
-| `pending` | en cours |
-| `delivered` | livré |
-| `failed` / `cancelled` | annulé |
-| `pickup` | pickup |
-| `expedition` | expédition |
-| `client_absent` | client absent |
-
-Transformation logic lives in `client/src/lib/data-transform.ts`.
-
 ### API Structure
 - Base path: `/api/v1/`
 - Express 5 app in `server/src/api/server.js`
 - Routes in `server/src/api/routes/`; newer routes delegate to controllers in `server/src/api/controllers/`
-- Registered routes: `auth`, `agencies`, `groups`, `tariffs`, `deliveries`, `expeditions`, `stats`, `search`, `reports`, `reminder-contacts`, `reminders`, `vendors`, `vendor`, `waitlist`, `recruitment`, `merchant-terms`, `hr`
+- Registered routes: `auth`, `agencies`, `waitlist`, `recruitment`, `merchant-terms`, `hr`
 - CORS: allows all localhost origins in dev; validates against `ALLOWED_ORIGINS` in production
 
 ### Frontend Service Layer
-`client/src/services/api.ts` is the base HTTP client (10 s timeout, `credentials: 'include'`). Domain services (`deliveries.ts`, `groups.ts`, etc.) wrap it. Custom hooks in `client/src/hooks/` expose React Query state. `AgencyContext` (`client/src/contexts/AgencyContext.tsx`) holds the current agency for the session.
+`client/src/services/api.ts` is the base HTTP client (10 s timeout, `credentials: 'include'`). Domain services (`hr.ts`, `recruitment.ts`, etc.) wrap it. Custom hooks in `client/src/hooks/` expose React Query state. `AgencyContext` (`client/src/contexts/AgencyContext.tsx`) holds the current agency for the session. The main dashboard (`/`) shows HR KPIs for `super_admin`.
 
 ### HR Check-in App (`hr-app/`)
 A separate lightweight React app (no router, no auth) used by employees to clock in via face recognition (MediaPipe Tasks Vision). It calls the public `/api/v1/hr/checkin/*` endpoints, which are rate-limited and require no JWT. The compiled face-descriptor utility is shared via `shared/hrLandmarkDescriptor.mjs`. E2E tests for this app live in `e2e/`.

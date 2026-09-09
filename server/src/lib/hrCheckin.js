@@ -122,7 +122,8 @@ function getCheckInStatus(now = new Date()) {
 }
 
 /**
- * Count Mon–Fri days in `year`/`month` (1–12) up to `asOfDate` (Douala calendar).
+ * Count Mon–Sat workdays in `year`/`month` (1–12) up to `asOfDate` (Douala calendar).
+ * Sunday is the only non-working day.
  * @param {number} year
  * @param {number} month 1–12
  * @param {Date|string} [asOfDate] Date or YYYY-MM-DD; default = today Douala
@@ -159,7 +160,8 @@ function countWeekdaysElapsed(year, month, asOfDate) {
   let count = 0;
   for (let d = 1; d <= endDay; d++) {
     const dow = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
-    if (dow >= 1 && dow <= 5) count += 1;
+    // 0 = Sunday (off); 1–6 = Mon–Sat (worked)
+    if (dow !== 0) count += 1;
   }
   return count;
 }

@@ -346,6 +346,72 @@ export async function apiPostFile<T>(
 }
 
 /**
+ * GET request that returns a binary body (PDF, file download, etc.).
+ * Uses credentials so HTTP-only auth cookies are sent cross-origin.
+ */
+export async function apiGetBlob(
+  endpoint: string,
+  options?: RequestOptions
+): Promise<{ blob: Blob; filename: string | null }> {
+  const url = buildApiUrl(endpoint);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(
+    () => controller.abort(),
+    options?.timeout || API_CONFIG.TIMEOUT
+  );
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      method: "GET",
+      credentials: "include",
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      const contentType = response.headers.get("content-type") || "";
+      if (contentType.includes("application/json")) {
+        const data = (await response.json()) as ApiResponse<unknown>;
+        throw new ApiError(
+          data.error || data.message || `HTTP ${response.status}`,
+          response.status,
+          data as Record<string, unknown>
+        );
+      }
+      const text = await response.text();
+      throw new ApiError(
+        text || `HTTP ${response.status}: ${response.statusText}`,
+        response.status
+      );
+    }
+
+    const blob = await response.blob();
+    const disposition = response.headers.get("content-disposition") || "";
+    const match = /filename="([^"]+)"/i.exec(disposition);
+    return { blob, filename: match?.[1] ?? null };
+  } catch (error) {
+    clearTimeout(timeoutId);
+
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new ApiError("Request timeout", 408);
+    }
+    if (error instanceof ApiError) {
+      throw error;
+    }
+    if (error instanceof TypeError && error.message.includes("fetch")) {
+      throw new ApiError("Network error: Unable to connect to server", 0, error);
+    }
+    throw new ApiError(
+      error instanceof Error ? error.message : "Unknown error occurred",
+      500,
+      error
+    );
+  }
+}
+
+/**
  * Health check - test API connection
  */
 export async function healthCheck(): Promise<boolean> {

@@ -77,7 +77,7 @@ export interface ListAttendancesParams {
 export interface ManualAttendancePayload {
   employee_id: number;
   date: string;
-  status: "present" | "late";
+  status: "present" | "late" | "absent";
 }
 
 export async function listEmployees(): Promise<HrEmployee[]> {

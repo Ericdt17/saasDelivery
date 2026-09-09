@@ -20,6 +20,7 @@ vi.mock("@/services/api", () => ({
   apiPost: vi.fn(),
   apiPatch: vi.fn(),
   apiDelete: vi.fn(),
+  apiGetBlob: vi.fn(),
 }));
 
 import * as apiModule from "@/services/api";
@@ -34,6 +35,8 @@ import {
   deleteQuestion,
   getApplications,
   getApplicationById,
+  getApplicationCvBlob,
+  getApplicationCoverLetterBlob,
   updateApplication,
   type AdminJobOffer,
   type JobQuestion,
@@ -46,6 +49,7 @@ const mockApiGet    = apiModule.apiGet    as unknown as MockInstance;
 const mockApiPost   = apiModule.apiPost   as unknown as MockInstance;
 const mockApiPatch  = apiModule.apiPatch  as unknown as MockInstance;
 const mockApiDelete = apiModule.apiDelete as unknown as MockInstance;
+const mockApiGetBlob = apiModule.apiGetBlob as unknown as MockInstance;
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -281,6 +285,35 @@ describe("getApplicationById(id)", () => {
       "/api/v1/recruitment/admin/applications/100"
     );
     expect(result.application.id).toBe(100);
+  });
+});
+
+describe("getApplicationCvBlob(id)", () => {
+  it("calls apiGetBlob with applications/:id/cv", async () => {
+    const blob = new Blob(["%PDF"], { type: "application/pdf" });
+    mockApiGetBlob.mockResolvedValueOnce({ blob, filename: "cv.pdf" });
+    const result = await getApplicationCvBlob(100);
+    expect(mockApiGetBlob).toHaveBeenCalledWith(
+      "/api/v1/recruitment/admin/applications/100/cv"
+    );
+    expect(result.blob).toBe(blob);
+    expect(result.filename).toBe("cv.pdf");
+  });
+});
+
+describe("getApplicationCoverLetterBlob(id)", () => {
+  it("calls apiGetBlob with applications/:id/cover-letter", async () => {
+    const blob = new Blob(["%PDF"], { type: "application/pdf" });
+    mockApiGetBlob.mockResolvedValueOnce({
+      blob,
+      filename: "lettre.pdf",
+    });
+    const result = await getApplicationCoverLetterBlob(100);
+    expect(mockApiGetBlob).toHaveBeenCalledWith(
+      "/api/v1/recruitment/admin/applications/100/cover-letter"
+    );
+    expect(result.blob).toBe(blob);
+    expect(result.filename).toBe("lettre.pdf");
   });
 });
 

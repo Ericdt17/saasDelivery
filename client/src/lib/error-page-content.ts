@@ -68,7 +68,7 @@ export const ERROR_PAGE_COPY: Record<ErrorPageKind, ErrorPageCopy> = {
     stepsTitle: "Que faire ?",
     steps: [
       "Actualiser la page — la ressource peut réapparaître.",
-      "Retourner à la liste (livraisons, prestataires, etc.).",
+      "Retourner à la liste précédente ou au tableau de bord.",
       "Si ça ne se passe pas, nous contacter en précisant ce que vous cherchiez.",
     ],
     code: "404",

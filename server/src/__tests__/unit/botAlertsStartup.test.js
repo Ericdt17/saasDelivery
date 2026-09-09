@@ -12,21 +12,21 @@ describe("botAlerts startup notifications", () => {
     jest.resetModules();
   });
 
-  it("buildApiStartupMessage includes port, commit, groups, and env", () => {
+  it("buildApiStartupMessage includes port, commit, agencies, and env", () => {
     process.env.DEPLOY_GIT_SHA = "abc1234";
     process.env.NODE_ENV = "production";
     const { buildApiStartupMessage } = require("../../lib/botAlerts");
 
     const message = buildApiStartupMessage({
       port: 3001,
-      activeGroups: 94,
+      activeAgencies: 94,
       gitSha: "def5678",
     });
 
     expect(message).toContain("LivSight API démarrée");
     expect(message).toContain("Port : 3001");
     expect(message).toContain("Commit : def5678");
-    expect(message).toContain("94 groupes actifs");
+    expect(message).toContain("94 agences actives");
     expect(message).toContain("Env : production");
   });
 
@@ -37,13 +37,13 @@ describe("botAlerts startup notifications", () => {
     global.fetch = jest.fn().mockResolvedValue({ ok: true });
 
     const { notifyApiStartup } = require("../../lib/botAlerts");
-    await notifyApiStartup({ port: 3001, activeGroups: 12 });
+    await notifyApiStartup({ port: 3001, activeAgencies: 12 });
 
     expect(global.fetch).toHaveBeenCalledTimes(1);
     expect(global.fetch.mock.calls[0][0]).toBe(process.env.BOT_ALERT_WEBHOOK_URL);
     const body = JSON.parse(global.fetch.mock.calls[0][1].body);
     expect(body.content).toContain("LivSight API démarrée");
-    expect(body.content).toContain("12 groupes actifs");
+    expect(body.content).toContain("12 agences actives");
   });
 
   it("notifyApiStartup skips when BOT_ALERT_STARTUP_ENABLED=false", async () => {
@@ -53,7 +53,7 @@ describe("botAlerts startup notifications", () => {
     global.fetch = jest.fn().mockResolvedValue({ ok: true });
 
     const { notifyApiStartup } = require("../../lib/botAlerts");
-    await notifyApiStartup({ port: 3001, activeGroups: 12 });
+    await notifyApiStartup({ port: 3001, activeAgencies: 12 });
 
     expect(global.fetch).not.toHaveBeenCalled();
   });
@@ -62,7 +62,7 @@ describe("botAlerts startup notifications", () => {
     global.fetch = jest.fn().mockResolvedValue({ ok: true });
 
     const { notifyApiStartup } = require("../../lib/botAlerts");
-    await notifyApiStartup({ port: 3001, activeGroups: 12 });
+    await notifyApiStartup({ port: 3001, activeAgencies: 12 });
 
     expect(global.fetch).not.toHaveBeenCalled();
   });

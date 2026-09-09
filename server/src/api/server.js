@@ -4,19 +4,8 @@ const cors = require("cors");
 const cookieParser = require("cookie-parser");
 const pinoHttp = require("pino-http");
 const logger = require("../logger");
-const deliveriesRouter = require("./routes/deliveries");
-const statsRouter = require("./routes/stats");
-const searchRouter = require("./routes/search");
 const authRouter = require("./routes/auth");
 const agenciesRouter = require("./routes/agencies");
-const groupsRouter = require("./routes/groups");
-const tariffsRouter = require("./routes/tariffs");
-const reportsRouter = require("./routes/reports");
-const expeditionsRouter = require("./routes/expeditions");
-const reminderContactsRouter = require("./routes/reminder-contacts");
-const remindersRouter = require("./routes/reminders");
-const vendorsRouter = require("./routes/vendors");
-const vendorRouter = require("./routes/vendor");
 const waitlistRouter = require("./routes/waitlist");
 const recruitmentRouter = require("./routes/recruitment");
 const merchantTermsRouter = require("./routes/merchantTerms");
@@ -88,8 +77,6 @@ const corsOptions = {
 };
 
 app.use(helmet({
-  // crossOriginResourcePolicy is set to same-site by default which blocks
-  // cross-origin PDF downloads — relax to cross-origin for the reports route.
   crossOriginResourcePolicy: { policy: "cross-origin" },
 }));
 app.use(cors(corsOptions)); // Enable CORS with configuration
@@ -134,17 +121,6 @@ app.use(pinoHttp({ logger }));
 // Routes
 app.use("/api/v1/auth", authRouter);
 app.use("/api/v1/agencies", agenciesRouter);
-app.use("/api/v1/groups", groupsRouter);
-app.use("/api/v1/tariffs", tariffsRouter);
-app.use("/api/v1/deliveries", deliveriesRouter);
-app.use("/api/v1/expeditions", expeditionsRouter);
-app.use("/api/v1/stats", statsRouter);
-app.use("/api/v1/search", searchRouter);
-app.use("/api/v1/reports", reportsRouter);
-app.use("/api/v1/reminder-contacts", reminderContactsRouter);
-app.use("/api/v1/reminders", remindersRouter);
-app.use("/api/v1/vendors", vendorsRouter);
-app.use("/api/v1/vendor", vendorRouter);
 app.use("/api/v1/waitlist", waitlistRouter);
 app.use("/api/v1/recruitment", recruitmentRouter);
 app.use("/api/v1/merchant-terms", merchantTermsRouter);
@@ -166,7 +142,7 @@ app.get("/api/v1/health", async (req, res) => {
   res.status(dbOk ? 200 : 503).json({
     status,
     timestamp: new Date().toISOString(),
-    service: "delivery-bot-api",
+    service: "livsight-api",
     version: "1.0.0",
     db: dbOk ? "ok" : "error",
     ...(dbError && { db_error: dbError }),
@@ -272,12 +248,15 @@ app.get("/api/v1/schema/status", async (req, res) => {
 // Root endpoint
 app.get("/", (req, res) => {
   res.json({
-    message: "Delivery Bot API",
+    message: "LivSight API",
     version: "1.0.0",
     endpoints: {
-      deliveries: "/api/v1/deliveries",
-      stats: "/api/v1/stats",
-      search: "/api/v1/search",
+      auth: "/api/v1/auth",
+      agencies: "/api/v1/agencies",
+      hr: "/api/v1/hr",
+      recruitment: "/api/v1/recruitment",
+      merchantTerms: "/api/v1/merchant-terms",
+      waitlist: "/api/v1/waitlist",
       health: "/api/v1/health",
     },
   });

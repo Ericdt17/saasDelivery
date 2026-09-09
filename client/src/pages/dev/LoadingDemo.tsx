@@ -73,7 +73,7 @@ export default function LoadingDemo() {
             <CardTitle>Avec texte</CardTitle>
           </CardHeader>
           <CardContent>
-            <LoadingSpinner size="md" text="Chargement des livraisons…" />
+            <LoadingSpinner size="md" text="Chargement…" />
           </CardContent>
         </Card>
 

@@ -199,6 +199,23 @@ describe("createManualAttendance", () => {
     expect(row.face_verified).toBe(false);
     expect(row.gps_verified).toBe(false);
   });
+
+  it("can post status absent", async () => {
+    mockApiPost.mockResolvedValueOnce({
+      success: true,
+      data: { ...attendanceFixture, status: "absent", check_in_time: null },
+    });
+    await createManualAttendance({
+      employee_id: 1,
+      date: "2026-09-07",
+      status: "absent",
+    });
+    expect(mockApiPost).toHaveBeenCalledWith("/api/v1/hr/attendances", {
+      employee_id: 1,
+      date: "2026-09-07",
+      status: "absent",
+    });
+  });
 });
 
 describe("getAttendancesSummary", () => {

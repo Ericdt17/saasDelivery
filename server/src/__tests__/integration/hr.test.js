@@ -627,6 +627,43 @@ describe('POST /api/v1/hr/attendances', () => {
     expect(res.status).toBe(400);
   });
 
+  it('creates a manual absent attendance via upsert', async () => {
+    mockGetEmployeeById.mockResolvedValueOnce(employeeFixture);
+    mockUpsertAttendance.mockResolvedValueOnce({
+      id: 11,
+      employee_id: 1,
+      date: '2026-09-07',
+      check_in_time: null,
+      status: 'absent',
+      face_verified: false,
+      gps_verified: false,
+      latitude: null,
+      longitude: null,
+      created_at: '2026-09-07T08:00:00.000Z',
+      full_name: 'Jean Dupont',
+      email: 'jean.dupont@example.com',
+      poste: 'Livreur',
+    });
+
+    const res = await request(app)
+      .post('/api/v1/hr/attendances')
+      .set('Authorization', `Bearer ${superToken}`)
+      .send({ employee_id: 1, date: '2026-09-07', status: 'absent' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.status).toBe('absent');
+    expect(mockUpsertAttendance).toHaveBeenCalledWith(
+      expect.objectContaining({
+        employee_id: 1,
+        date: '2026-09-07',
+        status: 'absent',
+        check_in_time: null,
+        face_verified: false,
+        gps_verified: false,
+      })
+    );
+  });
+
   it('returns 404 when employee does not exist', async () => {
     mockGetEmployeeById.mockResolvedValueOnce(null);
     const res = await request(app)

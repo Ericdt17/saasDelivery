@@ -26,7 +26,9 @@ function formatTime(iso: string): string {
 }
 
 function statusLabel(status: "present" | "late"): string {
-  return status === "present" ? "Présent" : "En retard";
+  return status === "present"
+    ? "Présent"
+    : "En retard (demi-journée)";
 }
 
 function CheckIcon() {

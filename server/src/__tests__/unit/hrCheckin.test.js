@@ -87,13 +87,14 @@ describe('getCheckInStatus (Africa/Douala)', () => {
 describe('countWeekdaysElapsed', () => {
   const { countWeekdaysElapsed } = require('../../lib/hrCheckin');
 
-  it('counts Mon–Fri through mid-month cutoff (Sept 2026 → 8th)', () => {
-    // 1 Tue … 8 Tue → 6 weekdays (excludes Sat 5 / Sun 6)
-    expect(countWeekdaysElapsed(2026, 9, '2026-09-08')).toBe(6);
+  it('counts Mon–Sat workdays through mid-month cutoff (Sept 2026 → 8th)', () => {
+    // 1 Tue … 8 Tue → includes Sat 5, excludes Sun 6 → 7 days
+    expect(countWeekdaysElapsed(2026, 9, '2026-09-08')).toBe(7);
   });
 
-  it('counts all weekdays when asOf is after the month', () => {
-    expect(countWeekdaysElapsed(2026, 9, '2026-10-01')).toBe(22);
+  it('counts all Mon–Sat days when asOf is after the month', () => {
+    // Sep 2026: 22 Mon–Fri + 4 Saturdays = 26
+    expect(countWeekdaysElapsed(2026, 9, '2026-10-01')).toBe(26);
   });
 
   it('returns 0 when asOf is before the month', () => {

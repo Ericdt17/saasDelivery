@@ -1,6 +1,9 @@
-const { Pool } = require("pg");
+const { Pool, types } = require("pg");
 const config = require("../config");
 const logger = require("../logger");
+
+/** Keep SQL DATE as YYYY-MM-DD — avoid node-pg midnight-local → wrong JSON day. */
+types.setTypeParser(1082, (value) => value);
 
 function createPostgresPool() {
   const connectionString = config.DATABASE_URL;
