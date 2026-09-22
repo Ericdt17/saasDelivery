@@ -1,21 +1,55 @@
 name: CD
 
+# Deploy only after CI succeeds on main (not in parallel with CI).
+# Manual "Run workflow" still allowed via workflow_dispatch.
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'server/**'
-      - '.github/workflows/cd.yml'
+  workflow_run:
+    workflows:
+      - CI
+    types:
+      - completed
   workflow_dispatch:
 
 jobs:
   deploy:
     name: Deploy to VPS
     runs-on: ubuntu-latest
+    # PRs also run CI — never deploy those. Only successful CI after a push to main.
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.event == 'push' &&
+        github.event.workflow_run.head_branch == 'main'
+      )
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+          fetch-depth: 2
+
+      - name: Decide whether to deploy
+        id: gate
+        run: |
+          set -e
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+            echo "Manual dispatch — deploy"
+            exit 0
+          fi
+          # Keep previous path filter: only deploy when server (or this workflow) changed
+          if git diff --name-only HEAD^ HEAD | grep -E '^(server/|\.github/workflows/cd\.yml)'; then
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+            echo "Server/CD changes detected — deploy"
+          else
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+            echo "No server/CD changes — skip deploy"
+          fi
+
       - name: Deploy backend API
+        if: steps.gate.outputs.deploy == 'true'
         uses: appleboy/ssh-action@v1.0.3
         env:
           GH_USERNAME: ${{ secrets.GH_USERNAME }}
