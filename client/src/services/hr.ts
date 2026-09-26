@@ -3,6 +3,7 @@
  */
 
 import { apiGet, apiPost, apiPatch, apiDelete } from "./api";
+import { buildApiUrl } from "@/lib/api-config";
 import type { ApiResponse } from "@/types/api";
 
 const BASE = "/api/v1/hr";
@@ -21,6 +22,8 @@ export interface HrEmployee {
   phone: string | null;
   poste: string | null;
   salary_base: number | null;
+  /** YYYY-MM-01 — first month included in payroll mass. */
+  payroll_eligible_from: string;
   is_active: boolean;
   is_enrolled: boolean;
   enrolled_at: string | null;
@@ -34,6 +37,8 @@ export interface CreateHrEmployeePayload {
   phone?: string | null;
   poste?: string | null;
   salary_base?: number | null;
+  /** When true, payroll mass starts on the 1st of next Douala month. */
+  include_next_month?: boolean;
 }
 
 export type UpdateHrEmployeePayload = Partial<CreateHrEmployeePayload> & {
@@ -78,6 +83,128 @@ export interface ManualAttendancePayload {
   employee_id: number;
   date: string;
   status: "present" | "late" | "absent";
+}
+
+/** Mirrors server `payslipFileName` so preview URLs end with the real download name. */
+export function buildPayslipFileName(
+  employee: { id: number; full_name?: string | null },
+  year: number,
+  month: number
+): string {
+  const raw = String(employee.full_name || `employe-${employee.id}`)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40);
+  const ym = `${year}-${String(month).padStart(2, "0")}`;
+  return `Bulletin-paie-${raw || "employe"}-${ym}.pdf`;
+}
+
+export function getPayslipPdfUrl(
+  employeeId: number,
+  params: {
+    month: number;
+    year: number;
+    download?: boolean;
+    /** When set, path ends with this name so the PDF viewer download keeps it. */
+    fileName?: string;
+  }
+): string {
+  const qs = new URLSearchParams({
+    month: String(params.month),
+    year: String(params.year),
+    download: params.download ? "true" : "false",
+  });
+  const path = params.fileName
+    ? `${BASE}/employees/${employeeId}/payslip/${encodeURIComponent(params.fileName)}`
+    : `${BASE}/employees/${employeeId}/payslip.pdf`;
+  return buildApiUrl(`${path}?${qs}`);
+}
+
+async function fetchPayslipPdfBlob(
+  employeeId: number,
+  params: { month: number; year: number; download?: boolean; fileName?: string }
+): Promise<{ blob: Blob; fileName: string }> {
+  const url = getPayslipPdfUrl(employeeId, params);
+  const response = await fetch(url, { credentials: "include" });
+  if (!response.ok) {
+    let message = `HTTP ${response.status}`;
+    try {
+      const data = await response.json();
+      message = data.error || data.message || message;
+    } catch {
+      /* non-JSON error body */
+    }
+    throw new Error(message || "Impossible de générer le bulletin de paie");
+  }
+  const disposition = response.headers.get("content-disposition") || "";
+  const match = /filename="([^"]+)"/i.exec(disposition);
+  const fileName =
+    match?.[1] ||
+    params.fileName ||
+    `Bulletin-paie-${params.year}-${String(params.month).padStart(2, "0")}.pdf`;
+  const blob = await response.blob();
+  return { blob, fileName };
+}
+
+/**
+ * Load PDF for in-page preview (blob URL — works despite X-Frame-Options on API).
+ * Use dialog "Télécharger" (or downloadPayslipPdf) for the canonical filename.
+ */
+export async function previewPayslipPdf(
+  employeeId: number,
+  params: { month: number; year: number; fileName?: string }
+): Promise<{ objectUrl: string; fileName: string }> {
+  const { blob, fileName } = await fetchPayslipPdfBlob(employeeId, {
+    ...params,
+    download: false,
+  });
+  const file = new File([blob], fileName, { type: "application/pdf" });
+  return { objectUrl: URL.createObjectURL(file), fileName };
+}
+
+/** Trigger browser download with the server filename. */
+export async function downloadPayslipPdf(
+  employeeId: number,
+  params: { month: number; year: number; fileName?: string }
+): Promise<void> {
+  const { blob, fileName } = await fetchPayslipPdfBlob(employeeId, {
+    ...params,
+    download: true,
+  });
+  const objectUrl = URL.createObjectURL(
+    new File([blob], fileName, { type: "application/pdf" })
+  );
+  const a = document.createElement("a");
+  a.href = objectUrl;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+}
+
+export interface SendPayslipWhatsappResult {
+  sent: boolean;
+  recipient: string | null;
+  message_id: string | null;
+  filename: string;
+}
+
+/** Generate payslip PDF and send it as a WhatsApp DM to the employee. */
+export async function sendPayslipWhatsapp(
+  employeeId: number,
+  params: { month: number; year: number }
+): Promise<SendPayslipWhatsappResult> {
+  const qs = new URLSearchParams({
+    month: String(params.month),
+    year: String(params.year),
+  });
+  const res = await apiPost<SendPayslipWhatsappResult>(
+    `${BASE}/employees/${employeeId}/payslip/send-whatsapp?${qs}`
+  );
+  return unwrap(res, "Impossible d'envoyer le bulletin sur WhatsApp");
 }
 
 export async function listEmployees(): Promise<HrEmployee[]> {

@@ -56,6 +56,21 @@ RECRUITMENT_ALERT_WEBHOOK_URL=
 # HR_ALERT_COOLDOWN_MS=300000
 
 # ---------------------------
+# WhatsApp bot (HR payslip DM — signed download link)
+# ---------------------------
+# Must match BOT_INTERNAL_TOKEN on the WhatsApp bot health server.
+# WHATSAPP_BOT_BASE_URL=http://127.0.0.1:3099
+# WHATSAPP_BOT_INTERNAL_TOKEN=change-me-long-random-secret
+# WHATSAPP_BOT_ENABLED=false
+# Public API URL embedded in WhatsApp download links (must be reachable by the phone).
+# WhatsApp often does NOT make raw http://IP:port links tappable — prefer an https domain:
+#   cloudflared tunnel --url http://127.0.0.1:3000
+# then set PUBLIC_API_BASE_URL to the https://….trycloudflare.com URL it prints.
+# PUBLIC_API_BASE_URL=https://xxxx.trycloudflare.com
+# Short-link store file (default: data/payslip-download-links.json)
+# PAYSLIP_LINKS_FILE=data/payslip-download-links.json
+
+# ---------------------------
 # HR check-in office GPS (defaults = Hippodrome Yaoundé)
 # Override for local testing (e.g. your location in France):
 # HR_OFFICE_LAT=48.8566

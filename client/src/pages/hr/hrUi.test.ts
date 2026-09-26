@@ -20,6 +20,8 @@ import {
   buildEmployeeMonthDayRows,
   buildDayAttendanceRows,
   buildHrDashboardStats,
+  buildPayrollRowsByEmployee,
+  isPayrollEligibleForMonth,
   formatAttendanceRatePct,
   formatPayrollAmount,
   estimateEmployeePayDue,
@@ -78,6 +80,7 @@ describe("buildEmployeeUpdatePayload", () => {
         poste: " Agent ",
         salaryBase: "150000",
         isActive: false,
+        includeNextMonth: true,
       })
     ).toEqual({
       full_name: "Ada Lovelace",
@@ -86,6 +89,7 @@ describe("buildEmployeeUpdatePayload", () => {
       poste: "Agent",
       salary_base: 150000,
       is_active: false,
+      include_next_month: true,
     });
   });
 
@@ -98,6 +102,7 @@ describe("buildEmployeeUpdatePayload", () => {
         poste: "",
         salaryBase: "abc",
         isActive: true,
+        includeNextMonth: false,
       })
     ).toEqual({
       full_name: "Ada",
@@ -106,6 +111,7 @@ describe("buildEmployeeUpdatePayload", () => {
       poste: null,
       salary_base: null,
       is_active: true,
+      include_next_month: false,
     });
   });
 });
@@ -427,6 +433,167 @@ describe("buildHrDashboardStats", () => {
     });
     expect(stats.basePayroll).toBe(500000);
     expect(stats.estimatedPayroll).toBe(402500);
+  });
+
+  it("excludes deferred payroll from mass but keeps attendance counts", () => {
+    const stats = buildHrDashboardStats({
+      employees: [
+        {
+          id: 1,
+          is_active: true,
+          salary_base: 300000,
+          payroll_eligible_from: "2026-09-01",
+        },
+        {
+          id: 2,
+          is_active: true,
+          salary_base: 200000,
+          payroll_eligible_from: "2026-10-01",
+        },
+      ],
+      todayAttendances: [
+        { employee_id: 1, status: "present" },
+        { employee_id: 2, status: "late" },
+      ],
+      monthSummary: [],
+      workdaysInMonth: 20,
+      year: 2026,
+      month: 9,
+    });
+    expect(stats.activeCount).toBe(2);
+    expect(stats.presentToday).toBe(2);
+    expect(stats.basePayroll).toBe(300000);
+    expect(stats.estimatedPayroll).toBe(300000);
+  });
+});
+
+describe("buildPayrollRowsByEmployee", () => {
+  const employees = [
+    {
+      id: 1,
+      full_name: "Ada",
+      is_active: true,
+      salary_base: 300000,
+    },
+    {
+      id: 2,
+      full_name: "Jean",
+      is_active: true,
+      salary_base: 200000,
+    },
+    {
+      id: 3,
+      full_name: "Inactif",
+      is_active: false,
+      salary_base: 100000,
+    },
+  ];
+
+  it("excludes inactive employees and totals estimated net", () => {
+    const result = buildPayrollRowsByEmployee({
+      employees,
+      monthSummary: [
+        {
+          employee_id: 1,
+          days_present: 12,
+          days_late: 3,
+          days_absent: 5,
+          weekdays_elapsed: 20,
+        },
+        {
+          employee_id: 2,
+          days_present: 20,
+          days_late: 0,
+          days_absent: 0,
+          weekdays_elapsed: 20,
+        },
+        {
+          employee_id: 3,
+          days_present: 0,
+          days_late: 5,
+          days_absent: 5,
+          weekdays_elapsed: 10,
+        },
+      ],
+      workdaysInMonth: 20,
+      year: 2026,
+      month: 9,
+    });
+
+    expect(result.rows).toHaveLength(2);
+    expect(result.rows.map((r) => r.fullName)).toEqual(["Ada", "Jean"]);
+    expect(result.rows[0]).toMatchObject({
+      employeeId: 1,
+      salaryBase: 300000,
+      daysPresent: 12,
+      daysLate: 3,
+      daysAbsent: 5,
+      estimatedNet: 202500,
+      penalties: 97500,
+    });
+    expect(result.rows[1]).toMatchObject({
+      employeeId: 2,
+      salaryBase: 200000,
+      daysPresent: 20,
+      daysLate: 0,
+      daysAbsent: 0,
+      estimatedNet: 200000,
+      penalties: 0,
+    });
+    expect(result.basePayroll).toBe(500000);
+    expect(result.activeCount).toBe(2);
+    expect(result.estimatedPayroll).toBe(402500);
+  });
+
+  it("returns null estimatedPayroll when month has no workdays", () => {
+    const result = buildPayrollRowsByEmployee({
+      employees,
+      monthSummary: [],
+      workdaysInMonth: 0,
+      year: 2026,
+      month: 9,
+    });
+    expect(result.activeCount).toBe(2);
+    expect(result.basePayroll).toBe(500000);
+    expect(result.estimatedPayroll).toBeNull();
+    expect(result.rows.every((r) => r.estimatedNet == null)).toBe(true);
+  });
+
+  it("excludes employees not yet payroll-eligible for the month", () => {
+    const result = buildPayrollRowsByEmployee({
+      employees: [
+        {
+          id: 1,
+          full_name: "Ada",
+          is_active: true,
+          salary_base: 300000,
+          payroll_eligible_from: "2026-09-01",
+        },
+        {
+          id: 2,
+          full_name: "Nouveau",
+          is_active: true,
+          salary_base: 200000,
+          payroll_eligible_from: "2026-10-01",
+        },
+      ],
+      monthSummary: [],
+      workdaysInMonth: 20,
+      year: 2026,
+      month: 9,
+    });
+    expect(result.rows).toHaveLength(1);
+    expect(result.rows[0].fullName).toBe("Ada");
+    expect(result.basePayroll).toBe(300000);
+    expect(result.estimatedPayroll).toBe(300000);
+  });
+});
+
+describe("isPayrollEligibleForMonth", () => {
+  it("includes from eligible month onward", () => {
+    expect(isPayrollEligibleForMonth("2026-10-01", 2026, 9)).toBe(false);
+    expect(isPayrollEligibleForMonth("2026-10-01", 2026, 10)).toBe(true);
+    expect(isPayrollEligibleForMonth(null, 2026, 9)).toBe(true);
   });
 });
 

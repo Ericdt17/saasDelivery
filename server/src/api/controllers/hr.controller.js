@@ -30,6 +30,18 @@ const {
 } = require("../../lib/hrCheckin");
 const { CHECKIN_MESSAGES } = require("../../lib/hrCheckinMessages");
 const { notifyHrCheckinAlert } = require("../../lib/botAlerts");
+const { buildEmployeePayslipPdf } = require("../../lib/hrPayslipPdf");
+const { formatMonthLabelFr } = require("../../lib/hrPayslip");
+const {
+  sendTextDm,
+  WhatsAppBotError,
+  isWhatsAppBotEnabled,
+} = require("../../lib/whatsappBotClient");
+const {
+  createPayslipDownloadLink,
+  resolvePayslipDownloadCode,
+} = require("../../lib/payslipDownloadToken");
+const { resolvePayrollEligibleFrom, firstOfCurrentMonthDouala } = require("../../lib/hrPayrollEligibility");
 
 function publicEmployeeCheckinPayload(employee) {
   const parts = getDoualaParts(new Date());
@@ -50,6 +62,8 @@ const createEmployeeSchema = z.object({
   phone: z.string().trim().min(1).nullable().optional(),
   poste: z.string().trim().min(1).nullable().optional(),
   salary_base: z.number().int().nullable().optional(),
+  /** When true, mass salary starts on the 1st of next Douala month. */
+  include_next_month: z.boolean().optional().default(false),
 });
 
 const patchEmployeeSchema = createEmployeeSchema
@@ -98,6 +112,16 @@ const listAttendancesQuerySchema = z
 const summaryAttendancesQuerySchema = z.object({
   month: z.coerce.number().int().min(1).max(12),
   year: z.coerce.number().int().min(2020),
+});
+
+const payslipQuerySchema = z.object({
+  month: z.coerce.number().int().min(1).max(12),
+  year: z.coerce.number().int().min(2020),
+  download: z
+    .enum(["true", "false"])
+    .optional()
+    .default("false")
+    .transform((v) => v === "true"),
 });
 
 const manualAttendanceSchema = z.object({
@@ -175,7 +199,13 @@ async function createAdminEmployee(req, res, next) {
         details: parsed.error.flatten(),
       });
     }
-    const row = await createEmployee(parsed.data);
+    const { include_next_month, ...fields } = parsed.data;
+    const row = await createEmployee({
+      ...fields,
+      payroll_eligible_from: resolvePayrollEligibleFrom({
+        includeNextMonth: include_next_month === true,
+      }),
+    });
     return res.status(201).json({ success: true, data: stripFaceDescriptor(row) });
   } catch (err) {
     next(err);
@@ -200,7 +230,23 @@ async function patchAdminEmployee(req, res, next) {
     if (!existing) {
       return res.status(404).json({ success: false, error: "Employee not found" });
     }
-    const row = await updateEmployee(id, parsed.data);
+    const { include_next_month, ...fields } = parsed.data;
+    const updates = { ...fields };
+    if (include_next_month === true) {
+      updates.payroll_eligible_from = resolvePayrollEligibleFrom({
+        includeNextMonth: true,
+      });
+    } else if (include_next_month === false) {
+      const currentMonthStart = firstOfCurrentMonthDouala();
+      const existingFrom = existing.payroll_eligible_from
+        ? String(existing.payroll_eligible_from).slice(0, 10)
+        : null;
+      // Only pull a deferred date back into the current month; never rewind older eligibility.
+      if (existingFrom && existingFrom > currentMonthStart) {
+        updates.payroll_eligible_from = currentMonthStart;
+      }
+    }
+    const row = await updateEmployee(id, updates);
     return res.json({ success: true, data: stripFaceDescriptor(row) });
   } catch (err) {
     next(err);
@@ -633,6 +679,208 @@ async function getAttendancesSummary(req, res, next) {
   }
 }
 
+async function getEmployeePayslipPdf(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id < 1) {
+      return res.status(400).json({ success: false, error: "Invalid employee id" });
+    }
+
+    const parsed = payslipQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      return res.status(400).json({
+        success: false,
+        error: "Validation failed",
+        details: parsed.error.flatten(),
+      });
+    }
+    const { month, year, download } = parsed.data;
+
+    const result = await buildEmployeePayslipPdf({
+      employeeId: id,
+      month,
+      year,
+    });
+    if (!result.ok) {
+      return res.status(404).json({ success: false, error: "Employee not found" });
+    }
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      `${download ? "attachment" : "inline"}; filename="${result.fileName}"`
+    );
+    return res.send(result.buffer);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function sendEmployeePayslipWhatsapp(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id < 1) {
+      return res.status(400).json({ success: false, error: "Invalid employee id" });
+    }
+
+    const parsed = payslipQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      return res.status(400).json({
+        success: false,
+        error: "Validation failed",
+        details: parsed.error.flatten(),
+      });
+    }
+    const { month, year } = parsed.data;
+
+    if (!isWhatsAppBotEnabled()) {
+      return res.status(503).json({
+        success: false,
+        error: "whatsapp_disabled",
+        message: "WhatsApp bot outbound is disabled",
+      });
+    }
+
+    const employee = await getEmployeeById(id);
+    if (!employee) {
+      return res.status(404).json({ success: false, error: "Employee not found" });
+    }
+
+    const phone =
+      employee.phone != null ? String(employee.phone).trim() : "";
+    if (!phone) {
+      return res.status(400).json({
+        success: false,
+        error: "phone_required",
+        message: "Employee has no phone number",
+      });
+    }
+
+    let downloadUrl;
+    try {
+      downloadUrl = createPayslipDownloadLink({
+        employeeId: id,
+        year,
+        month,
+      }).url;
+    } catch (err) {
+      return res.status(503).json({
+        success: false,
+        error: "payslip_link_config",
+        message: err.message || "Payslip download link could not be created",
+      });
+    }
+
+    const monthLabel = formatMonthLabelFr(year, month);
+    // WhatsApp often does NOT auto-link raw http://IP:port URLs.
+    // Send intro + URL as two separate bubbles (URL alone = best chance to linkify).
+    // Prefer PUBLIC_API_BASE_URL with an https domain (e.g. cloudflared) for reliable taps.
+    const introMessage = [
+      "*Bulletin de paie*",
+      "",
+      `${employee.full_name} — ${monthLabel}`,
+      "",
+      "Téléchargez votre bulletin (valable 7 jours).",
+      "Ouvrez le lien ci-dessous :",
+    ].join("\n");
+
+    try {
+      await sendTextDm({
+        recipientPhone: phone,
+        message: introMessage,
+      });
+      const sent = await sendTextDm({
+        recipientPhone: phone,
+        message: downloadUrl,
+      });
+      const hostLooksLikeIp = /^https?:\/\/(\d{1,3}\.){3}\d{1,3}(:\d+)?\//i.test(
+        downloadUrl
+      );
+      return res.json({
+        success: true,
+        data: {
+          sent: true,
+          channel: "whatsapp_link",
+          recipient: sent.recipient || null,
+          message_id: sent.messageId || null,
+          download_url: downloadUrl,
+          warning: hostLooksLikeIp
+            ? "WhatsApp often does not make http://IP:port links tappable. Use an https domain (e.g. cloudflared tunnel) in PUBLIC_API_BASE_URL."
+            : null,
+        },
+      });
+    } catch (err) {
+      if (err instanceof WhatsAppBotError) {
+        const status =
+          err.code === "config"
+            ? 503
+            : err.code === "unauthorized"
+              ? 502
+              : err.status && err.status >= 400 && err.status < 600
+                ? err.status === 401
+                  ? 502
+                  : err.status
+                : 502;
+        return res.status(status).json({
+          success: false,
+          error: err.code || "whatsapp_send_failed",
+          message: err.message,
+        });
+      }
+      throw err;
+    }
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function downloadPayslipByCode(req, res, next) {
+  try {
+    const code =
+      (req.params.code != null ? String(req.params.code) : "") ||
+      (req.query.token != null ? String(req.query.token) : "");
+    const trimmed = code.trim();
+    if (!trimmed) {
+      return res.status(400).json({
+        success: false,
+        error: "token_required",
+        message: "Missing download code",
+      });
+    }
+
+    const verified = resolvePayslipDownloadCode(trimmed);
+    if (!verified.ok) {
+      const status = verified.error === "expired" ? 410 : 403;
+      return res.status(status).json({
+        success: false,
+        error: verified.error,
+        message:
+          verified.error === "expired"
+            ? "This payslip link has expired"
+            : "Invalid payslip download link",
+      });
+    }
+
+    const result = await buildEmployeePayslipPdf({
+      employeeId: verified.employeeId,
+      month: verified.month,
+      year: verified.year,
+    });
+    if (!result.ok) {
+      return res.status(404).json({ success: false, error: "Employee not found" });
+    }
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${result.fileName}"`
+    );
+    return res.send(result.buffer);
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   listAdminEmployees,
   createAdminEmployee,
@@ -646,4 +894,8 @@ module.exports = {
   listAdminAttendances,
   createAdminAttendance,
   getAttendancesSummary,
+  getEmployeePayslipPdf,
+  sendEmployeePayslipWhatsapp,
+  downloadPayslipByCode,
+  downloadPayslipByToken: downloadPayslipByCode,
 };

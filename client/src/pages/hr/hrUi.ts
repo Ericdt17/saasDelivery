@@ -74,6 +74,8 @@ export type EmployeeFormFields = {
   poste: string;
   salaryBase: string;
   isActive: boolean;
+  /** When true, mass salary starts next Douala month. */
+  includeNextMonth: boolean;
 };
 
 export function buildEmployeeUpdatePayload(fields: EmployeeFormFields): {
@@ -83,6 +85,7 @@ export function buildEmployeeUpdatePayload(fields: EmployeeFormFields): {
   poste: string | null;
   salary_base: number | null;
   is_active: boolean;
+  include_next_month: boolean;
 } {
   const salaryParsed =
     fields.salaryBase.trim() === "" ? NaN : Number(fields.salaryBase);
@@ -94,7 +97,26 @@ export function buildEmployeeUpdatePayload(fields: EmployeeFormFields): {
     salary_base:
       Number.isFinite(salaryParsed) ? Math.trunc(salaryParsed) : null,
     is_active: fields.isActive,
+    include_next_month: fields.includeNextMonth === true,
   };
+}
+
+/**
+ * True when the employee enters payroll mass for this calendar month.
+ * Missing eligible_from → treated as always eligible (legacy rows).
+ */
+export function isPayrollEligibleForMonth(
+  eligibleFrom: string | null | undefined,
+  year: number,
+  month: number
+): boolean {
+  if (eligibleFrom == null || eligibleFrom === "") return true;
+  const raw = String(eligibleFrom).slice(0, 10);
+  const match = /^(\d{4})-(\d{2})/.exec(raw);
+  if (!match) return true;
+  const fromYear = Number(match[1]);
+  const fromMonth = Number(match[2]);
+  return year * 12 + month >= fromYear * 12 + fromMonth;
 }
 
 /** True when neither face nor GPS was verified (admin manual entry). */
@@ -514,6 +536,7 @@ export function buildHrDashboardStats(input: {
     id: number;
     is_active: boolean;
     salary_base?: number | null;
+    payroll_eligible_from?: string | null;
   }>;
   todayAttendances: Array<{
     employee_id: number;
@@ -528,10 +551,21 @@ export function buildHrDashboardStats(input: {
   }>;
   /** Full Mon–Sat days in the selected month (payroll / penalties basis). */
   workdaysInMonth: number;
+  /** Calendar month for payroll eligibility (defaults: always eligible). */
+  year?: number;
+  month?: number;
 }): HrDashboardStats {
+  const year = input.year;
+  const month = input.month;
   const activeEmployees = input.employees.filter((e) => e.is_active);
   const activeIds = new Set(activeEmployees.map((e) => Number(e.id)));
   const activeCount = activeIds.size;
+  const payrollEmployees = activeEmployees.filter(
+    (e) =>
+      year == null ||
+      month == null ||
+      isPayrollEligibleForMonth(e.payroll_eligible_from, year, month)
+  );
 
   const presentToday = input.todayAttendances.filter(
     (a) =>
@@ -559,7 +593,7 @@ export function buildHrDashboardStats(input: {
       ? Math.round((presentLateDays / weekdaysElapsedSum) * 100)
       : null;
 
-  const basePayroll = activeEmployees.reduce(
+  const basePayroll = payrollEmployees.reduce(
     (sum, e) => sum + (e.salary_base ?? 0),
     0
   );
@@ -573,7 +607,7 @@ export function buildHrDashboardStats(input: {
   let estimatedPayroll: number | null = null;
   let anyWorkdays = false;
   let estimatedSum = 0;
-  for (const emp of activeEmployees) {
+  for (const emp of payrollEmployees) {
     const row = summaryByEmployee.get(Number(emp.id));
     const due = estimateEmployeePayDue({
       salaryBase: emp.salary_base ?? null,
@@ -596,6 +630,119 @@ export function buildHrDashboardStats(input: {
     lateDaysMonth,
     basePayroll,
     estimatedPayroll,
+  };
+}
+
+export type PayrollEmployeeRow = {
+  employeeId: number;
+  fullName: string;
+  salaryBase: number;
+  daysPresent: number;
+  daysLate: number;
+  daysAbsent: number;
+  estimatedNet: number | null;
+  penalties: number | null;
+};
+
+export type PayrollByEmployeeResult = {
+  rows: PayrollEmployeeRow[];
+  activeCount: number;
+  basePayroll: number;
+  /** Null when the month has no workdays. */
+  estimatedPayroll: number | null;
+};
+
+/**
+ * Per-active-employee estimated net pay for ops reports / payroll detail.
+ */
+export function buildPayrollRowsByEmployee(input: {
+  employees: Array<{
+    id: number;
+    full_name: string;
+    is_active: boolean;
+    salary_base?: number | null;
+    payroll_eligible_from?: string | null;
+  }>;
+  monthSummary: Array<{
+    employee_id?: number;
+    days_present: number;
+    days_late: number;
+    days_absent?: number;
+    weekdays_elapsed: number;
+  }>;
+  workdaysInMonth: number;
+  year: number;
+  month: number;
+}): PayrollByEmployeeResult {
+  const activeEmployees = input.employees
+    .filter(
+      (e) =>
+        e.is_active &&
+        isPayrollEligibleForMonth(
+          e.payroll_eligible_from,
+          input.year,
+          input.month
+        )
+    )
+    .slice()
+    .sort((a, b) => a.full_name.localeCompare(b.full_name, "fr"));
+
+  const summaryByEmployee = new Map(
+    input.monthSummary
+      .filter((r) => r.employee_id != null)
+      .map((r) => [Number(r.employee_id), r])
+  );
+
+  const basePayroll = activeEmployees.reduce(
+    (sum, e) => sum + (e.salary_base ?? 0),
+    0
+  );
+
+  let anyWorkdays = false;
+  let estimatedSum = 0;
+  const rows: PayrollEmployeeRow[] = [];
+
+  for (const emp of activeEmployees) {
+    const row = summaryByEmployee.get(Number(emp.id));
+    const daysPresent = row?.days_present ?? 0;
+    const daysLate = row?.days_late ?? 0;
+    const weekdaysElapsed = row?.weekdays_elapsed ?? 0;
+    const daysAbsent =
+      row?.days_absent ??
+      Math.max(0, weekdaysElapsed - daysPresent - daysLate);
+
+    const payInput = {
+      salaryBase: emp.salary_base ?? null,
+      daysPresent,
+      daysLate,
+      daysAbsent,
+      weekdaysElapsed,
+      workdaysInMonth: input.workdaysInMonth,
+    };
+    const estimatedNet = estimateEmployeePayDue(payInput);
+    const penalties = estimateEmployeePenalties(payInput);
+    if (estimatedNet != null) {
+      anyWorkdays = true;
+      estimatedSum += estimatedNet;
+    }
+
+    rows.push({
+      employeeId: Number(emp.id),
+      fullName: emp.full_name,
+      salaryBase: emp.salary_base ?? 0,
+      daysPresent,
+      daysLate,
+      daysAbsent,
+      estimatedNet,
+      penalties,
+    });
+  }
+
+  return {
+    rows,
+    activeCount: activeEmployees.length,
+    basePayroll,
+    estimatedPayroll: anyWorkdays ? estimatedSum : null,
   };
 }
 

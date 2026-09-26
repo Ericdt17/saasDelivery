@@ -75,7 +75,7 @@ Migration files live in `server/db/migrations/` and are run in filename-alphabet
 - Base path: `/api/v1/`
 - Express 5 app in `server/src/api/server.js`
 - Routes in `server/src/api/routes/`; newer routes delegate to controllers in `server/src/api/controllers/`
-- Registered routes: `auth`, `agencies`, `waitlist`, `recruitment`, `merchant-terms`, `hr`
+- Registered routes: `auth`, `agencies`, `waitlist`, `recruitment`, `merchant-terms`, `hr`, `settings`
 - CORS: allows all localhost origins in dev; validates against `ALLOWED_ORIGINS` in production
 
 ### Frontend Service Layer
@@ -83,6 +83,14 @@ Migration files live in `server/db/migrations/` and are run in filename-alphabet
 
 ### HR Check-in App (`hr-app/`)
 A separate lightweight React app (no router, no auth) used by employees to clock in via face recognition (MediaPipe Tasks Vision). It calls the public `/api/v1/hr/checkin/*` endpoints, which are rate-limited and require no JWT. The compiled face-descriptor utility is shared via `shared/hrLandmarkDescriptor.mjs`. E2E tests for this app live in `e2e/`.
+
+### Payslip PDF Generation
+- Endpoint: `GET /api/v1/hr/employees/:id/payslip.pdf?year=YYYY&month=M` (JWT required, `agency_admin` or `super_admin`)
+- Business logic in `server/src/lib/hrPayslip.js`: computes net pay from `salary_base`, attendance counts, and `countWeekdaysInMonth`. Late-day penalty = half a day's rate.
+- Rendered via Puppeteer in `server/src/lib/pdf/renderPayslipPdf.js` using the HTML template at `server/src/templates/payslip.html`. The template uses `{{key}}` mustache-style placeholders — values are HTML-escaped except `logoHtml` (raw). The Puppeteer browser instance is lazily shared across requests.
+- Company branding (name, logo, NUI/RCCM, accent color) is stored in the `company_settings` table (singleton row) and resolved via `resolveCompanyBranding()` in `hrPayslip.js`. Falls back to `DEFAULT_COMPANY_BRANDING` if the row is missing.
+- Settings API: `GET/PUT /api/v1/settings/company` — `super_admin` only, validated with Zod.
+- Frontend settings page: `client/src/pages/config/Parametres.tsx` — shows agency fields for `agency` role and company branding fields for `super_admin`.
 
 ### Testing Conventions
 - **Server unit/integration tests**: Jest, files in `server/src/__tests__/`. DB layer is mocked via `jest.mock('../../db', ...)`. `setEnv.js` injects test env vars before any module loads.

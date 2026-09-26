@@ -1,0 +1,123 @@
+'use strict';
+
+const {
+  estimatePayslipAmounts,
+  buildPayslipModel,
+  payslipFileName,
+  formatCurrency,
+} = require('../../lib/hrPayslip');
+
+describe('estimatePayslipAmounts', () => {
+  it('Eric example: 100k base, 2 absences, 26 workdays', () => {
+    const a = estimatePayslipAmounts({
+      salaryBase: 100000,
+      daysPresent: 6,
+      daysLate: 0,
+      daysAbsent: 2,
+      workdaysInMonth: 26,
+    });
+    expect(a.costAbsentDay).toBe(3846);
+    expect(a.costLateDay).toBe(1923);
+    expect(a.penaltyAbsent).toBe(7692);
+    expect(a.penaltyLate).toBe(0);
+    expect(a.penaltiesTotal).toBe(7692);
+    expect(a.netPay).toBe(92308);
+  });
+
+  it('applies half-day late penalties on full-month basis', () => {
+    const a = estimatePayslipAmounts({
+      salaryBase: 300000,
+      daysPresent: 12,
+      daysLate: 3,
+      daysAbsent: 5,
+      workdaysInMonth: 20,
+    });
+    expect(a.penaltyLate).toBe(22500);
+    expect(a.penaltyAbsent).toBe(75000);
+    expect(a.penaltiesTotal).toBe(97500);
+    expect(a.netPay).toBe(202500);
+  });
+
+  it('returns nulls when month has no workdays', () => {
+    const a = estimatePayslipAmounts({
+      salaryBase: 100000,
+      daysPresent: 0,
+      daysLate: 0,
+      daysAbsent: 0,
+      workdaysInMonth: 0,
+    });
+    expect(a.netPay).toBeNull();
+    expect(a.penaltiesTotal).toBeNull();
+  });
+});
+
+describe('buildPayslipModel / payslipFileName', () => {
+  it('builds preformatted labels and bulletin number', () => {
+    const model = buildPayslipModel({
+      employee: {
+        id: 2,
+        full_name: 'Djou Tousse Eric',
+        email: 'eric@example.com',
+        poste: 'CEO',
+        salary_base: 100000,
+      },
+      month: 9,
+      year: 2026,
+      daysPresent: 6,
+      daysLate: 0,
+      daysAbsent: 2,
+      weekdaysElapsed: 8,
+      generatedAt: new Date('2026-09-09T12:00:00.000Z'),
+    });
+    expect(model.companyName).toBe('LivSight');
+    expect(model.bulletinNo).toBe('PAIE-202609-2');
+    expect(model.employeeName).toBe('Djou Tousse Eric');
+    expect(model.monthLabel).toMatch(/septembre/i);
+    expect(model.workdaysInMonth).toBe('26');
+    expect(model.netPayLabel).toBe(formatCurrency(92308));
+    expect(model.penaltiesTotalLabel).toBe(formatCurrency(7692));
+  });
+
+  it('uses company settings branding when provided', () => {
+    const model = buildPayslipModel({
+      employee: {
+        id: 2,
+        full_name: 'Jean',
+        email: 'j@x.com',
+        salary_base: 100000,
+      },
+      month: 9,
+      year: 2026,
+      daysPresent: 1,
+      daysLate: 0,
+      daysAbsent: 0,
+      company: {
+        company_name: 'Acme RH',
+        legal_name: 'Acme SARL',
+        tax_id: 'M123',
+        trade_register: 'RC/DLA/2020/B/1',
+        address: 'Yaoundé',
+        phone: '+237 111',
+        email: 'rh@acme.com',
+        accent_color: '#112233',
+      },
+    });
+    expect(model.companyName).toBe('Acme RH');
+    expect(model.legalName).toBe('Acme SARL');
+    expect(model.taxId).toBe('M123');
+    expect(model.tradeRegister).toBe('RC/DLA/2020/B/1');
+    expect(model.legalIdsLine).toBe('NUI: M123 · RCCM: RC/DLA/2020/B/1');
+    expect(model.accentColor).toBe('#112233');
+    expect(model.address).toBe('Yaoundé');
+  });
+
+  it('builds a safe PDF filename', () => {
+    expect(
+      payslipFileName(
+        { id: 2, full_name: 'Djou Toussé Eric' },
+        2026,
+        9
+      )
+    ).toBe('Bulletin-paie-Djou-Tousse-Eric-2026-09.pdf');
+  });
+});

@@ -709,7 +709,8 @@ function createPostgresQueries(pool) {
     id, application_id, job_offer_id, full_name, phone, email, photo_url,
     gender, quartier, job_title, job_type, education_level, field_of_study,
     school_name, transport, availability, status, hired_at, notes, salary,
-    poste, salary_base, is_active, enrolled_at, created_at, updated_at,
+    poste, salary_base, payroll_eligible_from, is_active, enrolled_at,
+    created_at, updated_at,
     (enrolled_at IS NOT NULL) AS is_enrolled
   `;
 
@@ -750,13 +751,23 @@ function createPostgresQueries(pool) {
     phone = null,
     poste = null,
     salary_base = null,
+    payroll_eligible_from = null,
   }) {
     const normalizedEmail = String(email).trim().toLowerCase();
     const result = await pool.query(
-      `INSERT INTO employees (full_name, email, phone, poste, salary_base, application_id)
-       VALUES ($1, $2, $3, $4, $5, NULL)
+      `INSERT INTO employees (
+         full_name, email, phone, poste, salary_base, payroll_eligible_from, application_id
+       )
+       VALUES ($1, $2, $3, $4, $5, COALESCE($6::date, (date_trunc('month', timezone('Africa/Douala', NOW())))::date), NULL)
        RETURNING ${EMPLOYEE_PUBLIC_COLUMNS}`,
-      [full_name, normalizedEmail, phone ?? null, poste ?? null, salary_base ?? null]
+      [
+        full_name,
+        normalizedEmail,
+        phone ?? null,
+        poste ?? null,
+        salary_base ?? null,
+        payroll_eligible_from ?? null,
+      ]
     );
     return result.rows[0] || null;
   }
@@ -768,6 +779,7 @@ function createPostgresQueries(pool) {
       "phone",
       "poste",
       "salary_base",
+      "payroll_eligible_from",
       "is_active",
     ];
     const fields = [];
@@ -980,6 +992,61 @@ function createPostgresQueries(pool) {
     return Array.isArray(rows) ? rows : rows ? [rows] : [];
   }
 
+  async function getCompanySettings() {
+    const rows = await query(
+      `SELECT id, company_name, legal_name, tax_id, trade_register, address, phone, email,
+              accent_color, logo_base64, updated_at
+       FROM company_settings WHERE id = 1`
+    );
+    const list = Array.isArray(rows) ? rows : rows ? [rows] : [];
+    return list[0] || null;
+  }
+
+  async function upsertCompanySettings({
+    company_name,
+    legal_name,
+    tax_id,
+    trade_register,
+    address,
+    phone,
+    email,
+    accent_color,
+    logo_base64,
+  }) {
+    const rows = await query(
+      `INSERT INTO company_settings (
+         id, company_name, legal_name, tax_id, trade_register, address, phone, email,
+         accent_color, logo_base64, updated_at
+       ) VALUES (1, $1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP)
+       ON CONFLICT (id) DO UPDATE SET
+         company_name = EXCLUDED.company_name,
+         legal_name = EXCLUDED.legal_name,
+         tax_id = EXCLUDED.tax_id,
+         trade_register = EXCLUDED.trade_register,
+         address = EXCLUDED.address,
+         phone = EXCLUDED.phone,
+         email = EXCLUDED.email,
+         accent_color = EXCLUDED.accent_color,
+         logo_base64 = EXCLUDED.logo_base64,
+         updated_at = CURRENT_TIMESTAMP
+       RETURNING id, company_name, legal_name, tax_id, trade_register, address, phone, email,
+                 accent_color, logo_base64, updated_at`,
+      [
+        company_name,
+        legal_name ?? null,
+        tax_id ?? null,
+        trade_register ?? null,
+        address ?? null,
+        phone ?? null,
+        email ?? null,
+        accent_color,
+        logo_base64 ?? null,
+      ]
+    );
+    const list = Array.isArray(rows) ? rows : rows ? [rows] : [];
+    return list[0] || null;
+  }
+
   return {
     type: "postgres",
     query,
@@ -1033,6 +1100,8 @@ function createPostgresQueries(pool) {
     upsertAttendance,
     listAttendances,
     summarizeAttendances,
+    getCompanySettings,
+    upsertCompanySettings,
     close: async () => pool.end(),
     getRawDb: () => pool,
     TIME_ZONE,

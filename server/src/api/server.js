@@ -10,6 +10,8 @@ const waitlistRouter = require("./routes/waitlist");
 const recruitmentRouter = require("./routes/recruitment");
 const merchantTermsRouter = require("./routes/merchantTerms");
 const hrRouter = require("./routes/hr");
+const settingsRouter = require("./routes/settings");
+const opsReportsRouter = require("./routes/opsReports");
 const errorHandler = require("./middleware/errorHandler");
 
 const app = express();
@@ -125,6 +127,8 @@ app.use("/api/v1/waitlist", waitlistRouter);
 app.use("/api/v1/recruitment", recruitmentRouter);
 app.use("/api/v1/merchant-terms", merchantTermsRouter);
 app.use("/api/v1/hr", hrRouter);
+app.use("/api/v1/settings", settingsRouter);
+app.use("/api/v1/ops-reports", opsReportsRouter);
 
 // Health check endpoint
 app.get("/api/v1/health", async (req, res) => {

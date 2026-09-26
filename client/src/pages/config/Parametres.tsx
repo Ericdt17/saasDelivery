@@ -15,7 +15,12 @@ import { LoadingSpinner } from "@/components/loading/LoadingSpinner";
 import { toast } from "sonner";
 import { AppErrorExperience } from "@/components/errors/AppErrorExperience";
 import { getAgencyMe, updateAgency } from "@/services/agencies";
+import {
+  getCompanySettings,
+  updateCompanySettings,
+} from "@/services/settings";
 import { useAuth } from "@/contexts/AuthContext";
+import { trimLogoWhitespace } from "@/lib/trimLogo";
 
 const Parametres = () => {
   const { user, isSuperAdmin } = useAuth();
@@ -27,6 +32,10 @@ const Parametres = () => {
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [logoBase64, setLogoBase64] = useState<string | null>(null);
+  const [legalName, setLegalName] = useState("");
+  const [taxId, setTaxId] = useState("");
+  const [tradeRegister, setTradeRegister] = useState("");
+  const [accentColor, setAccentColor] = useState("#4A9FD4");
 
   const {
     data: agency,
@@ -41,6 +50,19 @@ const Parametres = () => {
     enabled: !isSuperAdmin && user?.role === "agency",
   });
 
+  const {
+    data: company,
+    isLoading: isLoadingCompany,
+    isError: isErrorCompany,
+    error: companyError,
+    refetch: refetchCompany,
+  } = useQuery({
+    queryKey: ["settings", "company"],
+    queryFn: getCompanySettings,
+    retry: 1,
+    enabled: Boolean(isSuperAdmin),
+  });
+
   useEffect(() => {
     if (agency) {
       setAgencyName(agency.name || "");
@@ -51,7 +73,21 @@ const Parametres = () => {
     }
   }, [agency]);
 
-  const hasChanges = useMemo(() => {
+  useEffect(() => {
+    if (company) {
+      setAgencyName(company.company_name || "");
+      setLegalName(company.legal_name || "");
+      setTaxId(company.tax_id || "");
+      setTradeRegister(company.trade_register || "");
+      setAddress(company.address || "");
+      setPhone(company.phone || "");
+      setEmail(company.email || "");
+      setAccentColor(company.accent_color || "#4A9FD4");
+      setLogoBase64(company.logo_base64 || null);
+    }
+  }, [company]);
+
+  const agencyHasChanges = useMemo(() => {
     if (!agency) return false;
     return (
       agencyName.trim() !== (agency.name || "") ||
@@ -60,6 +96,32 @@ const Parametres = () => {
       logoBase64 !== (agency.logo_base64 || null)
     );
   }, [agency, agencyName, address, phone, logoBase64]);
+
+  const companyHasChanges = useMemo(() => {
+    if (!company) return false;
+    return (
+      agencyName.trim() !== (company.company_name || "") ||
+      legalName.trim() !== (company.legal_name || "") ||
+      taxId.trim() !== (company.tax_id || "") ||
+      tradeRegister.trim() !== (company.trade_register || "") ||
+      address.trim() !== (company.address || "") ||
+      phone.trim() !== (company.phone || "") ||
+      email.trim() !== (company.email || "") ||
+      accentColor.trim() !== (company.accent_color || "#4A9FD4") ||
+      logoBase64 !== (company.logo_base64 || null)
+    );
+  }, [
+    company,
+    agencyName,
+    legalName,
+    taxId,
+    tradeRegister,
+    address,
+    phone,
+    email,
+    accentColor,
+    logoBase64,
+  ]);
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -73,7 +135,10 @@ const Parametres = () => {
       return;
     }
     const reader = new FileReader();
-    reader.onloadend = () => setLogoBase64(reader.result as string);
+    reader.onloadend = async () => {
+      const trimmed = await trimLogoWhitespace(reader.result as string);
+      setLogoBase64(trimmed);
+    };
     reader.onerror = () => toast.error("Erreur lors de la lecture du fichier");
     reader.readAsDataURL(file);
   };
@@ -81,7 +146,7 @@ const Parametres = () => {
   const agencyId =
     agency?.id || user?.agencyId || (user?.id ? Number(user.id) : null);
 
-  const saveMutation = useMutation({
+  const saveAgencyMutation = useMutation({
     mutationFn: (data: {
       name: string;
       address?: string | null;
@@ -101,20 +166,57 @@ const Parametres = () => {
     },
     onError: (err: unknown) => {
       toast.error("Erreur", {
-        description: err instanceof Error ? err.message : "Enregistrement impossible",
+        description:
+          err instanceof Error ? err.message : "Enregistrement impossible",
       });
     },
   });
 
-  function handleSave() {
+  const saveCompanyMutation = useMutation({
+    mutationFn: updateCompanySettings,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["settings", "company"] });
+      toast.success("Paramètres société enregistrés");
+    },
+    onError: (err: unknown) => {
+      toast.error("Erreur", {
+        description:
+          err instanceof Error ? err.message : "Enregistrement impossible",
+      });
+    },
+  });
+
+  function handleSaveAgency() {
     if (!agencyName.trim()) {
       toast.error("Le nom de l'agence est obligatoire");
       return;
     }
-    saveMutation.mutate({
+    saveAgencyMutation.mutate({
       name: agencyName.trim(),
       address: address.trim() || null,
       phone: phone.trim() || null,
+      logo_base64: logoBase64,
+    });
+  }
+
+  function handleSaveCompany() {
+    if (!agencyName.trim()) {
+      toast.error("Le nom de la société est obligatoire");
+      return;
+    }
+    if (!/^#[0-9A-Fa-f]{6}$/.test(accentColor.trim())) {
+      toast.error("Couleur d’accent invalide (format #RRGGBB)");
+      return;
+    }
+    saveCompanyMutation.mutate({
+      company_name: agencyName.trim(),
+      legal_name: legalName.trim() || agencyName.trim(),
+      tax_id: taxId.trim() || null,
+      trade_register: tradeRegister.trim() || null,
+      address: address.trim() || null,
+      phone: phone.trim() || null,
+      email: email.trim() || null,
+      accent_color: accentColor.trim(),
       logo_base64: logoBase64,
     });
   }
@@ -133,12 +235,29 @@ const Parametres = () => {
     );
   }
 
+  if (isSuperAdmin && !isLoadingCompany && isErrorCompany) {
+    return (
+      <AppErrorExperience
+        error={companyError}
+        onRetry={() => void refetchCompany()}
+      />
+    );
+  }
+
+  const isLoading = isSuperAdmin ? isLoadingCompany : isLoadingAgency;
+  const isSaving = isSuperAdmin
+    ? saveCompanyMutation.isPending
+    : saveAgencyMutation.isPending;
+  const hasChanges = isSuperAdmin ? companyHasChanges : agencyHasChanges;
+
   return (
     <div className="space-y-6 pb-8">
       <div>
         <h1 className="text-2xl md:text-3xl font-bold">Paramètres</h1>
         <p className="text-muted-foreground">
-          Configurez les paramètres de votre agence
+          {isSuperAdmin
+            ? "Informations société utilisées sur les bulletins de paie"
+            : "Configurez les paramètres de votre agence"}
         </p>
       </div>
 
@@ -146,39 +265,67 @@ const Parametres = () => {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Building2 className="w-5 h-5 text-primary" />
-            Informations de l'agence
+            {isSuperAdmin ? "Informations société" : "Informations de l'agence"}
           </CardTitle>
           <CardDescription>
-            Informations générales de votre compte agence
+            {isSuperAdmin
+              ? "Nom, contact et branding affichés sur les PDF RH"
+              : "Informations générales de votre compte agence"}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {isSuperAdmin ? (
-            <div className="text-center py-8 text-muted-foreground border border-muted rounded-lg p-4">
-              <p className="font-medium">Super administrateur</p>
-              <p className="text-sm mt-2">
-                Les super administrateurs n'ont pas d'agence associée.
-              </p>
-              <p className="text-sm mt-1">
-                Utilisez la page « Agences » pour modifier une agence
-                spécifique.
-              </p>
-            </div>
-          ) : isLoadingAgency ? (
+          {isLoading ? (
             <div className="flex items-center justify-center py-8">
               <LoadingSpinner size="md" variant="gif" />
             </div>
           ) : (
             <>
               <div>
-                <label className="text-sm font-medium">Nom de l'agence</label>
+                <label className="text-sm font-medium">
+                  {isSuperAdmin ? "Nom de la société" : "Nom de l'agence"}
+                </label>
                 <Input
                   value={agencyName}
                   onChange={(e) => setAgencyName(e.target.value)}
                   className="mt-1"
-                  placeholder="Nom de l'agence"
+                  placeholder={
+                    isSuperAdmin ? "LivSight" : "Nom de l'agence"
+                  }
                 />
               </div>
+              {isSuperAdmin ? (
+                <div>
+                  <label className="text-sm font-medium">Raison sociale</label>
+                  <Input
+                    value={legalName}
+                    onChange={(e) => setLegalName(e.target.value)}
+                    className="mt-1"
+                    placeholder="Raison sociale (pied de page PDF)"
+                  />
+                </div>
+              ) : null}
+              {isSuperAdmin ? (
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium">NUI</label>
+                    <Input
+                      value={taxId}
+                      onChange={(e) => setTaxId(e.target.value)}
+                      className="mt-1"
+                      placeholder="Numéro d’identification unique"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">RCCM</label>
+                    <Input
+                      value={tradeRegister}
+                      onChange={(e) => setTradeRegister(e.target.value)}
+                      className="mt-1"
+                      placeholder="Registre du commerce"
+                    />
+                  </div>
+                </div>
+              ) : null}
               <div>
                 <label className="text-sm font-medium">Logo</label>
                 <div className="mt-1 flex items-center gap-4">
@@ -219,7 +366,11 @@ const Parametres = () => {
               <div>
                 <label className="text-sm font-medium">Adresse</label>
                 <Textarea
-                  placeholder="Adresse complète de l'agence"
+                  placeholder={
+                    isSuperAdmin
+                      ? "Adresse complète de la société"
+                      : "Adresse complète de l'agence"
+                  }
                   className="mt-1"
                   value={address}
                   onChange={(e) => setAddress(e.target.value)}
@@ -239,37 +390,64 @@ const Parametres = () => {
                   <label className="text-sm font-medium">Email</label>
                   <Input
                     value={email}
-                    disabled
-                    className="mt-1 bg-muted"
-                    placeholder="Email de l'agence"
+                    onChange={
+                      isSuperAdmin
+                        ? (e) => setEmail(e.target.value)
+                        : undefined
+                    }
+                    disabled={!isSuperAdmin}
+                    className={`mt-1 ${isSuperAdmin ? "" : "bg-muted"}`}
+                    placeholder="contact@livsight.com"
                   />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    L'email ne peut pas être modifié ici
-                  </p>
+                  {!isSuperAdmin ? (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      L'email ne peut pas être modifié ici
+                    </p>
+                  ) : null}
                 </div>
               </div>
+              {isSuperAdmin ? (
+                <div>
+                  <label className="text-sm font-medium">
+                    Couleur d’accent (PDF)
+                  </label>
+                  <div className="mt-1 flex items-center gap-3">
+                    <Input
+                      type="color"
+                      value={accentColor}
+                      onChange={(e) => setAccentColor(e.target.value)}
+                      className="h-10 w-14 cursor-pointer p-1"
+                      aria-label="Couleur d’accent"
+                    />
+                    <Input
+                      value={accentColor}
+                      onChange={(e) => setAccentColor(e.target.value)}
+                      placeholder="#4A9FD4"
+                      className="font-mono uppercase"
+                    />
+                  </div>
+                </div>
+              ) : null}
             </>
           )}
         </CardContent>
       </Card>
 
-      {!isSuperAdmin && (
-        <div className="flex justify-end">
-          <Button
-            onClick={handleSave}
-            size="lg"
-            className="gap-2"
-            disabled={saveMutation.isPending || isLoadingAgency || !hasChanges}
-          >
-            {saveMutation.isPending ? (
-              <LoadingSpinner size="sm" variant="icon" className="gap-0" />
-            ) : (
-              <Save className="w-4 h-4" />
-            )}
-            Enregistrer les modifications
-          </Button>
-        </div>
-      )}
+      <div className="flex justify-end">
+        <Button
+          onClick={isSuperAdmin ? handleSaveCompany : handleSaveAgency}
+          size="lg"
+          className="gap-2"
+          disabled={isSaving || isLoading || !hasChanges}
+        >
+          {isSaving ? (
+            <LoadingSpinner size="sm" variant="icon" className="gap-0" />
+          ) : (
+            <Save className="w-4 h-4" />
+          )}
+          Enregistrer les modifications
+        </Button>
+      </div>
     </div>
   );
 };

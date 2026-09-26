@@ -16,7 +16,6 @@ import type { HrEmployee } from "@/services/hr";
 import {
   buildEmployeeDetailStats,
   buildEmployeeUpdatePayload,
-  currentMonthYearDouala,
   enrollmentBadgeLabel,
   enrollmentBadgeVariant,
   formatMonthLabelFr,
@@ -24,9 +23,17 @@ import {
   formatPenaltyBreakdownLines,
   formatSalary,
   countWorkdaysInMonth,
+  currentMonthYearDouala,
+  isPayrollEligibleForMonth,
 } from "@/pages/hr/hrUi";
 import { FaceEnrollDialog } from "@/pages/hr/FaceEnrollDialog";
-import { HrMonthPicker } from "@/pages/hr/HrMonthPicker";
+import { DateRangePicker } from "@/components/ui/date-range-picker";
+import {
+  getDateRangeForPreset,
+  monthYearFromDateRange,
+  snapDateRangeToMonth,
+  type DateRange,
+} from "@/lib/date-utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -62,7 +69,13 @@ import {
 import { UserCog, Plus, ScanFace, Pencil, Trash2, Eye } from "lucide-react";
 
 export default function EmployeesPage() {
-  const [{ year, month }, setPeriod] = useState(currentMonthYearDouala);
+  const [dateRange, setDateRange] = useState<DateRange>(() =>
+    getDateRangeForPreset("thisMonth")
+  );
+  const { year, month } = useMemo(
+    () => monthYearFromDateRange(dateRange),
+    [dateRange]
+  );
 
   const { data: employees = [], isLoading } = useHrEmployees();
   const { data: monthSummary = [], isLoading: loadingSummary } =
@@ -103,6 +116,7 @@ export default function EmployeesPage() {
   const [poste, setPoste] = useState("");
   const [salaryBase, setSalaryBase] = useState("");
   const [isActive, setIsActive] = useState(true);
+  const [includeNextMonth, setIncludeNextMonth] = useState(false);
 
   const [enrollTarget, setEnrollTarget] = useState<HrEmployee | null>(null);
 
@@ -113,6 +127,7 @@ export default function EmployeesPage() {
     setPoste("");
     setSalaryBase("");
     setIsActive(true);
+    setIncludeNextMonth(false);
   }
 
   function openCreate() {
@@ -121,12 +136,16 @@ export default function EmployeesPage() {
   }
 
   function openEdit(row: HrEmployee) {
+    const { year: cy, month: cm } = currentMonthYearDouala();
     setFullName(row.full_name);
     setEmail(row.email);
     setPhone(row.phone ?? "");
     setPoste(row.poste ?? "");
     setSalaryBase(row.salary_base != null ? String(row.salary_base) : "");
     setIsActive(row.is_active);
+    setIncludeNextMonth(
+      !isPayrollEligibleForMonth(row.payroll_eligible_from, cy, cm)
+    );
     setEditTarget(row);
   }
 
@@ -142,6 +161,7 @@ export default function EmployeesPage() {
       poste,
       salaryBase,
       isActive: true,
+      includeNextMonth,
     });
     await createEmployee.mutateAsync({
       full_name: payload.full_name,
@@ -149,6 +169,7 @@ export default function EmployeesPage() {
       phone: payload.phone,
       poste: payload.poste,
       salary_base: payload.salary_base,
+      include_next_month: payload.include_next_month,
     });
     setCreateOpen(false);
   }
@@ -168,6 +189,7 @@ export default function EmployeesPage() {
         poste,
         salaryBase,
         isActive,
+        includeNextMonth,
       }),
     });
     setEditTarget(null);
@@ -199,18 +221,11 @@ export default function EmployeesPage() {
             </p>
           </div>
         </div>
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <div className="space-y-1">
-            <Label htmlFor="employees-month" className="sr-only">
-              Mois
-            </Label>
-            <HrMonthPicker
-              id="employees-month"
-              year={year}
-              month={month}
-              onChange={setPeriod}
-            />
-          </div>
+        <div className="flex flex-col gap-2 sm:items-end w-full sm:w-auto">
+          <DateRangePicker
+            value={dateRange}
+            onChange={(next) => setDateRange(snapDateRangeToMonth(next))}
+          />
           <Button onClick={openCreate}>
             <Plus className="w-4 h-4 mr-2" />
             Ajouter un employé
@@ -259,6 +274,11 @@ export default function EmployeesPage() {
                 employees.map((row) => {
                   const enrolled = Boolean(row.is_enrolled || row.enrolled_at);
                   const stats = statsByEmployee.get(Number(row.id));
+                  const payrollEligible = isPayrollEligibleForMonth(
+                    row.payroll_eligible_from,
+                    year,
+                    month
+                  );
                   return (
                     <TableRow key={row.id} className="hover:bg-muted/50">
                       <TableCell className="font-medium">
@@ -278,15 +298,15 @@ export default function EmployeesPage() {
                         {row.is_active ? (stats?.daysLate ?? "—") : "—"}
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
-                        {row.is_active
+                        {row.is_active && payrollEligible
                           ? formatPayrollAmount(stats?.estimatedPay ?? null)
                           : "—"}
                       </TableCell>
                       <TableCell className="text-right text-xs tabular-nums">
-                        {row.is_active ? (
+                        {row.is_active && payrollEligible && stats ? (
                           <div className="inline-flex flex-col items-end gap-0.5 leading-snug text-muted-foreground">
                             {formatPenaltyBreakdownLines(
-                              stats?.penalties == null
+                              stats.penalties == null
                                 ? null
                                 : {
                                     late: stats.penaltyLate ?? 0,
@@ -387,11 +407,13 @@ export default function EmployeesPage() {
             phone={phone}
             poste={poste}
             salaryBase={salaryBase}
+            includeNextMonth={includeNextMonth}
             onFullNameChange={setFullName}
             onEmailChange={setEmail}
             onPhoneChange={setPhone}
             onPosteChange={setPoste}
             onSalaryBaseChange={setSalaryBase}
+            onIncludeNextMonthChange={setIncludeNextMonth}
           />
           <DialogFooter>
             <Button variant="outline" onClick={() => setCreateOpen(false)}>
@@ -427,11 +449,13 @@ export default function EmployeesPage() {
             phone={phone}
             poste={poste}
             salaryBase={salaryBase}
+            includeNextMonth={includeNextMonth}
             onFullNameChange={setFullName}
             onEmailChange={setEmail}
             onPhoneChange={setPhone}
             onPosteChange={setPoste}
             onSalaryBaseChange={setSalaryBase}
+            onIncludeNextMonthChange={setIncludeNextMonth}
           />
           <div className="flex items-center gap-2 py-1">
             <Checkbox
@@ -511,22 +535,26 @@ function EmployeeFormFields({
   phone,
   poste,
   salaryBase,
+  includeNextMonth,
   onFullNameChange,
   onEmailChange,
   onPhoneChange,
   onPosteChange,
   onSalaryBaseChange,
+  onIncludeNextMonthChange,
 }: {
   fullName: string;
   email: string;
   phone: string;
   poste: string;
   salaryBase: string;
+  includeNextMonth: boolean;
   onFullNameChange: (v: string) => void;
   onEmailChange: (v: string) => void;
   onPhoneChange: (v: string) => void;
   onPosteChange: (v: string) => void;
   onSalaryBaseChange: (v: string) => void;
+  onIncludeNextMonthChange: (v: boolean) => void;
 }) {
   return (
     <div className="space-y-4 py-2">
@@ -572,6 +600,23 @@ function EmployeeFormFields({
           value={salaryBase}
           onChange={(e) => onSalaryBaseChange(e.target.value)}
         />
+      </div>
+      <div className="flex items-start gap-2 rounded-lg border p-3">
+        <Checkbox
+          id="hr-include-next-month"
+          checked={includeNextMonth}
+          onCheckedChange={(v) => onIncludeNextMonthChange(v === true)}
+          className="mt-0.5"
+        />
+        <div className="space-y-1">
+          <Label htmlFor="hr-include-next-month" className="cursor-pointer">
+            Inclure au mois suivant
+          </Label>
+          <p className="text-xs text-muted-foreground">
+            Exclut ce salaire de la masse du mois en cours (rapports /
+            dashboard). Prise en compte à partir du 1er du mois suivant.
+          </p>
+        </div>
       </div>
     </div>
   );
