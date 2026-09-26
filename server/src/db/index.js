@@ -74,6 +74,7 @@ const api = {
   findAgencyByCode: queries.findAgencyByCode,
   getAllAgencies: queries.getAllAgencies,
   updateAgency: queries.updateAgency,
+  updateAgencyProfile: queries.updateAgencyProfile,
   deleteAgency: queries.deleteAgency,
   getWaitlistEntries: queries.getWaitlistEntries,
   insertWaitlistEntry: queries.insertWaitlistEntry,

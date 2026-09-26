@@ -73,6 +73,8 @@ describe('buildPayslipModel / payslipFileName', () => {
     expect(model.bulletinNo).toBe('PAIE-202609-2');
     expect(model.employeeName).toBe('Djou Tousse Eric');
     expect(model.monthLabel).toMatch(/septembre/i);
+    expect(model.generatedAtLabel).toMatch(/^\d{2}\/\d{2}\/\d{4}$/);
+    expect(model.generatedAtLabel).not.toMatch(/\d{2}:\d{2}/);
     expect(model.workdaysInMonth).toBe('26');
     expect(model.netPayLabel).toBe(formatCurrency(92308));
     expect(model.penaltiesTotalLabel).toBe(formatCurrency(7692));
@@ -109,6 +111,89 @@ describe('buildPayslipModel / payslipFileName', () => {
     expect(model.legalIdsLine).toBe('NUI: M123 · RCCM: RC/DLA/2020/B/1');
     expect(model.accentColor).toBe('#112233');
     expect(model.address).toBe('Yaoundé');
+  });
+
+  it('includes employer signature html when signature_base64 is set', () => {
+    const model = buildPayslipModel({
+      employee: {
+        id: 2,
+        full_name: 'Jean',
+        email: 'j@x.com',
+        salary_base: 100000,
+      },
+      month: 9,
+      year: 2026,
+      daysPresent: 1,
+      daysLate: 0,
+      daysAbsent: 0,
+      company: {
+        company_name: 'Acme RH',
+        signature_base64: 'data:image/png;base64,AAA',
+        stamp_base64: 'data:image/png;base64,STAMP',
+      },
+    });
+    expect(model.signatureBase64).toBe('data:image/png;base64,AAA');
+    expect(model.signatureHtml).toContain('data:image/png;base64,AAA');
+    expect(model.signatureHtml).toContain('signature-img');
+    expect(model.stampHtml).toContain('data:image/png;base64,STAMP');
+    expect(model.stampHtml).toContain('stamp-img');
+  });
+
+  it('includes signer name and role from company settings', () => {
+    const model = buildPayslipModel({
+      employee: {
+        id: 2,
+        full_name: 'Jean',
+        email: 'j@x.com',
+        salary_base: 100000,
+      },
+      month: 9,
+      year: 2026,
+      daysPresent: 1,
+      daysLate: 0,
+      daysAbsent: 0,
+      company: {
+        company_name: 'Acme RH',
+        signer_name: 'Djou Tousse Eric',
+        signer_role: 'Directeur Général',
+      },
+    });
+    expect(model.signerName).toBe('Djou Tousse Eric');
+    expect(model.signerRole).toBe('Directeur Général');
+  });
+
+  it('prefers personal signer profile over company signer fields', () => {
+    const model = buildPayslipModel({
+      employee: {
+        id: 2,
+        full_name: 'Jean',
+        email: 'j@x.com',
+        salary_base: 100000,
+      },
+      month: 9,
+      year: 2026,
+      daysPresent: 1,
+      daysLate: 0,
+      daysAbsent: 0,
+      company: {
+        company_name: 'Acme RH',
+        stamp_base64: 'data:image/png;base64,OLDSTAMP',
+        signer_name: 'Old Company Signer',
+        signature_base64: 'data:image/png;base64,OLD',
+      },
+      signer: {
+        name: 'Eric Djou',
+        fonction: 'Directeur Général',
+        signature_base64: 'data:image/png;base64,ME',
+        stamp_base64: 'data:image/png;base64,MYSTAMP',
+      },
+    });
+    expect(model.signerName).toBe('Eric Djou');
+    expect(model.signerRole).toBe('Directeur Général');
+    expect(model.signatureHtml).toContain('data:image/png;base64,ME');
+    // Both stamps are rendered: company on the page left, personal next to the signature.
+    expect(model.stampHtml).toContain('data:image/png;base64,OLDSTAMP');
+    expect(model.profileStampHtml).toContain('data:image/png;base64,MYSTAMP');
   });
 
   it('builds a safe PDF filename', () => {

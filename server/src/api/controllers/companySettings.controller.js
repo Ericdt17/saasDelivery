@@ -1,5 +1,6 @@
 /**
  * Company settings API — singleton branding for PDFs (super_admin)
+ * Personal signature lives on agencies via /settings/me.
  */
 
 const { z } = require("zod");
@@ -27,6 +28,7 @@ const putCompanySettingsSchema = z.object({
     .regex(ACCENT_COLOR_RE, "accent_color must be #RRGGBB")
     .optional(),
   logo_base64: z.string().nullable().optional(),
+  stamp_base64: z.string().nullable().optional(),
 });
 
 function toPublicCompanySettings(row) {
@@ -41,6 +43,7 @@ function toPublicCompanySettings(row) {
     email: branding.email,
     accent_color: branding.accentColor,
     logo_base64: branding.logoBase64,
+    stamp_base64: branding.stampBase64,
     updated_at: row?.updated_at ?? null,
   };
 }
@@ -68,6 +71,7 @@ async function putCompanySettingsHandler(req, res, next) {
       });
     }
     const body = parsed.data;
+    const existing = await getCompanySettings();
     const row = await upsertCompanySettings({
       company_name: body.company_name,
       legal_name: body.legal_name ?? null,
@@ -78,6 +82,11 @@ async function putCompanySettingsHandler(req, res, next) {
       email: body.email ?? null,
       accent_color: body.accent_color || DEFAULT_COMPANY_BRANDING.accentColor,
       logo_base64: body.logo_base64 ?? null,
+      // Preserve legacy company signature/signer columns if present
+      signature_base64: existing?.signature_base64 ?? null,
+      stamp_base64: body.stamp_base64 ?? null,
+      signer_name: existing?.signer_name ?? null,
+      signer_role: existing?.signer_role ?? null,
     });
     return res.json({
       success: true,

@@ -43,6 +43,7 @@ const allNavItems: NavItem[] = [
   { title: "Conditions marchands", href: "/conditions-marchands", icon: ScrollText, requireSuperAdmin: true },
   { title: "Offres", href: "/recruitment/jobs", icon: Briefcase },
   { title: "Candidatures", href: "/recruitment/applications", icon: UserCircle },
+  { title: "Mon profil", href: "/mon-profil", icon: UserCircle, requireSuperAdmin: true },
   { title: "Paramètres", href: "/parametres", icon: Settings },
 ];
 

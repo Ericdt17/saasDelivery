@@ -10,6 +10,7 @@ import { AgencyProvider } from "@/contexts/AgencyContext";
 import Login from "./pages/auth/Login";
 import Index from "./pages/dashboard/Index";
 import Parametres from "./pages/config/Parametres";
+import MyProfilePage from "./pages/config/MyProfilePage";
 import Agencies from "./pages/admin/Agencies";
 import Waitlist from "./pages/admin/Waitlist";
 import MerchantTermsPage from "./pages/admin/MerchantTermsPage";
@@ -108,6 +109,14 @@ const App = () => (
                 }
               />
               <Route path="/parametres" element={<Parametres />} />
+              <Route
+                path="/mon-profil"
+                element={
+                  <ProtectedRoute requireSuperAdmin>
+                    <MyProfilePage />
+                  </ProtectedRoute>
+                }
+              />
               <Route path="/recruitment/jobs" element={<JobsPage />} />
               <Route
                 path="/recruitment/applications"

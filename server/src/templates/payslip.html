@@ -146,9 +146,92 @@ td.num, th.num {
       padding-top: 8px;
       border-top: 1px solid #dddddd;
       font-size: 8px;
-      color: #888888;
+      color: {{accentColor}};
       text-align: center;
       line-height: 1.4;
+    }
+
+    .signatures {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      margin-top: 28px;
+      page-break-inside: avoid;
+    }
+
+    .stamp-box {
+      padding-left: 30px;
+      padding-bottom: 10px;
+    }
+
+    .signature-box {
+      width: 45%;
+      text-align: center;
+    }
+
+    .signature-box .title {
+      font-size: 9px;
+      font-weight: bold;
+      text-transform: uppercase;
+      color: #444444;
+      margin-bottom: 8px;
+    }
+
+    .signature-slot {
+      height: 72px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      gap: 12px;
+      margin-bottom: 6px;
+      position: relative;
+    }
+
+    .signature-img {
+      max-width: 140px;
+      max-height: 70px;
+      object-fit: contain;
+      display: block;
+    }
+
+    .stamp-img {
+      max-width: 140px;
+      max-height: 120px;
+      object-fit: contain;
+      display: block;
+    }
+
+    /* Overlays the centred signature without shifting it. */
+    .profile-stamp-img {
+      max-width: 140px;
+      max-height: 120px;
+      object-fit: contain;
+      position: absolute;
+      right: 10px;
+      bottom: 45px;
+      transform: rotate(12deg);
+      opacity: 0.92;
+    }
+
+    .signature-line {
+      border-top: 1px solid #999999;
+      margin: 0 12px;
+      padding-top: 4px;
+      font-size: 8px;
+      color: #666666;
+    }
+
+    .signer-name {
+      margin-top: 8px;
+      font-size: 10px;
+      font-weight: bold;
+      color: #1a1a1a;
+    }
+
+    .signer-role {
+      font-size: 8px;
+      color: #555555;
+      margin-top: 2px;
     }
   </style>
 </head>
@@ -162,7 +245,6 @@ td.num, th.num {
     <div class="header-right">
       <div class="report-meta">
         <span class="label">Bulletin N°:</span> <span class="value">{{bulletinNo}}</span><br />
-        <span class="label">Employé:</span> <span class="value">{{employeeName}}</span><br />
         <span class="label">Période:</span> <span class="value">{{monthLabel}}</span><br />
         <span class="label">Généré le:</span> <span class="value">{{generatedAtLabel}}</span>
       </div>
@@ -274,10 +356,20 @@ td.num, th.num {
     </tbody>
   </table>
 
+  <div class="signatures">
+    <div class="stamp-box">{{stampHtml}}</div>
+    <div class="signature-box">
+      <div class="title">Employeur</div>
+      <div class="signature-slot">{{signatureHtml}}{{profileStampHtml}}</div>
+      <div class="signature-line">Signature / cachet</div>
+      <div class="signer-name">{{signerName}}</div>
+      <div class="signer-role">{{signerRole}}</div>
+    </div>
+  </div>
+
   <div class="footer">
     {{legalName}} — {{address}} — {{phone}} — {{email}}<br />
-    {{legalIdsLine}}<br />
-    Document généré automatiquement — estimation basée sur les pointages du mois.
+    {{legalIdsLine}}
   </div>
 </body>
 </html>

@@ -26,12 +26,14 @@ const Parametres = () => {
   const { user, isSuperAdmin } = useAuth();
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const stampInputRef = useRef<HTMLInputElement>(null);
 
   const [agencyName, setAgencyName] = useState("");
   const [address, setAddress] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [logoBase64, setLogoBase64] = useState<string | null>(null);
+  const [stampBase64, setStampBase64] = useState<string | null>(null);
   const [legalName, setLegalName] = useState("");
   const [taxId, setTaxId] = useState("");
   const [tradeRegister, setTradeRegister] = useState("");
@@ -84,6 +86,7 @@ const Parametres = () => {
       setEmail(company.email || "");
       setAccentColor(company.accent_color || "#4A9FD4");
       setLogoBase64(company.logo_base64 || null);
+      setStampBase64(company.stamp_base64 || null);
     }
   }, [company]);
 
@@ -108,7 +111,8 @@ const Parametres = () => {
       phone.trim() !== (company.phone || "") ||
       email.trim() !== (company.email || "") ||
       accentColor.trim() !== (company.accent_color || "#4A9FD4") ||
-      logoBase64 !== (company.logo_base64 || null)
+      logoBase64 !== (company.logo_base64 || null) ||
+      stampBase64 !== (company.stamp_base64 || null)
     );
   }, [
     company,
@@ -121,6 +125,7 @@ const Parametres = () => {
     email,
     accentColor,
     logoBase64,
+    stampBase64,
   ]);
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -138,6 +143,26 @@ const Parametres = () => {
     reader.onloadend = async () => {
       const trimmed = await trimLogoWhitespace(reader.result as string);
       setLogoBase64(trimmed);
+    };
+    reader.onerror = () => toast.error("Erreur lors de la lecture du fichier");
+    reader.readAsDataURL(file);
+  };
+
+  const handleStampUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Veuillez sélectionner un fichier image");
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error("Le fichier est trop volumineux (max 2MB)");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onloadend = async () => {
+      const trimmed = await trimLogoWhitespace(reader.result as string);
+      setStampBase64(trimmed);
     };
     reader.onerror = () => toast.error("Erreur lors de la lecture du fichier");
     reader.readAsDataURL(file);
@@ -218,6 +243,7 @@ const Parametres = () => {
       email: email.trim() || null,
       accent_color: accentColor.trim(),
       logo_base64: logoBase64,
+      stamp_base64: stampBase64,
     });
   }
 
@@ -269,7 +295,7 @@ const Parametres = () => {
           </CardTitle>
           <CardDescription>
             {isSuperAdmin
-              ? "Nom, contact et branding affichés sur les PDF RH"
+              ? "Nom, contact, logo et cachet affichés sur les PDF RH"
               : "Informations générales de votre compte agence"}
           </CardDescription>
         </CardHeader>
@@ -363,6 +389,60 @@ const Parametres = () => {
                   </div>
                 </div>
               </div>
+              {isSuperAdmin ? (
+                <div>
+                  <label className="text-sm font-medium">Cachet société</label>
+                  <div className="mt-1 flex items-center gap-4">
+                    <div className="w-20 h-20 rounded-xl border bg-muted/40 flex items-center justify-center overflow-hidden px-2">
+                      {stampBase64 ? (
+                        <img
+                          src={stampBase64}
+                          alt="Cachet"
+                          className="max-h-16 max-w-full object-contain"
+                        />
+                      ) : (
+                        <span className="text-xs text-muted-foreground">
+                          Aucun
+                        </span>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <input
+                        ref={stampInputRef}
+                        type="file"
+                        accept="image/*"
+                        onChange={handleStampUpload}
+                        className="hidden"
+                      />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-2"
+                        onClick={() => stampInputRef.current?.click()}
+                      >
+                        <Upload className="w-4 h-4" />
+                        {stampBase64
+                          ? "Changer le cachet"
+                          : "Ajouter un cachet"}
+                      </Button>
+                      {stampBase64 ? (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-muted-foreground"
+                          onClick={() => setStampBase64(null)}
+                        >
+                          Retirer
+                        </Button>
+                      ) : null}
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Affiché à côté de la signature personnelle (Mon profil) sur
+                    les bulletins
+                  </p>
+                </div>
+              ) : null}
               <div>
                 <label className="text-sm font-medium">Adresse</label>
                 <Textarea
