@@ -22,16 +22,20 @@ import {
 } from "@/hooks/useHr";
 import {
   buildHrDashboardStats,
-  currentMonthYearDouala,
   countWorkdaysInMonth,
   formatAttendanceRatePct,
   formatMonthLabelFr,
   formatPayrollAmount,
   todayDateStringDouala,
 } from "@/pages/hr/hrUi";
-import { HrMonthPicker } from "@/pages/hr/HrMonthPicker";
+import { DateRangePicker } from "@/components/ui/date-range-picker";
+import {
+  getDateRangeForPreset,
+  monthYearFromDateRange,
+  snapDateRangeToMonth,
+  type DateRange,
+} from "@/lib/date-utils";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
 import { StatCard } from "@/components/ui/stat-card";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -55,7 +59,13 @@ const Index = () => {
 
 function HrDashboardContent() {
   const today = todayDateStringDouala();
-  const [{ year, month }, setPeriod] = useState(currentMonthYearDouala);
+  const [dateRange, setDateRange] = useState<DateRange>(() =>
+    getDateRangeForPreset("thisMonth")
+  );
+  const { year, month } = useMemo(
+    () => monthYearFromDateRange(dateRange),
+    [dateRange]
+  );
 
   const {
     data: employees = [],
@@ -80,6 +90,8 @@ function HrDashboardContent() {
         todayAttendances,
         monthSummary,
         workdaysInMonth: countWorkdaysInMonth(year, month),
+        year,
+        month,
       }),
     [employees, todayAttendances, monthSummary, year, month]
   );
@@ -100,18 +112,11 @@ function HrDashboardContent() {
             </p>
           </div>
         </div>
-        <div className="flex flex-col gap-2 sm:items-end">
-          <div className="space-y-1">
-            <Label htmlFor="dashboard-month" className="sr-only">
-              Mois
-            </Label>
-            <HrMonthPicker
-              id="dashboard-month"
-              year={year}
-              month={month}
-              onChange={setPeriod}
-            />
-          </div>
+        <div className="flex flex-col gap-2 sm:items-end w-full sm:w-auto">
+          <DateRangePicker
+            value={dateRange}
+            onChange={(next) => setDateRange(snapDateRangeToMonth(next))}
+          />
           <div className="flex flex-wrap gap-2">
             <Button asChild variant="outline">
               <Link to="/hr/employees">Employés</Link>

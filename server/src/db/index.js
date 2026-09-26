@@ -113,6 +113,8 @@ const api = {
   upsertAttendance: queries.upsertAttendance,
   listAttendances: queries.listAttendances,
   summarizeAttendances: queries.summarizeAttendances,
+  getCompanySettings: queries.getCompanySettings,
+  upsertCompanySettings: queries.upsertCompanySettings,
   close: queries.close,
   getRawDb: queries.getRawDb,
 };

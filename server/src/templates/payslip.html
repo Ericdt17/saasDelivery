@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <title>Bulletin de paie</title>
+  <style type="text/css">
+    @page {
+      size: A4;
+      margin: 12mm 14mm 22mm 14mm;
+    }
+
+    body {
+      font-family: Helvetica, Arial, sans-serif;
+      font-size: 10px;
+      color: #1a1a1a;
+      margin: 0;
+      padding: 0;
+    }
+
+    /* ── Header layout ── */
+    .header-flex {
+      display: flex;
+      align-items: center;
+      width: 100%;
+    }
+
+    .header-left  { flex: 0 0 58%; }
+    .header-right { flex: 1; text-align: right; }
+
+    /* ── Logo slot — ONLY touch this to resize the logo ── */
+    .logo-wrapper {
+      width: 220px;
+      height: 80px;
+    }
+
+    .header-logo {
+      width: 100%;
+      height: 100%;
+      display: block;
+      object-fit: contain;
+      object-position: left center;
+    }
+
+    .report-meta {
+      font-size: 10px;
+      color: #1a1a1a;
+      line-height: 1.7;
+    }
+
+    .report-meta .label {
+      color: #444444;
+    }
+
+    .report-meta .value {
+      font-weight: bold;
+    }
+
+    .report-title {
+      font-size: 14px;
+      font-weight: bold;
+      text-transform: uppercase;
+      margin-top: 4px;
+      text-align: center;
+      color: {{accentColor}};
+    }
+
+    .header-rule {
+      border-bottom: 2px solid {{accentColor}};
+      margin: 4px 0 8px 0;
+    }
+
+    h2 {
+      font-size: 11px;
+      font-weight: bold;
+      color: {{accentColor}};
+      margin: 14px 0 6px 0;
+      text-transform: uppercase;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    th, td {
+      border: 1px solid #cccccc;
+      padding: 5px 8px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background-color: {{accentColor}};
+      color: #ffffff;
+      font-size: 9px;
+      text-transform: uppercase;
+    }
+
+    tr:nth-child(even) td {
+      background-color: #EBF5FB;
+    }
+
+td.num, th.num {
+      text-align: right;
+    }
+
+    .total-row td {
+      background-color: #D6EAF8;
+      font-weight: bold;
+    }
+
+    .net-row td {
+      background-color: #D6EAF8;
+      font-weight: bold;
+      font-size: 12px;
+      color: {{accentColor}};
+    }
+
+    .deduct {
+      color: #c0392b;
+    }
+
+    .summary {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 4px;
+    }
+
+    .summary td {
+      border: none;
+      padding: 4px 6px;
+      background: transparent;
+    }
+
+    .summary .label {
+      color: #444444;
+    }
+
+    .summary .value {
+      text-align: right;
+      font-weight: bold;
+    }
+
+    .footer {
+      margin-top: 28px;
+      padding-top: 8px;
+      border-top: 1px solid #dddddd;
+      font-size: 8px;
+      color: #888888;
+      text-align: center;
+      line-height: 1.4;
+    }
+  </style>
+</head>
+<body>
+  <div class="header-flex">
+    <div class="header-left">
+      <div class="logo-wrapper">
+        {{logoHtml}}
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="report-meta">
+        <span class="label">Bulletin N°:</span> <span class="value">{{bulletinNo}}</span><br />
+        <span class="label">Employé:</span> <span class="value">{{employeeName}}</span><br />
+        <span class="label">Période:</span> <span class="value">{{monthLabel}}</span><br />
+        <span class="label">Généré le:</span> <span class="value">{{generatedAtLabel}}</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-title">Bulletin de paie</div>
+  <div class="header-rule"></div>
+
+  <h2>Identité</h2>
+  <table class="summary">
+    <tbody>
+      <tr>
+        <td class="label">Nom</td>
+        <td class="value">{{employeeName}}</td>
+      </tr>
+      <tr>
+        <td class="label">Email</td>
+        <td class="value">{{employeeEmail}}</td>
+      </tr>
+      <tr>
+        <td class="label">Poste</td>
+        <td class="value">{{employeePoste}}</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>Récapitulatif des jours</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Indicateur</th>
+        <th class="num">Valeur</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Jours ouvrés du mois (lun–sam)</td>
+        <td class="num">{{workdaysInMonth}}</td>
+      </tr>
+      <tr>
+        <td>Jours écoulés (lun–sam)</td>
+        <td class="num">{{weekdaysElapsed}}</td>
+      </tr>
+      <tr>
+        <td>Présents</td>
+        <td class="num">{{daysPresent}}</td>
+      </tr>
+      <tr>
+        <td>Retards</td>
+        <td class="num">{{daysLate}}</td>
+      </tr>
+      <tr>
+        <td>Absents</td>
+        <td class="num">{{daysAbsent}}</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>Salaire et coût d’un jour</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Libellé</th>
+        <th class="num">Montant</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Salaire de base</td>
+        <td class="num">{{salaryBaseLabel}}</td>
+      </tr>
+      <tr>
+        <td>Coût d’un jour de retard (0,5)</td>
+        <td class="num">{{costLateDayLabel}}</td>
+      </tr>
+      <tr>
+        <td>Coût d’un jour d’absence</td>
+        <td class="num">{{costAbsentDayLabel}}</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>Pénalités</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Libellé</th>
+        <th class="num">Montant</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Pénalités retards</td>
+        <td class="num deduct">{{penaltyLateLabel}}</td>
+      </tr>
+      <tr>
+        <td>Pénalités absences</td>
+        <td class="num deduct">{{penaltyAbsentLabel}}</td>
+      </tr>
+      <tr class="total-row">
+        <td>Total pénalités</td>
+        <td class="num deduct">{{penaltiesTotalLabel}}</td>
+      </tr>
+      <tr class="net-row">
+        <td>Net à payer</td>
+        <td class="num">{{netPayLabel}}</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="footer">
+    {{legalName}} — {{address}} — {{phone}} — {{email}}<br />
+    {{legalIdsLine}}<br />
+    Document généré automatiquement — estimation basée sur les pointages du mois.
+  </div>
+</body>
+</html>

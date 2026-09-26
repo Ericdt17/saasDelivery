@@ -16,7 +16,11 @@ import {
   HandCoins,
   UserCheck,
   Scale,
+  Eye,
+  Download,
+  MessageCircle,
 } from "lucide-react";
+import { toast } from "sonner";
 import {
   useCreateManualAttendance,
   useHrAttendances,
@@ -24,12 +28,17 @@ import {
   useHrEmployees,
 } from "@/hooks/useHr";
 import {
+  buildPayslipFileName,
+  downloadPayslipPdf,
+  previewPayslipPdf,
+  sendPayslipWhatsapp,
+} from "@/services/hr";
+import {
   attendanceStatusClassName,
   attendanceStatusLabel,
   buildEmployeeDetailStats,
   buildEmployeeMonthDayRows,
   canSetAttendanceStatus,
-  currentMonthYearDouala,
   enrollmentBadgeLabel,
   enrollmentBadgeVariant,
   formatAttendanceRatePct,
@@ -43,12 +52,23 @@ import {
   formatSalary,
   type AttendanceStatus,
 } from "@/pages/hr/hrUi";
-import { HrMonthPicker } from "@/pages/hr/HrMonthPicker";
+import { DateRangePicker } from "@/components/ui/date-range-picker";
+import {
+  getDateRangeForPreset,
+  monthYearFromDateRange,
+  snapDateRangeToMonth,
+  type DateRange,
+} from "@/lib/date-utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatCard } from "@/components/ui/stat-card";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Table,
   TableBody,
@@ -63,7 +83,13 @@ export default function EmployeeDetailPage() {
   const employeeId = Number(id);
   const [pendingKey, setPendingKey] = useState<string | null>(null);
 
-  const [{ year, month }, setPeriod] = useState(currentMonthYearDouala);
+  const [dateRange, setDateRange] = useState<DateRange>(() =>
+    getDateRangeForPreset("thisMonth")
+  );
+  const { year, month } = useMemo(
+    () => monthYearFromDateRange(dateRange),
+    [dateRange]
+  );
 
   const { data: employees = [], isLoading: loadingEmployees } = useHrEmployees();
   const { data: monthSummary = [], isLoading: loadingSummary } =
@@ -75,6 +101,13 @@ export default function EmployeeDetailPage() {
       year,
     });
   const createManual = useCreateManualAttendance();
+  const [payslipBusy, setPayslipBusy] = useState<
+    "preview" | "download" | "whatsapp" | null
+  >(null);
+  const [payslipPreview, setPayslipPreview] = useState<{
+    objectUrl: string;
+    fileName: string;
+  } | null>(null);
 
   const employee = useMemo(
     () => employees.find((e) => Number(e.id) === employeeId) ?? null,
@@ -117,6 +150,78 @@ export default function EmployeeDetailPage() {
       });
     } finally {
       setPendingKey(null);
+    }
+  }
+
+  async function handlePayslip(mode: "preview" | "download") {
+    if (!Number.isFinite(employeeId) || !employee) return;
+    setPayslipBusy(mode);
+    const fileName = buildPayslipFileName(employee, year, month);
+    try {
+      if (mode === "preview") {
+        const next = await previewPayslipPdf(employeeId, {
+          month,
+          year,
+          fileName,
+        });
+        setPayslipPreview((prev) => {
+          if (prev?.objectUrl) URL.revokeObjectURL(prev.objectUrl);
+          return next;
+        });
+      } else {
+        await downloadPayslipPdf(employeeId, { month, year, fileName });
+      }
+    } catch (err) {
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : "Impossible de générer le bulletin de paie"
+      );
+    } finally {
+      setPayslipBusy(null);
+    }
+  }
+
+  async function handleSendPayslipWhatsapp() {
+    if (!Number.isFinite(employeeId) || !employee) return;
+    if (!employee.phone?.trim()) {
+      toast.error("Ajoutez un numéro de téléphone à l’employé avant d’envoyer.");
+      return;
+    }
+    setPayslipBusy("whatsapp");
+    try {
+      await sendPayslipWhatsapp(employeeId, { month, year });
+      toast.success("Bulletin envoyé sur WhatsApp");
+    } catch (err) {
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : "Impossible d'envoyer le bulletin sur WhatsApp"
+      );
+    } finally {
+      setPayslipBusy(null);
+    }
+  }
+
+  function closePayslipPreview() {
+    setPayslipPreview((prev) => {
+      if (prev?.objectUrl) URL.revokeObjectURL(prev.objectUrl);
+      return null;
+    });
+  }
+
+  async function downloadFromPreview() {
+    if (!payslipPreview) return;
+    setPayslipBusy("download");
+    try {
+      const a = document.createElement("a");
+      a.href = payslipPreview.objectUrl;
+      a.download = payslipPreview.fileName;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } finally {
+      setPayslipBusy(null);
     }
   }
 
@@ -183,17 +288,53 @@ export default function EmployeeDetailPage() {
             </div>
           )}
         </div>
-        <div className="flex flex-col gap-2 sm:items-end">
-          <div className="space-y-1">
-            <Label htmlFor="employee-detail-month" className="sr-only">
-              Mois
-            </Label>
-            <HrMonthPicker
-              id="employee-detail-month"
-              year={year}
-              month={month}
-              onChange={setPeriod}
-            />
+        <div className="flex flex-col gap-2 sm:items-end w-full sm:w-auto">
+          <DateRangePicker
+            value={dateRange}
+            onChange={(next) => setDateRange(snapDateRangeToMonth(next))}
+          />
+          <div className="flex flex-wrap gap-2 sm:justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={!employee || payslipBusy !== null}
+              onClick={() => handlePayslip("preview")}
+            >
+              <Eye className="mr-1.5 h-4 w-4" />
+              {payslipBusy === "preview" ? "Génération…" : "Prévisualiser"}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={!employee || payslipBusy !== null}
+              onClick={() => handlePayslip("download")}
+            >
+              <Download className="mr-1.5 h-4 w-4" />
+              {payslipBusy === "download" ? "Génération…" : "Télécharger"}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={
+                !employee ||
+                payslipBusy !== null ||
+                !employee.phone?.trim()
+              }
+              title={
+                employee?.phone?.trim()
+                  ? "Envoyer le bulletin sur WhatsApp"
+                  : "Numéro de téléphone requis"
+              }
+              onClick={() => void handleSendPayslipWhatsapp()}
+            >
+              <MessageCircle className="mr-1.5 h-4 w-4" />
+              {payslipBusy === "whatsapp"
+                ? "Envoi…"
+                : "Envoyer WhatsApp"}
+            </Button>
           </div>
           <Button asChild variant="outline">
             <Link to="/hr/attendances">Voir les présences</Link>
@@ -464,6 +605,48 @@ export default function EmployeeDetailPage() {
           </div>
         </>
       )}
+
+      <Dialog
+        open={payslipPreview != null}
+        onOpenChange={(open) => {
+          if (!open) closePayslipPreview();
+        }}
+      >
+        <DialogContent className="flex h-[90vh] max-h-[90vh] w-[min(960px,95vw)] max-w-[95vw] flex-col gap-3 overflow-hidden p-4 sm:rounded-lg">
+          <DialogHeader className="shrink-0 space-y-1 pr-8">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div className="min-w-0 space-y-1">
+                <DialogTitle>Bulletin de paie</DialogTitle>
+                {payslipPreview?.fileName ? (
+                  <p className="text-sm font-normal text-muted-foreground truncate">
+                    {payslipPreview.fileName}
+                  </p>
+                ) : null}
+              </div>
+              {payslipPreview ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0"
+                  disabled={payslipBusy !== null}
+                  onClick={() => void downloadFromPreview()}
+                >
+                  <Download className="mr-1.5 h-4 w-4" />
+                  {payslipBusy === "download" ? "Génération…" : "Télécharger"}
+                </Button>
+              ) : null}
+            </div>
+          </DialogHeader>
+          {payslipPreview?.objectUrl ? (
+            <iframe
+              title="Aperçu bulletin de paie"
+              src={payslipPreview.objectUrl}
+              className="min-h-0 w-full flex-1 rounded-md border bg-muted/30"
+            />
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

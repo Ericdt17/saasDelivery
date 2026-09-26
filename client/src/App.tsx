@@ -18,6 +18,7 @@ import ApplicationsPage from "./pages/recruitment/ApplicationsPage";
 import EmployeesPage from "./pages/hr/EmployeesPage";
 import EmployeeDetailPage from "./pages/hr/EmployeeDetailPage";
 import AttendancesPage from "./pages/hr/AttendancesPage";
+import OpsReportsPage from "./pages/reports/OpsReportsPage";
 import RecruitmentLandingPage from "./pages/recruitment/public/RecruitmentLandingPage";
 import ApplyPage from "./pages/recruitment/public/ApplyPage";
 import NotFound from "./pages/NotFound";
@@ -133,6 +134,14 @@ const App = () => (
                 element={
                   <ProtectedRoute requireSuperAdmin>
                     <AttendancesPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/rapports"
+                element={
+                  <ProtectedRoute requireSuperAdmin>
+                    <OpsReportsPage />
                   </ProtectedRoute>
                 }
               />

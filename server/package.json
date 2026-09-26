@@ -21,7 +21,8 @@
     "test:prod-setup": "node src/scripts/test-prod-migration.js",
     "test:migration-prod": "node src/scripts/test-migration-prod.js",
     "test:startup": "node src/scripts/test-startup-script.js",
-    "check-dev-migrations": "node src/scripts/check-dev-migrations.js"
+    "check-dev-migrations": "node src/scripts/check-dev-migrations.js",
+    "puppeteer:install": "npx puppeteer browsers install chrome"
   },
   "keywords": [],
   "author": "",
@@ -46,6 +47,7 @@
     "pg": "^8.11.3",
     "pino": "^10.3.1",
     "pino-http": "^11.0.0",
+    "puppeteer": "^24.43.1",
     "xlsx": "^0.18.5",
     "zod": "^4.3.6"
   },

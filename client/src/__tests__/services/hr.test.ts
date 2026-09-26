@@ -22,6 +22,7 @@ import {
   listAttendances,
   createManualAttendance,
   getAttendancesSummary,
+  sendPayslipWhatsapp,
   type HrEmployee,
   type HrAttendance,
 } from "@/services/hr";
@@ -38,6 +39,7 @@ const employeeFixture: HrEmployee = {
   phone: null,
   poste: "Livreur",
   salary_base: 150000,
+  payroll_eligible_from: "2026-01-01",
   is_active: true,
   is_enrolled: false,
   enrolled_at: null,
@@ -241,5 +243,23 @@ describe("getAttendancesSummary", () => {
       year: 2026,
     });
     expect(rows[0].days_absent).toBe(3);
+  });
+
+  it("calls apiPost for sendPayslipWhatsapp", async () => {
+    mockApiPost.mockResolvedValueOnce({
+      success: true,
+      data: {
+        sent: true,
+        recipient: "237690000000@c.us",
+        message_id: "msg-1",
+        filename: "Bulletin-paie-Jean-Dupont-2026-09.pdf",
+      },
+    });
+    const result = await sendPayslipWhatsapp(1, { month: 9, year: 2026 });
+    expect(mockApiPost).toHaveBeenCalledWith(
+      "/api/v1/hr/employees/1/payslip/send-whatsapp?month=9&year=2026"
+    );
+    expect(result.sent).toBe(true);
+    expect(result.message_id).toBe("msg-1");
   });
 });

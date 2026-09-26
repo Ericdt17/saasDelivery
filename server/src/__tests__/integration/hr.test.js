@@ -17,6 +17,7 @@ const mockCreateAttendance = jest.fn();
 const mockUpsertAttendance = jest.fn();
 const mockListAttendances = jest.fn();
 const mockSummarizeAttendances = jest.fn();
+const mockGetCompanySettings = jest.fn();
 
 jest.mock('../../db', () => ({
   adapter: { query: jest.fn(), type: 'sqlite' },
@@ -32,6 +33,7 @@ jest.mock('../../db', () => ({
   upsertAttendance: mockUpsertAttendance,
   listAttendances: mockListAttendances,
   summarizeAttendances: mockSummarizeAttendances,
+  getCompanySettings: mockGetCompanySettings,
   listMerchantTerms: jest.fn(),
   getMerchantTermsById: jest.fn(),
   createMerchantTerms: jest.fn(),
@@ -75,6 +77,22 @@ jest.mock('../../db', () => ({
   recruitmentListAdminJobsWithCounts: jest.fn(),
 }));
 
+const mockSendTextDm = jest.fn();
+const mockIsWhatsAppBotEnabled = jest.fn(() => true);
+jest.mock('../../lib/whatsappBotClient', () => ({
+  sendTextDm: (...args) => mockSendTextDm(...args),
+  sendDocumentDm: jest.fn(),
+  isWhatsAppBotEnabled: () => mockIsWhatsAppBotEnabled(),
+  WhatsAppBotError: class WhatsAppBotError extends Error {
+    constructor(message, { status = null, code } = {}) {
+      super(message);
+      this.name = 'WhatsAppBotError';
+      this.status = status;
+      this.code = code;
+    }
+  },
+}));
+
 jest.mock('../../lib/hrCheckin', () => {
   const actual = jest.requireActual('../../lib/hrCheckin');
   return {
@@ -92,6 +110,11 @@ jest.mock('../../lib/botAlerts', () => {
   };
 });
 
+const mockRenderPayslipPdf = jest.fn().mockResolvedValue(Buffer.from('%PDF-1.4 mock'));
+jest.mock('../../lib/pdf/renderPayslipPdf', () => ({
+  renderPayslipPdf: (...args) => mockRenderPayslipPdf(...args),
+}));
+
 const app = require('../../api/server');
 const { resetHrCheckinRateLimit } = require('../../api/middleware/hrCheckinRateLimit');
 const { getCheckInStatus, OFFICE_LAT, OFFICE_LNG } = require('../../lib/hrCheckin');
@@ -106,6 +129,7 @@ const employeeFixture = {
   phone: '690000000',
   poste: 'Livreur',
   salary_base: 150000,
+  payroll_eligible_from: '2026-01-01',
   is_active: true,
   is_enrolled: false,
   enrolled_at: null,
@@ -127,6 +151,17 @@ const enrolledEmployee = {
 beforeEach(async () => {
   await resetHrCheckinRateLimit();
   mockNotifyHrCheckinAlert.mockClear();
+  mockRenderPayslipPdf.mockClear();
+  mockRenderPayslipPdf.mockResolvedValue(Buffer.from('%PDF-1.4 mock'));
+  mockGetCompanySettings.mockResolvedValue(null);
+  mockSendTextDm.mockReset();
+  mockIsWhatsAppBotEnabled.mockReset();
+  mockIsWhatsAppBotEnabled.mockReturnValue(true);
+  process.env.PUBLIC_API_BASE_URL = 'http://api.test:3000';
+  process.env.PAYSLIP_LINKS_FILE = require('path').join(
+    require('os').tmpdir(),
+    `payslip-links-hr-test-${process.pid}.json`
+  );
   getCheckInStatus.mockImplementation(
     jest.requireActual('../../lib/hrCheckin').getCheckInStatus
   );
@@ -194,7 +229,42 @@ describe('POST /api/v1/hr/employees', () => {
     expect(res.body.success).toBe(true);
     expect(res.body.data.email).toBe('jean.dupont@example.com');
     expect(res.body.data).not.toHaveProperty('face_descriptor');
-    expect(mockCreateEmployee).toHaveBeenCalled();
+    expect(mockCreateEmployee).toHaveBeenCalledWith(
+      expect.objectContaining({
+        full_name: 'Jean Dupont',
+        email: 'jean.dupont@example.com',
+        payroll_eligible_from: expect.stringMatching(/^\d{4}-\d{2}-01$/),
+      })
+    );
+    expect(mockCreateEmployee.mock.calls[0][0]).not.toHaveProperty(
+      'include_next_month'
+    );
+  });
+
+  it('defers payroll_eligible_from to next month when include_next_month is true', async () => {
+    mockCreateEmployee.mockResolvedValueOnce({
+      ...employeeFixture,
+      payroll_eligible_from: '2026-10-01',
+    });
+    const res = await request(app)
+      .post('/api/v1/hr/employees')
+      .set('Authorization', `Bearer ${superToken}`)
+      .send({
+        full_name: 'Nouveau',
+        email: 'nouveau@example.com',
+        include_next_month: true,
+      });
+    expect(res.status).toBe(201);
+    expect(mockCreateEmployee).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payroll_eligible_from: expect.stringMatching(/^\d{4}-\d{2}-01$/),
+      })
+    );
+    const eligible = mockCreateEmployee.mock.calls[0][0].payroll_eligible_from;
+    const { resolvePayrollEligibleFrom } = require('../../lib/hrPayrollEligibility');
+    expect(eligible).toBe(
+      resolvePayrollEligibleFrom({ includeNextMonth: true })
+    );
   });
 
   it('returns 409 when email is duplicated', async () => {
@@ -800,5 +870,183 @@ describe('GET /api/v1/hr/attendances/summary', () => {
     expect(res.body.data[0].days_absent).toBe(Math.max(0, weekdays - 3));
     expect(res.body.data[0].weekdays_elapsed).toBe(weekdays);
     expect(res.body.data[0]).not.toHaveProperty('face_descriptor');
+  });
+});
+
+describe('GET /api/v1/hr/employees/:id/payslip.pdf', () => {
+  it('returns 401 without a token', async () => {
+    const res = await request(app)
+      .get('/api/v1/hr/employees/1/payslip.pdf')
+      .query({ month: 9, year: 2026 });
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 403 for agency user', async () => {
+    const res = await request(app)
+      .get('/api/v1/hr/employees/1/payslip.pdf')
+      .query({ month: 9, year: 2026 })
+      .set('Authorization', `Bearer ${agencyToken}`);
+    expect(res.status).toBe(403);
+  });
+
+  it('returns 400 without month/year', async () => {
+    const res = await request(app)
+      .get('/api/v1/hr/employees/1/payslip.pdf')
+      .set('Authorization', `Bearer ${superToken}`);
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 404 when employee is missing', async () => {
+    mockGetEmployeeById.mockResolvedValueOnce(null);
+    const res = await request(app)
+      .get('/api/v1/hr/employees/999/payslip.pdf')
+      .query({ month: 9, year: 2026 })
+      .set('Authorization', `Bearer ${superToken}`);
+    expect(res.status).toBe(404);
+    expect(mockRenderPayslipPdf).not.toHaveBeenCalled();
+  });
+
+  it('returns PDF inline by default (preview)', async () => {
+    mockGetEmployeeById.mockResolvedValueOnce(employeeFixture);
+    mockSummarizeAttendances.mockResolvedValueOnce([
+      {
+        employee_id: 1,
+        full_name: 'Jean Dupont',
+        email: 'jean.dupont@example.com',
+        poste: 'Livreur',
+        days_present: 6,
+        days_late: 0,
+      },
+    ]);
+
+    const res = await request(app)
+      .get('/api/v1/hr/employees/1/payslip.pdf')
+      .query({ month: 9, year: 2026 })
+      .set('Authorization', `Bearer ${superToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toMatch(/application\/pdf/);
+    expect(res.headers['content-disposition']).toMatch(/^inline;/);
+    expect(res.headers['content-disposition']).toMatch(/Bulletin-paie-Jean-Dupont-2026-09\.pdf/);
+    expect(mockRenderPayslipPdf).toHaveBeenCalledTimes(1);
+    expect(Buffer.isBuffer(res.body) || typeof res.body === 'object').toBe(true);
+  });
+
+  it('returns PDF as attachment when download=true', async () => {
+    mockGetEmployeeById.mockResolvedValueOnce(employeeFixture);
+    mockSummarizeAttendances.mockResolvedValueOnce([]);
+
+    const res = await request(app)
+      .get('/api/v1/hr/employees/1/payslip.pdf')
+      .query({ month: 9, year: 2026, download: true })
+      .set('Authorization', `Bearer ${superToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toMatch(/application\/pdf/);
+    expect(res.headers['content-disposition']).toMatch(/^attachment;/);
+    expect(mockRenderPayslipPdf).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('POST /api/v1/hr/employees/:id/payslip/send-whatsapp', () => {
+  it('returns 401 without a token', async () => {
+    const res = await request(app)
+      .post('/api/v1/hr/employees/1/payslip/send-whatsapp')
+      .query({ month: 9, year: 2026 });
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 503 when WhatsApp bot is disabled', async () => {
+    mockIsWhatsAppBotEnabled.mockReturnValue(false);
+    const res = await request(app)
+      .post('/api/v1/hr/employees/1/payslip/send-whatsapp')
+      .query({ month: 9, year: 2026 })
+      .set('Authorization', `Bearer ${superToken}`);
+    expect(res.status).toBe(503);
+    expect(res.body.error).toBe('whatsapp_disabled');
+    expect(mockSendTextDm).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 when employee has no phone', async () => {
+    mockGetEmployeeById.mockResolvedValueOnce({
+      ...employeeFixture,
+      phone: null,
+    });
+
+    const res = await request(app)
+      .post('/api/v1/hr/employees/1/payslip/send-whatsapp')
+      .query({ month: 9, year: 2026 })
+      .set('Authorization', `Bearer ${superToken}`);
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('phone_required');
+    expect(mockSendTextDm).not.toHaveBeenCalled();
+  });
+
+  it('sends WhatsApp text DM with signed download link', async () => {
+    mockGetEmployeeById.mockResolvedValueOnce(employeeFixture);
+    mockSendTextDm
+      .mockResolvedValueOnce({
+        messageId: 'msg-intro',
+        recipient: '237690000000@c.us',
+      })
+      .mockResolvedValueOnce({
+        messageId: 'msg-wa-1',
+        recipient: '237690000000@c.us',
+      });
+
+    const res = await request(app)
+      .post('/api/v1/hr/employees/1/payslip/send-whatsapp')
+      .query({ month: 9, year: 2026 })
+      .set('Authorization', `Bearer ${superToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      success: true,
+      data: {
+        sent: true,
+        channel: 'whatsapp_link',
+        message_id: 'msg-wa-1',
+        recipient: '237690000000@c.us',
+      },
+    });
+    expect(res.body.data.download_url).toMatch(
+      /\/api\/v1\/hr\/p\/[A-Za-z0-9]+$/
+    );
+    expect(res.body.data.download_url).not.toMatch(/token=/);
+    expect(mockSendTextDm).toHaveBeenCalledTimes(2);
+    expect(mockSendTextDm.mock.calls[0][0].message).toContain('Bulletin de paie');
+    expect(mockSendTextDm.mock.calls[0][0].message).not.toContain(
+      res.body.data.download_url
+    );
+    expect(mockSendTextDm.mock.calls[1][0]).toEqual({
+      recipientPhone: '690000000',
+      message: res.body.data.download_url,
+    });
+  });
+});
+
+describe('GET /api/v1/hr/p/:code', () => {
+  it('returns PDF for a valid short code (no auth)', async () => {
+    const { createPayslipDownloadLink } = require('../../lib/payslipDownloadToken');
+    const { code } = createPayslipDownloadLink({
+      employeeId: 1,
+      year: 2026,
+      month: 9,
+    });
+    mockGetEmployeeById.mockResolvedValueOnce(employeeFixture);
+    mockSummarizeAttendances.mockResolvedValueOnce([]);
+
+    const res = await request(app).get(`/api/v1/hr/p/${code}`);
+
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toMatch(/application\/pdf/);
+    expect(res.headers['content-disposition']).toMatch(/^attachment;/);
+    expect(mockRenderPayslipPdf).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns 403 for unknown code', async () => {
+    const res = await request(app).get('/api/v1/hr/p/noSuchCode1');
+    expect(res.status).toBe(403);
   });
 });
