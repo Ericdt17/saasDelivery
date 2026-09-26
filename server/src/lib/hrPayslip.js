@@ -22,6 +22,10 @@ const DEFAULT_COMPANY_BRANDING = {
   email: "contact@livsight.com",
   accentColor: "#4A9FD4",
   logoBase64: null,
+  signatureBase64: null,
+  stampBase64: null,
+  signerName: "",
+  signerRole: "",
 };
 
 /** @deprecated use DEFAULT_COMPANY_BRANDING */
@@ -77,6 +81,22 @@ function resolveCompanyBranding(row) {
       typeof row.logo_base64 === "string" && row.logo_base64.trim()
         ? row.logo_base64.trim()
         : null,
+    signatureBase64:
+      typeof row.signature_base64 === "string" && row.signature_base64.trim()
+        ? row.signature_base64.trim()
+        : null,
+    stampBase64:
+      typeof row.stamp_base64 === "string" && row.stamp_base64.trim()
+        ? row.stamp_base64.trim()
+        : null,
+    signerName:
+      typeof row.signer_name === "string" && row.signer_name.trim()
+        ? row.signer_name.trim()
+        : "",
+    signerRole:
+      typeof row.signer_role === "string" && row.signer_role.trim()
+        ? row.signer_role.trim()
+        : "",
   };
 }
 
@@ -148,6 +168,7 @@ function estimatePayslipAmounts(input) {
  *   daysAbsent: number,
  *   weekdaysElapsed?: number,
  *   company?: Record<string, unknown>|null,
+ *   signer?: { name?: string|null, fonction?: string|null, signature_base64?: string|null }|null,
  *   generatedAt?: Date,
  * }} input
  */
@@ -167,7 +188,6 @@ function buildPayslipModel(input) {
   const generatedAt = input.generatedAt || new Date();
   const generatedAtLabel = new Intl.DateTimeFormat("fr-FR", {
     dateStyle: "short",
-    timeStyle: "short",
     timeZone: "Africa/Douala",
   }).format(generatedAt);
 
@@ -177,10 +197,36 @@ function buildPayslipModel(input) {
   const logoHtml = branding.logoBase64
     ? `<img class="header-logo" src="${branding.logoBase64}" alt="" />`
     : "";
+  const stampHtml = branding.stampBase64
+    ? `<img class="stamp-img" src="${branding.stampBase64}" alt="" />`
+    : "";
+
+  const signer = input.signer || null;
+  const signerName =
+    (signer && typeof signer.name === "string" && signer.name.trim()) ||
+    branding.signerName ||
+    "";
+  const signerRole =
+    (signer && typeof signer.fonction === "string" && signer.fonction.trim()) ||
+    branding.signerRole ||
+    "";
+  const signerSignature =
+    (signer &&
+      typeof signer.signature_base64 === "string" &&
+      signer.signature_base64.trim()) ||
+    branding.signatureBase64 ||
+    null;
+  const signatureHtml = signerSignature
+    ? `<img class="signature-img" src="${signerSignature}" alt="" />`
+    : "";
 
   return {
     ...branding,
+    signerName,
+    signerRole,
     logoHtml,
+    signatureHtml,
+    stampHtml,
     bulletinNo,
     employeeName: input.employee.full_name || "—",
     employeeEmail: input.employee.email || "—",

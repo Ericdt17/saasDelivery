@@ -8,19 +8,30 @@ const {
   getEmployeeById,
   summarizeAttendances,
   getCompanySettings,
+  getAgencyById,
 } = require("../db");
 const { countWeekdaysElapsed } = require("./hrCheckin");
 const { buildPayslipModel, payslipFileName } = require("./hrPayslip");
 const { renderPayslipPdf } = require("./pdf/renderPayslipPdf");
 
 /**
- * @param {{ employeeId: number, month: number, year: number }} input
+ * @param {{
+ *   employeeId: number,
+ *   month: number,
+ *   year: number,
+ *   signerUserId?: number|null,
+ * }} input
  * @returns {Promise<
  *   | { ok: true, buffer: Buffer, fileName: string, employee: object, model: object }
  *   | { ok: false, error: "not_found" }
  * >}
  */
-async function buildEmployeePayslipPdf({ employeeId, month, year }) {
+async function buildEmployeePayslipPdf({
+  employeeId,
+  month,
+  year,
+  signerUserId = null,
+}) {
   const employee = await getEmployeeById(employeeId);
   if (!employee) {
     return { ok: false, error: "not_found" };
@@ -34,6 +45,18 @@ async function buildEmployeePayslipPdf({ employeeId, month, year }) {
   const daysAbsent = Math.max(0, weekdaysElapsed - daysPresent - daysLate);
 
   const company = await getCompanySettings();
+  let signer = null;
+  if (signerUserId != null) {
+    const profile = await getAgencyById(signerUserId);
+    if (profile) {
+      signer = {
+        name: profile.name,
+        fonction: profile.fonction,
+        signature_base64: profile.signature_base64,
+      };
+    }
+  }
+
   const model = buildPayslipModel({
     employee,
     month,
@@ -43,6 +66,7 @@ async function buildEmployeePayslipPdf({ employeeId, month, year }) {
     daysAbsent,
     weekdaysElapsed,
     company,
+    signer,
   });
   const fileName = payslipFileName(employee, year, month);
   const buffer = await renderPayslipPdf(model);

@@ -113,6 +113,7 @@ function createPostgresQueries(pool) {
   async function getAgencyById(id) {
     const result = await query(
       `SELECT id, name, email, agency_code, role, is_active, address, phone, logo_base64,
+              fonction, signature_base64,
               group_id, parent_agency_id, created_at, updated_at
        FROM agencies
        WHERE id = $1 LIMIT 1`,
@@ -166,7 +167,18 @@ function createPostgresQueries(pool) {
 
   async function updateAgency(
     id,
-    { name, email, password_hash, role, is_active, agency_code, group_id, parent_agency_id }
+    {
+      name,
+      email,
+      password_hash,
+      role,
+      is_active,
+      agency_code,
+      group_id,
+      parent_agency_id,
+      fonction,
+      signature_base64,
+    }
   ) {
     const updates = [];
     const params = [];
@@ -207,6 +219,14 @@ function createPostgresQueries(pool) {
       updates.push(`parent_agency_id = $${paramIndex++}`);
       params.push(parent_agency_id !== null ? parseInt(parent_agency_id) : null);
     }
+    if (fonction !== undefined) {
+      updates.push(`fonction = $${paramIndex++}`);
+      params.push(fonction);
+    }
+    if (signature_base64 !== undefined) {
+      updates.push(`signature_base64 = $${paramIndex++}`);
+      params.push(signature_base64);
+    }
 
     if (updates.length === 0) {
       return { changes: 0 };
@@ -218,6 +238,14 @@ function createPostgresQueries(pool) {
     const sql = `UPDATE agencies SET ${updates.join(", ")} WHERE id = $${paramIndex}`;
     const result = await query(sql, params);
     return { changes: result.changes || 0 };
+  }
+
+  /**
+   * Update personal profile fields and return the agency row.
+   */
+  async function updateAgencyProfile(id, { name, fonction, signature_base64 }) {
+    await updateAgency(id, { name, fonction, signature_base64 });
+    return getAgencyById(id);
   }
 
   async function deleteAgency(id) {
@@ -995,7 +1023,8 @@ function createPostgresQueries(pool) {
   async function getCompanySettings() {
     const rows = await query(
       `SELECT id, company_name, legal_name, tax_id, trade_register, address, phone, email,
-              accent_color, logo_base64, updated_at
+              accent_color, logo_base64, signature_base64, stamp_base64,
+              signer_name, signer_role, updated_at
        FROM company_settings WHERE id = 1`
     );
     const list = Array.isArray(rows) ? rows : rows ? [rows] : [];
@@ -1012,12 +1041,17 @@ function createPostgresQueries(pool) {
     email,
     accent_color,
     logo_base64,
+    signature_base64,
+    stamp_base64,
+    signer_name,
+    signer_role,
   }) {
     const rows = await query(
       `INSERT INTO company_settings (
          id, company_name, legal_name, tax_id, trade_register, address, phone, email,
-         accent_color, logo_base64, updated_at
-       ) VALUES (1, $1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP)
+         accent_color, logo_base64, signature_base64, stamp_base64,
+         signer_name, signer_role, updated_at
+       ) VALUES (1, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, CURRENT_TIMESTAMP)
        ON CONFLICT (id) DO UPDATE SET
          company_name = EXCLUDED.company_name,
          legal_name = EXCLUDED.legal_name,
@@ -1028,9 +1062,14 @@ function createPostgresQueries(pool) {
          email = EXCLUDED.email,
          accent_color = EXCLUDED.accent_color,
          logo_base64 = EXCLUDED.logo_base64,
+         signature_base64 = EXCLUDED.signature_base64,
+         stamp_base64 = EXCLUDED.stamp_base64,
+         signer_name = EXCLUDED.signer_name,
+         signer_role = EXCLUDED.signer_role,
          updated_at = CURRENT_TIMESTAMP
        RETURNING id, company_name, legal_name, tax_id, trade_register, address, phone, email,
-                 accent_color, logo_base64, updated_at`,
+                 accent_color, logo_base64, signature_base64, stamp_base64,
+                 signer_name, signer_role, updated_at`,
       [
         company_name,
         legal_name ?? null,
@@ -1041,6 +1080,10 @@ function createPostgresQueries(pool) {
         email ?? null,
         accent_color,
         logo_base64 ?? null,
+        signature_base64 ?? null,
+        stamp_base64 ?? null,
+        signer_name ?? null,
+        signer_role ?? null,
       ]
     );
     const list = Array.isArray(rows) ? rows : rows ? [rows] : [];
@@ -1057,6 +1100,7 @@ function createPostgresQueries(pool) {
     findAgencyByCode,
     getAllAgencies,
     updateAgency,
+    updateAgencyProfile,
     deleteAgency,
     // Waitlist
     getWaitlistEntries,

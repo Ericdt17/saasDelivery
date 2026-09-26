@@ -700,6 +700,7 @@ async function getEmployeePayslipPdf(req, res, next) {
       employeeId: id,
       month,
       year,
+      signerUserId: req.user?.userId ?? null,
     });
     if (!result.ok) {
       return res.status(404).json({ success: false, error: "Employee not found" });

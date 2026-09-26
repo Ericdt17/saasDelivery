@@ -86,6 +86,7 @@ const settingsRow = {
   email: 'hello@livsight.com',
   accent_color: '#1A73E8',
   logo_base64: null,
+  stamp_base64: null,
   updated_at: '2026-09-26T00:00:00.000Z',
 };
 
@@ -147,6 +148,7 @@ describe('PUT /api/v1/settings/company', () => {
   });
 
   it('upserts and returns company settings', async () => {
+    mockGetCompanySettings.mockResolvedValueOnce(settingsRow);
     mockUpsertCompanySettings.mockResolvedValueOnce(settingsRow);
     const res = await request(app)
       .put('/api/v1/settings/company')
@@ -161,17 +163,21 @@ describe('PUT /api/v1/settings/company', () => {
         email: 'hello@livsight.com',
         accent_color: '#1A73E8',
         logo_base64: null,
+        stamp_base64: 'data:image/png;base64,STAMP',
       });
     expect(res.status).toBe(200);
     expect(res.body.data.company_name).toBe('LivSight SA');
     expect(res.body.data.tax_id).toBe('M0987654321');
     expect(res.body.data.trade_register).toBe('RC/DLA/2019/B/100');
+    expect(res.body.data).not.toHaveProperty('signer_name');
+    expect(res.body.data).not.toHaveProperty('signature_base64');
     expect(mockUpsertCompanySettings).toHaveBeenCalledWith(
       expect.objectContaining({
         company_name: 'LivSight SA',
         tax_id: 'M0987654321',
         trade_register: 'RC/DLA/2019/B/100',
         accent_color: '#1A73E8',
+        stamp_base64: 'data:image/png;base64,STAMP',
       })
     );
   });

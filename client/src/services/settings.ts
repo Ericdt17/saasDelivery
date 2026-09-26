@@ -1,8 +1,8 @@
 /**
- * App settings — company branding (super_admin)
+ * App settings — company branding + personal profile (super_admin)
  */
 
-import { apiGet, apiPut } from "./api";
+import { apiGet, apiPut, apiPatch } from "./api";
 import type { ApiResponse } from "@/types/api";
 
 const BASE = "/api/v1/settings";
@@ -24,6 +24,7 @@ export interface CompanySettings {
   email: string;
   accent_color: string;
   logo_base64: string | null;
+  stamp_base64: string | null;
   updated_at: string | null;
 }
 
@@ -37,6 +38,20 @@ export type UpdateCompanySettingsPayload = {
   email?: string | null;
   accent_color?: string;
   logo_base64?: string | null;
+  stamp_base64?: string | null;
+};
+
+export interface MyProfile {
+  name: string;
+  email: string;
+  fonction: string | null;
+  signature_base64: string | null;
+}
+
+export type UpdateMyProfilePayload = {
+  name: string;
+  fonction?: string | null;
+  signature_base64?: string | null;
 };
 
 export async function getCompanySettings(): Promise<CompanySettings> {
@@ -49,4 +64,16 @@ export async function updateCompanySettings(
 ): Promise<CompanySettings> {
   const res = await apiPut<CompanySettings>(`${BASE}/company`, data);
   return unwrap(res, "Impossible d'enregistrer les paramètres société");
+}
+
+export async function getMyProfile(): Promise<MyProfile> {
+  const res = await apiGet<MyProfile>(`${BASE}/me`);
+  return unwrap(res, "Impossible de charger le profil");
+}
+
+export async function updateMyProfile(
+  data: UpdateMyProfilePayload
+): Promise<MyProfile> {
+  const res = await apiPatch<MyProfile>(`${BASE}/me`, data);
+  return unwrap(res, "Impossible d'enregistrer le profil");
 }
