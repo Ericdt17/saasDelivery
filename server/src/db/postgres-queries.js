@@ -113,7 +113,7 @@ function createPostgresQueries(pool) {
   async function getAgencyById(id) {
     const result = await query(
       `SELECT id, name, email, agency_code, role, is_active, address, phone, logo_base64,
-              fonction, signature_base64,
+              fonction, signature_base64, stamp_base64,
               group_id, parent_agency_id, created_at, updated_at
        FROM agencies
        WHERE id = $1 LIMIT 1`,
@@ -178,6 +178,7 @@ function createPostgresQueries(pool) {
       parent_agency_id,
       fonction,
       signature_base64,
+      stamp_base64,
     }
   ) {
     const updates = [];
@@ -227,6 +228,10 @@ function createPostgresQueries(pool) {
       updates.push(`signature_base64 = $${paramIndex++}`);
       params.push(signature_base64);
     }
+    if (stamp_base64 !== undefined) {
+      updates.push(`stamp_base64 = $${paramIndex++}`);
+      params.push(stamp_base64);
+    }
 
     if (updates.length === 0) {
       return { changes: 0 };
@@ -243,8 +248,8 @@ function createPostgresQueries(pool) {
   /**
    * Update personal profile fields and return the agency row.
    */
-  async function updateAgencyProfile(id, { name, fonction, signature_base64 }) {
-    await updateAgency(id, { name, fonction, signature_base64 });
+  async function updateAgencyProfile(id, { name, fonction, signature_base64, stamp_base64 }) {
+    await updateAgency(id, { name, fonction, signature_base64, stamp_base64 });
     return getAgencyById(id);
   }
 

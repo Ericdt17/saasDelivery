@@ -53,6 +53,7 @@ async function buildEmployeePayslipPdf({
         name: profile.name,
         fonction: profile.fonction,
         signature_base64: profile.signature_base64,
+        stamp_base64: profile.stamp_base64,
       };
     }
   }

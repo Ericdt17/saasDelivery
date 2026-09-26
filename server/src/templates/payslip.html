@@ -146,16 +146,22 @@ td.num, th.num {
       padding-top: 8px;
       border-top: 1px solid #dddddd;
       font-size: 8px;
-      color: #888888;
+      color: {{accentColor}};
       text-align: center;
       line-height: 1.4;
     }
 
     .signatures {
       display: flex;
-      justify-content: flex-end;
+      justify-content: space-between;
+      align-items: flex-end;
       margin-top: 28px;
       page-break-inside: avoid;
+    }
+
+    .stamp-box {
+      padding-left: 30px;
+      padding-bottom: 10px;
     }
 
     .signature-box {
@@ -178,6 +184,7 @@ td.num, th.num {
       justify-content: center;
       gap: 12px;
       margin-bottom: 6px;
+      position: relative;
     }
 
     .signature-img {
@@ -188,10 +195,22 @@ td.num, th.num {
     }
 
     .stamp-img {
-      max-width: 80px;
-      max-height: 70px;
+      max-width: 140px;
+      max-height: 120px;
       object-fit: contain;
       display: block;
+    }
+
+    /* Overlays the centred signature without shifting it. */
+    .profile-stamp-img {
+      max-width: 140px;
+      max-height: 120px;
+      object-fit: contain;
+      position: absolute;
+      right: 10px;
+      bottom: 45px;
+      transform: rotate(12deg);
+      opacity: 0.92;
     }
 
     .signature-line {
@@ -338,9 +357,10 @@ td.num, th.num {
   </table>
 
   <div class="signatures">
+    <div class="stamp-box">{{stampHtml}}</div>
     <div class="signature-box">
       <div class="title">Employeur</div>
-      <div class="signature-slot">{{stampHtml}}{{signatureHtml}}</div>
+      <div class="signature-slot">{{signatureHtml}}{{profileStampHtml}}</div>
       <div class="signature-line">Signature / cachet</div>
       <div class="signer-name">{{signerName}}</div>
       <div class="signer-role">{{signerRole}}</div>
@@ -349,8 +369,7 @@ td.num, th.num {
 
   <div class="footer">
     {{legalName}} — {{address}} — {{phone}} — {{email}}<br />
-    {{legalIdsLine}}<br />
-    Document généré automatiquement — estimation basée sur les pointages du mois.
+    {{legalIdsLine}}
   </div>
 </body>
 </html>

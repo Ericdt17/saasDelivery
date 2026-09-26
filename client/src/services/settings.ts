@@ -46,12 +46,14 @@ export interface MyProfile {
   email: string;
   fonction: string | null;
   signature_base64: string | null;
+  stamp_base64: string | null;
 }
 
 export type UpdateMyProfilePayload = {
   name: string;
   fonction?: string | null;
   signature_base64?: string | null;
+  stamp_base64?: string | null;
 };
 
 export async function getCompanySettings(): Promise<CompanySettings> {

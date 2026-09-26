@@ -83,6 +83,7 @@ const profileRow = {
   role: 'super_admin',
   fonction: 'Directeur Général',
   signature_base64: 'data:image/png;base64,SIG',
+  stamp_base64: 'data:image/png;base64,STAMP',
   is_active: true,
 };
 
@@ -110,6 +111,7 @@ describe('GET /api/v1/settings/me', () => {
       email: 'admin@livsight.com',
       fonction: 'Directeur Général',
       signature_base64: 'data:image/png;base64,SIG',
+      stamp_base64: 'data:image/png;base64,STAMP',
     });
     expect(mockGetAgencyById).toHaveBeenCalledWith(99);
   });
@@ -131,6 +133,7 @@ describe('PATCH /api/v1/settings/me', () => {
       name: 'Eric Updated',
       fonction: 'CEO',
       signature_base64: null,
+      stamp_base64: 'data:image/png;base64,NEWSTAMP',
     });
     const res = await request(app)
       .patch('/api/v1/settings/me')
@@ -139,16 +142,19 @@ describe('PATCH /api/v1/settings/me', () => {
         name: 'Eric Updated',
         fonction: 'CEO',
         signature_base64: null,
+        stamp_base64: 'data:image/png;base64,NEWSTAMP',
       });
     expect(res.status).toBe(200);
     expect(res.body.data.name).toBe('Eric Updated');
     expect(res.body.data.fonction).toBe('CEO');
+    expect(res.body.data.stamp_base64).toBe('data:image/png;base64,NEWSTAMP');
     expect(mockUpdateAgencyProfile).toHaveBeenCalledWith(
       99,
       expect.objectContaining({
         name: 'Eric Updated',
         fonction: 'CEO',
         signature_base64: null,
+        stamp_base64: 'data:image/png;base64,NEWSTAMP',
       })
     );
   });

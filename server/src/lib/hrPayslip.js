@@ -168,7 +168,7 @@ function estimatePayslipAmounts(input) {
  *   daysAbsent: number,
  *   weekdaysElapsed?: number,
  *   company?: Record<string, unknown>|null,
- *   signer?: { name?: string|null, fonction?: string|null, signature_base64?: string|null }|null,
+ *   signer?: { name?: string|null, fonction?: string|null, signature_base64?: string|null, stamp_base64?: string|null }|null,
  *   generatedAt?: Date,
  * }} input
  */
@@ -197,11 +197,22 @@ function buildPayslipModel(input) {
   const logoHtml = branding.logoBase64
     ? `<img class="header-logo" src="${branding.logoBase64}" alt="" />`
     : "";
+  const signer = input.signer || null;
+  const stampFromSigner =
+    signer &&
+    typeof signer.stamp_base64 === "string" &&
+    signer.stamp_base64.trim()
+      ? signer.stamp_base64.trim()
+      : null;
+  // Company stamp on the page left; signer's personal stamp next to the
+  // signature (both can appear on the same payslip).
   const stampHtml = branding.stampBase64
     ? `<img class="stamp-img" src="${branding.stampBase64}" alt="" />`
     : "";
+  const profileStampHtml = stampFromSigner
+    ? `<img class="profile-stamp-img" src="${stampFromSigner}" alt="" />`
+    : "";
 
-  const signer = input.signer || null;
   const signerName =
     (signer && typeof signer.name === "string" && signer.name.trim()) ||
     branding.signerName ||
@@ -227,6 +238,7 @@ function buildPayslipModel(input) {
     logoHtml,
     signatureHtml,
     stampHtml,
+    profileStampHtml,
     bulletinNo,
     employeeName: input.employee.full_name || "—",
     employeeEmail: input.employee.email || "—",

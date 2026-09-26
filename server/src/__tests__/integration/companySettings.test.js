@@ -171,6 +171,7 @@ describe('PUT /api/v1/settings/company', () => {
     expect(res.body.data.trade_register).toBe('RC/DLA/2019/B/100');
     expect(res.body.data).not.toHaveProperty('signer_name');
     expect(res.body.data).not.toHaveProperty('signature_base64');
+    expect(res.body.data).toHaveProperty('stamp_base64');
     expect(mockUpsertCompanySettings).toHaveBeenCalledWith(
       expect.objectContaining({
         company_name: 'LivSight SA',

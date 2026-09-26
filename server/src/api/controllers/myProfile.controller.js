@@ -1,5 +1,5 @@
 /**
- * Personal profile (Mon profil) — name, fonction, signature for super_admin.
+ * Personal profile (Mon profil) — name, fonction, signature, stamp for super_admin.
  */
 
 const { z } = require("zod");
@@ -9,6 +9,7 @@ const patchMeSchema = z.object({
   name: z.string().trim().min(1).max(120),
   fonction: z.string().trim().max(120).nullable().optional(),
   signature_base64: z.string().nullable().optional(),
+  stamp_base64: z.string().nullable().optional(),
 });
 
 function toPublicProfile(row) {
@@ -18,6 +19,7 @@ function toPublicProfile(row) {
       email: "",
       fonction: null,
       signature_base64: null,
+      stamp_base64: null,
     };
   }
   return {
@@ -30,6 +32,10 @@ function toPublicProfile(row) {
     signature_base64:
       typeof row.signature_base64 === "string" && row.signature_base64.trim()
         ? row.signature_base64.trim()
+        : null,
+    stamp_base64:
+      typeof row.stamp_base64 === "string" && row.stamp_base64.trim()
+        ? row.stamp_base64.trim()
         : null,
   };
 }
@@ -65,6 +71,7 @@ async function patchMyProfileHandler(req, res, next) {
       name: body.name,
       fonction: body.fonction ?? null,
       signature_base64: body.signature_base64 ?? null,
+      stamp_base64: body.stamp_base64 ?? null,
     });
     return res.json({ success: true, data: toPublicProfile(row) });
   } catch (err) {

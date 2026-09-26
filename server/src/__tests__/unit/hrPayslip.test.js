@@ -177,7 +177,7 @@ describe('buildPayslipModel / payslipFileName', () => {
       daysAbsent: 0,
       company: {
         company_name: 'Acme RH',
-        stamp_base64: 'data:image/png;base64,STAMP',
+        stamp_base64: 'data:image/png;base64,OLDSTAMP',
         signer_name: 'Old Company Signer',
         signature_base64: 'data:image/png;base64,OLD',
       },
@@ -185,12 +185,15 @@ describe('buildPayslipModel / payslipFileName', () => {
         name: 'Eric Djou',
         fonction: 'Directeur Général',
         signature_base64: 'data:image/png;base64,ME',
+        stamp_base64: 'data:image/png;base64,MYSTAMP',
       },
     });
     expect(model.signerName).toBe('Eric Djou');
     expect(model.signerRole).toBe('Directeur Général');
     expect(model.signatureHtml).toContain('data:image/png;base64,ME');
-    expect(model.stampHtml).toContain('data:image/png;base64,STAMP');
+    // Both stamps are rendered: company on the page left, personal next to the signature.
+    expect(model.stampHtml).toContain('data:image/png;base64,OLDSTAMP');
+    expect(model.profileStampHtml).toContain('data:image/png;base64,MYSTAMP');
   });
 
   it('builds a safe PDF filename', () => {
