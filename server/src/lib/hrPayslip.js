@@ -158,9 +158,58 @@ function estimatePayslipAmounts(input) {
 }
 
 /**
+ * @param {{
+ *   salaryBase: number|null,
+ *   previousSalaryBase?: number|null,
+ * }} input
+ * @returns {{
+ *   kind: 'raise'|'drop',
+ *   delta: number,
+ *   previous: number,
+ *   current: number,
+ *   label: string,
+ * }|null}
+ */
+function describeSalaryChange(input) {
+  const current = Number(input.salaryBase);
+  const previous = Number(input.previousSalaryBase);
+  if (!Number.isFinite(current) || !Number.isFinite(previous)) return null;
+  const delta = Math.round(current) - Math.round(previous);
+  if (delta === 0) return null;
+  return {
+    kind: delta > 0 ? "raise" : "drop",
+    delta,
+    previous: Math.round(previous),
+    current: Math.round(current),
+    label: delta > 0 ? "Augmentation de salaire" : "Baisse de salaire",
+  };
+}
+
+/**
+ * Raw table rows (previous base + raise/drop) inserted before salaire de base.
+ * @param {ReturnType<typeof describeSalaryChange>} change
+ * @returns {string}
+ */
+function buildSalaryChangeRowHtml(change) {
+  if (!change) return "";
+  const absDelta = Math.abs(change.delta);
+  const signed =
+    change.kind === "raise"
+      ? `+${formatCurrency(absDelta)}`
+      : `−${formatCurrency(absDelta)}`;
+  const amountClass =
+    change.kind === "raise" ? "num" : "num deduct";
+  return [
+    `<tr><td>Salaire du mois précédent</td><td class="num">${formatCurrency(change.previous)}</td></tr>`,
+    `<tr><td>${change.label}</td><td class="${amountClass}">${signed}</td></tr>`,
+  ].join("");
+}
+
+/**
  * Build preformatted template model for PDF.
  * @param {{
  *   employee: { id: number, full_name: string, email: string, poste?: string|null, salary_base?: number|null },
+ *   previousSalaryBase?: number|null,
  *   month: number,
  *   year: number,
  *   daysPresent: number,
@@ -184,6 +233,11 @@ function buildPayslipModel(input) {
     daysAbsent: input.daysAbsent,
     workdaysInMonth,
   });
+  const salaryChange = describeSalaryChange({
+    salaryBase,
+    previousSalaryBase: input.previousSalaryBase,
+  });
+  const salaryChangeRowHtml = buildSalaryChangeRowHtml(salaryChange);
 
   const generatedAt = input.generatedAt || new Date();
   const generatedAtLabel = new Intl.DateTimeFormat("fr-FR", {
@@ -255,6 +309,8 @@ function buildPayslipModel(input) {
     daysLate: String(input.daysLate ?? 0),
     daysAbsent: String(input.daysAbsent ?? 0),
     salaryBaseLabel: formatCurrency(salaryBase ?? 0),
+    salaryChange,
+    salaryChangeRowHtml,
     costLateDayLabel: formatCurrency(amounts.costLateDay),
     costAbsentDayLabel: formatCurrency(amounts.costAbsentDay),
     penaltyLateLabel: formatCurrency(amounts.penaltyLate),
@@ -264,6 +320,7 @@ function buildPayslipModel(input) {
     amounts,
   };
 }
+
 
 /**
  * Safe Content-Disposition filename.
@@ -290,6 +347,8 @@ module.exports = {
   formatCurrency,
   formatMonthLabelFr,
   estimatePayslipAmounts,
+  describeSalaryChange,
+  buildSalaryChangeRowHtml,
   resolveCompanyBranding,
   buildPayslipModel,
   payslipFileName,

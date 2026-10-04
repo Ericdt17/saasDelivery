@@ -117,6 +117,7 @@ export default function EmployeesPage() {
   const [salaryBase, setSalaryBase] = useState("");
   const [isActive, setIsActive] = useState(true);
   const [includeNextMonth, setIncludeNextMonth] = useState(false);
+  const [salaryApplyThisMonth, setSalaryApplyThisMonth] = useState(false);
 
   const [enrollTarget, setEnrollTarget] = useState<HrEmployee | null>(null);
 
@@ -128,6 +129,7 @@ export default function EmployeesPage() {
     setSalaryBase("");
     setIsActive(true);
     setIncludeNextMonth(false);
+    setSalaryApplyThisMonth(false);
   }
 
   function openCreate() {
@@ -146,6 +148,7 @@ export default function EmployeesPage() {
     setIncludeNextMonth(
       !isPayrollEligibleForMonth(row.payroll_eligible_from, cy, cm)
     );
+    setSalaryApplyThisMonth(false);
     setEditTarget(row);
   }
 
@@ -162,6 +165,7 @@ export default function EmployeesPage() {
       salaryBase,
       isActive: true,
       includeNextMonth,
+      salaryApplyThisMonth: false,
     });
     await createEmployee.mutateAsync({
       full_name: payload.full_name,
@@ -190,6 +194,7 @@ export default function EmployeesPage() {
         salaryBase,
         isActive,
         includeNextMonth,
+        salaryApplyThisMonth,
       }),
     });
     setEditTarget(null);
@@ -290,7 +295,20 @@ export default function EmployeesPage() {
                         </Link>
                       </TableCell>
                       <TableCell>{row.poste ?? "—"}</TableCell>
-                      <TableCell>{formatSalary(row.salary_base)}</TableCell>
+                      <TableCell>
+                        <div className="flex flex-col gap-0.5">
+                          <span>{formatSalary(row.salary_base)}</span>
+                          {row.salary_scheduled ? (
+                            <span className="text-xs text-muted-foreground">
+                              → {formatSalary(row.salary_scheduled.amount)} dès{" "}
+                              {String(row.salary_scheduled.effective_from).slice(
+                                0,
+                                7
+                              )}
+                            </span>
+                          ) : null}
+                        </div>
+                      </TableCell>
                       <TableCell className="text-right tabular-nums">
                         {row.is_active ? (stats?.daysPresent ?? "—") : "—"}
                       </TableCell>
@@ -450,12 +468,16 @@ export default function EmployeesPage() {
             poste={poste}
             salaryBase={salaryBase}
             includeNextMonth={includeNextMonth}
+            showSalaryTiming
+            salaryApplyThisMonth={salaryApplyThisMonth}
+            salaryScheduled={editTarget?.salary_scheduled ?? null}
             onFullNameChange={setFullName}
             onEmailChange={setEmail}
             onPhoneChange={setPhone}
             onPosteChange={setPoste}
             onSalaryBaseChange={setSalaryBase}
             onIncludeNextMonthChange={setIncludeNextMonth}
+            onSalaryApplyThisMonthChange={setSalaryApplyThisMonth}
           />
           <div className="flex items-center gap-2 py-1">
             <Checkbox
@@ -536,12 +558,16 @@ function EmployeeFormFields({
   poste,
   salaryBase,
   includeNextMonth,
+  showSalaryTiming = false,
+  salaryApplyThisMonth = false,
+  salaryScheduled = null,
   onFullNameChange,
   onEmailChange,
   onPhoneChange,
   onPosteChange,
   onSalaryBaseChange,
   onIncludeNextMonthChange,
+  onSalaryApplyThisMonthChange,
 }: {
   fullName: string;
   email: string;
@@ -549,12 +575,16 @@ function EmployeeFormFields({
   poste: string;
   salaryBase: string;
   includeNextMonth: boolean;
+  showSalaryTiming?: boolean;
+  salaryApplyThisMonth?: boolean;
+  salaryScheduled?: HrEmployee["salary_scheduled"];
   onFullNameChange: (v: string) => void;
   onEmailChange: (v: string) => void;
   onPhoneChange: (v: string) => void;
   onPosteChange: (v: string) => void;
   onSalaryBaseChange: (v: string) => void;
   onIncludeNextMonthChange: (v: boolean) => void;
+  onSalaryApplyThisMonthChange?: (v: boolean) => void;
 }) {
   return (
     <div className="space-y-4 py-2">
@@ -600,7 +630,39 @@ function EmployeeFormFields({
           value={salaryBase}
           onChange={(e) => onSalaryBaseChange(e.target.value)}
         />
+        {showSalaryTiming && salaryScheduled ? (
+          <p className="text-xs text-muted-foreground">
+            Déjà programmé : {formatSalary(salaryScheduled.amount)} F dès{" "}
+            {String(salaryScheduled.effective_from).slice(0, 7)}. Une nouvelle
+            modification remplace le planning à partir de la date choisie.
+          </p>
+        ) : null}
       </div>
+      {showSalaryTiming ? (
+        <div className="flex items-start gap-2 rounded-lg border p-3">
+          <Checkbox
+            id="hr-salary-apply-this-month"
+            checked={salaryApplyThisMonth}
+            onCheckedChange={(v) =>
+              onSalaryApplyThisMonthChange?.(v === true)
+            }
+            className="mt-0.5"
+          />
+          <div className="space-y-1">
+            <Label
+              htmlFor="hr-salary-apply-this-month"
+              className="cursor-pointer"
+            >
+              Appliquer dès ce mois
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              Par défaut, hausse ou baisse prend effet le 1er du mois suivant.
+              Cochez uniquement pour une correction sur le mois en cours
+              (bulletins / masse salariale d’octobre inclus).
+            </p>
+          </div>
+        </div>
+      ) : null}
       <div className="flex items-start gap-2 rounded-lg border p-3">
         <Checkbox
           id="hr-include-next-month"

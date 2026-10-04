@@ -24,6 +24,11 @@ export interface HrEmployee {
   salary_base: number | null;
   /** YYYY-MM-01 — first month included in payroll mass. */
   payroll_eligible_from: string;
+  /** Next scheduled rise/drop after the current Douala month, if any. */
+  salary_scheduled?: {
+    amount: number | null;
+    effective_from: string;
+  } | null;
   is_active: boolean;
   is_enrolled: boolean;
   enrolled_at: string | null;
@@ -43,6 +48,8 @@ export interface CreateHrEmployeePayload {
 
 export type UpdateHrEmployeePayload = Partial<CreateHrEmployeePayload> & {
   is_active?: boolean;
+  /** When true, salary change applies this Douala month; default next month. */
+  salary_apply_this_month?: boolean;
 };
 
 export interface HrAttendance {
@@ -207,8 +214,17 @@ export async function sendPayslipWhatsapp(
   return unwrap(res, "Impossible d'envoyer le bulletin sur WhatsApp");
 }
 
-export async function listEmployees(): Promise<HrEmployee[]> {
-  const res = await apiGet<HrEmployee[]>(`${BASE}/employees`);
+export async function listEmployees(params?: {
+  year?: number;
+  month?: number;
+}): Promise<HrEmployee[]> {
+  const qs = new URLSearchParams();
+  if (params?.year != null && params?.month != null) {
+    qs.set("year", String(params.year));
+    qs.set("month", String(params.month));
+  }
+  const suffix = qs.toString() ? `?${qs}` : "";
+  const res = await apiGet<HrEmployee[]>(`${BASE}/employees${suffix}`);
   return unwrap(res, "Impossible de charger les employés");
 }
 

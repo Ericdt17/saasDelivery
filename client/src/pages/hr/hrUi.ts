@@ -76,6 +76,11 @@ export type EmployeeFormFields = {
   isActive: boolean;
   /** When true, mass salary starts next Douala month. */
   includeNextMonth: boolean;
+  /**
+   * When true, a salary change applies this Douala month (correction).
+   * Default false → next month.
+   */
+  salaryApplyThisMonth: boolean;
 };
 
 export function buildEmployeeUpdatePayload(fields: EmployeeFormFields): {
@@ -86,6 +91,7 @@ export function buildEmployeeUpdatePayload(fields: EmployeeFormFields): {
   salary_base: number | null;
   is_active: boolean;
   include_next_month: boolean;
+  salary_apply_this_month: boolean;
 } {
   const salaryParsed =
     fields.salaryBase.trim() === "" ? NaN : Number(fields.salaryBase);
@@ -98,6 +104,7 @@ export function buildEmployeeUpdatePayload(fields: EmployeeFormFields): {
       Number.isFinite(salaryParsed) ? Math.trunc(salaryParsed) : null,
     is_active: fields.isActive,
     include_next_month: fields.includeNextMonth === true,
+    salary_apply_this_month: fields.salaryApplyThisMonth === true,
   };
 }
 

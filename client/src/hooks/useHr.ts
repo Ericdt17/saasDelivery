@@ -23,16 +23,24 @@ import {
 export const hrKeys = {
   all: ["hr"] as const,
   employees: ["hr", "employees"] as const,
+  employeesForMonth: (year: number, month: number) =>
+    ["hr", "employees", year, month] as const,
   attendances: (filters: ListAttendancesParams) =>
     ["hr", "attendances", filters] as const,
   summary: (month: number, year: number) =>
     ["hr", "summary", month, year] as const,
 };
 
-export function useHrEmployees() {
+export function useHrEmployees(params?: { year?: number; month?: number }) {
+  const year = params?.year;
+  const month = params?.month;
+  const scoped = year != null && month != null;
   const result = useQuery({
-    queryKey: hrKeys.employees,
-    queryFn: () => listEmployees(),
+    queryKey: scoped
+      ? hrKeys.employeesForMonth(year, month)
+      : hrKeys.employees,
+    queryFn: () =>
+      listEmployees(scoped ? { year, month } : undefined),
     retry: 2,
     staleTime: 10000,
   });
@@ -53,6 +61,7 @@ export function useCreateHrEmployee() {
     mutationFn: (data: CreateHrEmployeePayload) => createEmployee(data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: hrKeys.employees });
+      qc.invalidateQueries({ queryKey: ["hr", "employees"] });
       qc.invalidateQueries({ queryKey: ["hr", "summary"] });
       toast.success("Employé créé");
     },
@@ -71,6 +80,7 @@ export function useUpdateHrEmployee() {
       updateEmployee(id, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: hrKeys.employees });
+      qc.invalidateQueries({ queryKey: ["hr", "employees"] });
       qc.invalidateQueries({ queryKey: ["hr", "attendances"] });
       qc.invalidateQueries({ queryKey: ["hr", "summary"] });
       toast.success("Employé mis à jour");
@@ -89,6 +99,7 @@ export function useDeleteHrEmployee() {
     mutationFn: (id: number) => deleteEmployee(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: hrKeys.employees });
+      qc.invalidateQueries({ queryKey: ["hr", "employees"] });
       qc.invalidateQueries({ queryKey: ["hr", "attendances"] });
       qc.invalidateQueries({ queryKey: ["hr", "summary"] });
       toast.success("Employé désactivé");

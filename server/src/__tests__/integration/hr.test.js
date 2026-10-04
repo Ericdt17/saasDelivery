@@ -18,6 +18,8 @@ const mockUpsertAttendance = jest.fn();
 const mockListAttendances = jest.fn();
 const mockSummarizeAttendances = jest.fn();
 const mockGetCompanySettings = jest.fn();
+const mockReplaceSalaryFrom = jest.fn();
+const mockListEmployeeSalaryHistory = jest.fn();
 
 jest.mock('../../db', () => ({
   adapter: { query: jest.fn(), type: 'sqlite' },
@@ -34,6 +36,8 @@ jest.mock('../../db', () => ({
   listAttendances: mockListAttendances,
   summarizeAttendances: mockSummarizeAttendances,
   getCompanySettings: mockGetCompanySettings,
+  replaceSalaryFrom: mockReplaceSalaryFrom,
+  listEmployeeSalaryHistory: mockListEmployeeSalaryHistory,
   listMerchantTerms: jest.fn(),
   getMerchantTermsById: jest.fn(),
   createMerchantTerms: jest.fn(),
@@ -154,6 +158,9 @@ beforeEach(async () => {
   mockRenderPayslipPdf.mockClear();
   mockRenderPayslipPdf.mockResolvedValue(Buffer.from('%PDF-1.4 mock'));
   mockGetCompanySettings.mockResolvedValue(null);
+  mockReplaceSalaryFrom.mockReset();
+  mockListEmployeeSalaryHistory.mockReset();
+  mockListEmployeeSalaryHistory.mockResolvedValue([]);
   mockSendTextDm.mockReset();
   mockIsWhatsAppBotEnabled.mockReset();
   mockIsWhatsAppBotEnabled.mockReturnValue(true);
@@ -315,6 +322,76 @@ describe('PATCH /api/v1/hr/employees/:id', () => {
     expect(res.status).toBe(200);
     expect(res.body.data.poste).toBe('Agent');
     expect(res.body.data).not.toHaveProperty('face_descriptor');
+  });
+
+  it('schedules salary rise for next Douala month by default', async () => {
+    mockGetEmployeeById
+      .mockResolvedValueOnce(employeeFixture)
+      .mockResolvedValueOnce({
+        ...employeeFixture,
+        salary_scheduled: {
+          amount: 180000,
+          effective_from: '2026-11-01',
+        },
+      });
+    mockReplaceSalaryFrom.mockResolvedValueOnce(undefined);
+    mockUpdateEmployee.mockImplementation(async (id, updates) => {
+      expect(updates).not.toHaveProperty('salary_base');
+      return {
+        ...employeeFixture,
+        ...updates,
+        salary_scheduled: {
+          amount: 180000,
+          effective_from: '2026-11-01',
+        },
+      };
+    });
+
+    const res = await request(app)
+      .patch('/api/v1/hr/employees/1')
+      .set('Authorization', `Bearer ${superToken}`)
+      .send({ salary_base: 180000 });
+
+    expect(res.status).toBe(200);
+    expect(mockReplaceSalaryFrom).toHaveBeenCalledWith(
+      expect.objectContaining({
+        employee_id: 1,
+        amount: 180000,
+        effective_from: expect.stringMatching(/^\d{4}-\d{2}-01$/),
+      })
+    );
+    const { resolveSalaryEffectiveFrom } = require('../../lib/hrSalary');
+    expect(mockReplaceSalaryFrom.mock.calls[0][0].effective_from).toBe(
+      resolveSalaryEffectiveFrom({ applyThisMonth: false })
+    );
+    expect(res.body.data.salary_base).toBe(150000);
+  });
+
+  it('applies salary drop this month when salary_apply_this_month is true', async () => {
+    mockGetEmployeeById.mockResolvedValueOnce(employeeFixture);
+    mockReplaceSalaryFrom.mockResolvedValueOnce(undefined);
+    mockUpdateEmployee.mockResolvedValueOnce({
+      ...employeeFixture,
+      salary_base: 120000,
+    });
+
+    const res = await request(app)
+      .patch('/api/v1/hr/employees/1')
+      .set('Authorization', `Bearer ${superToken}`)
+      .send({ salary_base: 120000, salary_apply_this_month: true });
+
+    expect(res.status).toBe(200);
+    const { resolveSalaryEffectiveFrom } = require('../../lib/hrSalary');
+    expect(mockReplaceSalaryFrom).toHaveBeenCalledWith({
+      employee_id: 1,
+      amount: 120000,
+      effective_from: resolveSalaryEffectiveFrom({ applyThisMonth: true }),
+    });
+    expect(mockUpdateEmployee).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({ salary_base: 120000 })
+    );
+    expect(res.body.data.salary_base).toBe(120000);
   });
 });
 

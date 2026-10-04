@@ -17,6 +17,7 @@ const {
   upsertAttendance,
   listAttendances,
   summarizeAttendances,
+  replaceSalaryFrom,
 } = require("../../db");
 const {
   isWithinOffice,
@@ -41,7 +42,14 @@ const {
   createPayslipDownloadLink,
   resolvePayslipDownloadCode,
 } = require("../../lib/payslipDownloadToken");
-const { resolvePayrollEligibleFrom, firstOfCurrentMonthDouala } = require("../../lib/hrPayrollEligibility");
+const {
+  resolvePayrollEligibleFrom,
+  firstOfCurrentMonthDouala,
+} = require("../../lib/hrPayrollEligibility");
+const {
+  resolveSalaryEffectiveFrom,
+  salariesEqual,
+} = require("../../lib/hrSalary");
 
 function publicEmployeeCheckinPayload(employee) {
   const parts = getDoualaParts(new Date());
@@ -70,7 +78,17 @@ const patchEmployeeSchema = createEmployeeSchema
   .partial()
   .extend({
     is_active: z.boolean().optional(),
+    /**
+     * When salary_base changes: false (default) → effective next Douala month;
+     * true → effective this month (correction / intentional October adjust).
+     */
+    salary_apply_this_month: z.boolean().optional().default(false),
   });
+
+const listEmployeesQuerySchema = z.object({
+  year: z.coerce.number().int().min(2020).optional(),
+  month: z.coerce.number().int().min(1).max(12).optional(),
+});
 
 const enrollEmployeeSchema = z.object({
   face_descriptor: z.array(z.number()).length(128),
@@ -182,7 +200,24 @@ function isEmployeeEnrolled(employee) {
 
 async function listAdminEmployees(req, res, next) {
   try {
-    const rows = await listEmployees();
+    const parsed = listEmployeesQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      return res.status(400).json({
+        success: false,
+        error: "Validation failed",
+        details: parsed.error.flatten(),
+      });
+    }
+    const { year, month } = parsed.data;
+    if ((year != null) !== (month != null)) {
+      return res.status(400).json({
+        success: false,
+        error: "year and month must be provided together",
+      });
+    }
+    const rows = await listEmployees(
+      year != null && month != null ? { year, month } : {}
+    );
     return res.json({ success: true, data: stripFaceDescriptorList(rows) });
   } catch (err) {
     next(err);
@@ -230,7 +265,8 @@ async function patchAdminEmployee(req, res, next) {
     if (!existing) {
       return res.status(404).json({ success: false, error: "Employee not found" });
     }
-    const { include_next_month, ...fields } = parsed.data;
+    const { include_next_month, salary_apply_this_month, ...fields } =
+      parsed.data;
     const updates = { ...fields };
     if (include_next_month === true) {
       updates.payroll_eligible_from = resolvePayrollEligibleFrom({
@@ -246,6 +282,29 @@ async function patchAdminEmployee(req, res, next) {
         updates.payroll_eligible_from = currentMonthStart;
       }
     }
+
+    const salaryProvided = Object.prototype.hasOwnProperty.call(
+      fields,
+      "salary_base"
+    );
+    if (salaryProvided && !salariesEqual(fields.salary_base, existing.salary_base)) {
+      const effectiveFrom = resolveSalaryEffectiveFrom({
+        applyThisMonth: salary_apply_this_month === true,
+      });
+      const currentMonthStart = firstOfCurrentMonthDouala();
+      await replaceSalaryFrom({
+        employee_id: id,
+        amount: fields.salary_base ?? null,
+        effective_from: effectiveFrom,
+      });
+      // Denormalized current-month amount only when the change covers this month.
+      if (effectiveFrom > currentMonthStart) {
+        delete updates.salary_base;
+      }
+    } else if (salaryProvided) {
+      // Unchanged amount — keep denormalized column in sync if sent, no history rewrite.
+    }
+
     const row = await updateEmployee(id, updates);
     return res.json({ success: true, data: stripFaceDescriptor(row) });
   } catch (err) {
