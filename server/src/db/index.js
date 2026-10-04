@@ -109,6 +109,8 @@ const api = {
   updateEmployee: queries.updateEmployee,
   deleteEmployee: queries.deleteEmployee,
   enrollEmployeeFace: queries.enrollEmployeeFace,
+  listEmployeeSalaryHistory: queries.listEmployeeSalaryHistory,
+  replaceSalaryFrom: queries.replaceSalaryFrom,
   getAttendanceByEmployeeAndDate: queries.getAttendanceByEmployeeAndDate,
   createAttendance: queries.createAttendance,
   upsertAttendance: queries.upsertAttendance,

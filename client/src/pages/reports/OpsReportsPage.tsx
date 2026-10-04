@@ -767,7 +767,7 @@ export default function OpsReportsPage() {
     isError: errorEmployees,
     error: employeesError,
     refetch: refetchEmployees,
-  } = useHrEmployees();
+  } = useHrEmployees({ year, month });
   const {
     data: monthSummary = [],
     isLoading: loadingSummary,

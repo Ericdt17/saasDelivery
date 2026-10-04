@@ -747,16 +747,124 @@ function createPostgresQueries(pool) {
     (enrolled_at IS NOT NULL) AS is_enrolled
   `;
 
-  async function listEmployees() {
+  /**
+   * @param {object|null} row
+   * @param {{ year?: number, month?: number }} [opts]
+   */
+  async function attachSalaryMeta(row, opts = {}) {
+    if (!row) return null;
+    const history = await listEmployeeSalaryHistory(row.id);
+    const { resolveSalaryForMonth, findScheduledSalary } = require("../lib/hrSalary");
+    const {
+      currentYearMonthDouala,
+    } = require("../lib/hrPayrollEligibility");
+    const { year: cy, month: cm } = currentYearMonthDouala();
+    const year = Number.isFinite(opts.year) ? opts.year : cy;
+    const month = Number.isFinite(opts.month) ? opts.month : cm;
+    const resolved = resolveSalaryForMonth(
+      history,
+      year,
+      month,
+      row.salary_base ?? null
+    );
+    const scheduled = findScheduledSalary(history);
+    return {
+      ...row,
+      salary_base: resolved,
+      salary_scheduled: scheduled,
+    };
+  }
+
+  async function listEmployeeSalaryHistory(employeeId) {
+    const rows = await query(
+      `SELECT amount, effective_from, created_at
+       FROM employee_salary_history
+       WHERE employee_id = $1
+       ORDER BY effective_from ASC`,
+      [employeeId]
+    );
+    return Array.isArray(rows) ? rows : rows ? [rows] : [];
+  }
+
+  /**
+   * Replace timeline from effective_from forward, then insert the new amount.
+   * If this is the first known amount and it changes, keep the old value on the
+   * previous month so payslips can show augmentation / baisse.
+   * @param {{ employee_id: number, amount: number|null, effective_from: string }} input
+   */
+  async function replaceSalaryFrom(input) {
+    const { previousYearMonth, normalizeEffectiveFrom } = require("../lib/hrSalary");
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const effectiveFrom = normalizeEffectiveFrom(input.effective_from);
+      if (!effectiveFrom) {
+        throw new Error("Invalid salary effective_from");
+      }
+
+      const priorRes = await client.query(
+        `SELECT amount, effective_from
+         FROM employee_salary_history
+         WHERE employee_id = $1 AND effective_from < $2::date
+         ORDER BY effective_from DESC
+         LIMIT 1`,
+        [input.employee_id, effectiveFrom]
+      );
+      const coveringRes = await client.query(
+        `SELECT amount
+         FROM employee_salary_history
+         WHERE employee_id = $1 AND effective_from <= $2::date
+         ORDER BY effective_from DESC
+         LIMIT 1`,
+        [input.employee_id, effectiveFrom]
+      );
+
+      if (!priorRes.rows.length && coveringRes.rows.length) {
+        const y = Number(effectiveFrom.slice(0, 4));
+        const m = Number(effectiveFrom.slice(5, 7));
+        const prev = previousYearMonth(y, m);
+        const prevFrom = `${prev.year}-${String(prev.month).padStart(2, "0")}-01`;
+        await client.query(
+          `INSERT INTO employee_salary_history (employee_id, amount, effective_from)
+           VALUES ($1, $2, $3::date)
+           ON CONFLICT (employee_id, effective_from) DO NOTHING`,
+          [input.employee_id, coveringRes.rows[0].amount, prevFrom]
+        );
+      }
+
+      await client.query(
+        `DELETE FROM employee_salary_history
+         WHERE employee_id = $1 AND effective_from >= $2::date`,
+        [input.employee_id, effectiveFrom]
+      );
+      await client.query(
+        `INSERT INTO employee_salary_history (employee_id, amount, effective_from)
+         VALUES ($1, $2, $3::date)`,
+        [input.employee_id, input.amount ?? null, effectiveFrom]
+      );
+      await client.query("COMMIT");
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * @param {{ year?: number, month?: number }} [opts]
+   */
+  async function listEmployees(opts = {}) {
     const rows = await query(
       `SELECT ${EMPLOYEE_PUBLIC_COLUMNS}
        FROM employees
        ORDER BY created_at DESC`
     );
-    return Array.isArray(rows) ? rows : rows ? [rows] : [];
+    const list = Array.isArray(rows) ? rows : rows ? [rows] : [];
+    return Promise.all(list.map((row) => attachSalaryMeta(row, opts)));
   }
 
-  async function getEmployeeById(id) {
+  async function getEmployeeById(id, opts = {}) {
     const row = await query(
       `SELECT ${EMPLOYEE_PUBLIC_COLUMNS}
        FROM employees
@@ -764,7 +872,7 @@ function createPostgresQueries(pool) {
        LIMIT 1`,
       [id]
     );
-    return row || null;
+    return attachSalaryMeta(row || null, opts);
   }
 
   async function getEmployeeByIdWithDescriptor(id) {
@@ -775,7 +883,7 @@ function createPostgresQueries(pool) {
        LIMIT 1`,
       [id]
     );
-    return row || null;
+    return attachSalaryMeta(row || null);
   }
 
   async function createEmployee({
@@ -787,22 +895,46 @@ function createPostgresQueries(pool) {
     payroll_eligible_from = null,
   }) {
     const normalizedEmail = String(email).trim().toLowerCase();
-    const result = await pool.query(
-      `INSERT INTO employees (
-         full_name, email, phone, poste, salary_base, payroll_eligible_from, application_id
-       )
-       VALUES ($1, $2, $3, $4, $5, COALESCE($6::date, (date_trunc('month', timezone('Africa/Douala', NOW())))::date), NULL)
-       RETURNING ${EMPLOYEE_PUBLIC_COLUMNS}`,
-      [
-        full_name,
-        normalizedEmail,
-        phone ?? null,
-        poste ?? null,
-        salary_base ?? null,
-        payroll_eligible_from ?? null,
-      ]
-    );
-    return result.rows[0] || null;
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const result = await client.query(
+        `INSERT INTO employees (
+           full_name, email, phone, poste, salary_base, payroll_eligible_from, application_id
+         )
+         VALUES ($1, $2, $3, $4, $5, COALESCE($6::date, (date_trunc('month', timezone('Africa/Douala', NOW())))::date), NULL)
+         RETURNING ${EMPLOYEE_PUBLIC_COLUMNS}`,
+        [
+          full_name,
+          normalizedEmail,
+          phone ?? null,
+          poste ?? null,
+          salary_base ?? null,
+          payroll_eligible_from ?? null,
+        ]
+      );
+      const row = result.rows[0] || null;
+      if (row) {
+        const effectiveFrom =
+          payroll_eligible_from ||
+          row.payroll_eligible_from ||
+          null;
+        await client.query(
+          `INSERT INTO employee_salary_history (employee_id, amount, effective_from)
+           VALUES ($1, $2, COALESCE($3::date, (date_trunc('month', timezone('Africa/Douala', NOW())))::date))
+           ON CONFLICT (employee_id, effective_from) DO UPDATE
+           SET amount = EXCLUDED.amount`,
+          [row.id, salary_base ?? null, effectiveFrom]
+        );
+      }
+      await client.query("COMMIT");
+      return row ? attachSalaryMeta(row) : null;
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
+    }
   }
 
   async function updateEmployee(id, updates = {}) {
@@ -838,7 +970,7 @@ function createPostgresQueries(pool) {
        RETURNING ${EMPLOYEE_PUBLIC_COLUMNS}`,
       values
     );
-    return result.rows[0] || null;
+    return attachSalaryMeta(result.rows[0] || null);
   }
 
   async function deleteEmployee(id) {
@@ -856,7 +988,7 @@ function createPostgresQueries(pool) {
        RETURNING ${EMPLOYEE_PUBLIC_COLUMNS}`,
       [JSON.stringify(faceDescriptor), id]
     );
-    return result.rows[0] || null;
+    return attachSalaryMeta(result.rows[0] || null);
   }
 
   async function getEmployeeByEmailWithDescriptor(email) {
@@ -868,7 +1000,7 @@ function createPostgresQueries(pool) {
        LIMIT 1`,
       [normalizedEmail]
     );
-    return row || null;
+    return attachSalaryMeta(row || null);
   }
 
   async function getAttendanceByEmployeeAndDate(employeeId, date) {
@@ -1144,6 +1276,8 @@ function createPostgresQueries(pool) {
     updateEmployee,
     deleteEmployee,
     enrollEmployeeFace,
+    listEmployeeSalaryHistory,
+    replaceSalaryFrom,
     getAttendanceByEmployeeAndDate,
     createAttendance,
     upsertAttendance,

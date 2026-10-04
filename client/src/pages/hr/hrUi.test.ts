@@ -81,6 +81,7 @@ describe("buildEmployeeUpdatePayload", () => {
         salaryBase: "150000",
         isActive: false,
         includeNextMonth: true,
+        salaryApplyThisMonth: false,
       })
     ).toEqual({
       full_name: "Ada Lovelace",
@@ -90,6 +91,7 @@ describe("buildEmployeeUpdatePayload", () => {
       salary_base: 150000,
       is_active: false,
       include_next_month: true,
+      salary_apply_this_month: false,
     });
   });
 
@@ -103,6 +105,7 @@ describe("buildEmployeeUpdatePayload", () => {
         salaryBase: "abc",
         isActive: true,
         includeNextMonth: false,
+        salaryApplyThisMonth: true,
       })
     ).toEqual({
       full_name: "Ada",
@@ -112,6 +115,7 @@ describe("buildEmployeeUpdatePayload", () => {
       salary_base: null,
       is_active: true,
       include_next_month: false,
+      salary_apply_this_month: true,
     });
   });
 });

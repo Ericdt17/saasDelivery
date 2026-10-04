@@ -19,7 +19,13 @@ function loadTemplate() {
  * @param {Record<string, string|number|null|undefined>} model
  */
 function fillTemplate(html, model) {
-  const rawKeys = new Set(['logoHtml', 'signatureHtml', 'stampHtml', 'profileStampHtml']);
+  const rawKeys = new Set([
+    'logoHtml',
+    'signatureHtml',
+    'stampHtml',
+    'profileStampHtml',
+    'salaryChangeRowHtml',
+  ]);
   return html.replace(/\{\{(\w+)\}\}/g, (_, key) => {
     const raw = model[key];
     if (raw == null) return '';

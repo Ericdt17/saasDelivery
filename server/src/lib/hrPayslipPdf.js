@@ -9,10 +9,15 @@ const {
   summarizeAttendances,
   getCompanySettings,
   getAgencyById,
+  listEmployeeSalaryHistory,
 } = require("../db");
 const { countWeekdaysElapsed } = require("./hrCheckin");
 const { buildPayslipModel, payslipFileName } = require("./hrPayslip");
 const { renderPayslipPdf } = require("./pdf/renderPayslipPdf");
+const {
+  resolveSalaryForMonth,
+  previousYearMonth,
+} = require("./hrSalary");
 
 /**
  * @param {{
@@ -32,10 +37,20 @@ async function buildEmployeePayslipPdf({
   year,
   signerUserId = null,
 }) {
-  const employee = await getEmployeeById(employeeId);
+  // salary_base is resolved for the payslip month via salary history.
+  const employee = await getEmployeeById(employeeId, { year, month });
   if (!employee) {
     return { ok: false, error: "not_found" };
   }
+
+  const history = await listEmployeeSalaryHistory(employeeId);
+  const prev = previousYearMonth(year, month);
+  const previousSalaryBase = resolveSalaryForMonth(
+    history,
+    prev.year,
+    prev.month,
+    null
+  );
 
   const weekdaysElapsed = countWeekdaysElapsed(year, month);
   const rows = await summarizeAttendances({ month, year });
@@ -60,6 +75,7 @@ async function buildEmployeePayslipPdf({
 
   const model = buildPayslipModel({
     employee,
+    previousSalaryBase,
     month,
     year,
     daysPresent,

@@ -78,6 +78,79 @@ describe('buildPayslipModel / payslipFileName', () => {
     expect(model.workdaysInMonth).toBe('26');
     expect(model.netPayLabel).toBe(formatCurrency(92308));
     expect(model.penaltiesTotalLabel).toBe(formatCurrency(7692));
+    expect(model.salaryChangeRowHtml).toBe('');
+    expect(model.salaryChange).toBeNull();
+  });
+
+  it('shows an augmentation row when base salary rose vs previous month', () => {
+    const model = buildPayslipModel({
+      employee: {
+        id: 2,
+        full_name: 'Jean',
+        email: 'j@x.com',
+        salary_base: 180000,
+      },
+      previousSalaryBase: 150000,
+      month: 11,
+      year: 2026,
+      daysPresent: 1,
+      daysLate: 0,
+      daysAbsent: 0,
+    });
+    expect(model.salaryChange).toEqual({
+      kind: 'raise',
+      delta: 30000,
+      previous: 150000,
+      current: 180000,
+      label: 'Augmentation de salaire',
+    });
+    expect(model.salaryChangeRowHtml).toContain('Salaire du mois précédent');
+    expect(model.salaryChangeRowHtml).toContain(formatCurrency(150000));
+    expect(model.salaryChangeRowHtml).toContain('Augmentation de salaire');
+    expect(model.salaryChangeRowHtml).toContain('+');
+    expect(model.salaryChangeRowHtml).toContain(formatCurrency(30000));
+    expect(model.salaryBaseLabel).toBe(formatCurrency(180000));
+  });
+
+  it('shows a baisse row when base salary dropped vs previous month', () => {
+    const model = buildPayslipModel({
+      employee: {
+        id: 2,
+        full_name: 'Jean',
+        email: 'j@x.com',
+        salary_base: 120000,
+      },
+      previousSalaryBase: 150000,
+      month: 11,
+      year: 2026,
+      daysPresent: 1,
+      daysLate: 0,
+      daysAbsent: 0,
+    });
+    expect(model.salaryChange?.kind).toBe('drop');
+    expect(model.salaryChange?.delta).toBe(-30000);
+    expect(model.salaryChangeRowHtml).toContain('Baisse de salaire');
+    expect(model.salaryChangeRowHtml).toContain('deduct');
+    expect(model.salaryChangeRowHtml).toContain(formatCurrency(30000));
+  });
+
+  it('omits the change row when previous equals current', () => {
+    const model = buildPayslipModel({
+      employee: {
+        id: 2,
+        full_name: 'Jean',
+        email: 'j@x.com',
+        salary_base: 150000,
+      },
+      previousSalaryBase: 150000,
+      month: 11,
+      year: 2026,
+      daysPresent: 1,
+      daysLate: 0,
+      daysAbsent: 0,
+    });
+    expect(model.salaryChange).toBeNull();
+    expect(model.salaryChangeRowHtml).toBe('');
   });
 
   it('uses company settings branding when provided', () => {
