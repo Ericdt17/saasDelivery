@@ -20,6 +20,11 @@ const mockSummarizeAttendances = jest.fn();
 const mockGetCompanySettings = jest.fn();
 const mockReplaceSalaryFrom = jest.fn();
 const mockListEmployeeSalaryHistory = jest.fn();
+const mockListWorkplaces = jest.fn();
+const mockGetWorkplaceById = jest.fn();
+const mockCreateWorkplace = jest.fn();
+const mockUpdateWorkplace = jest.fn();
+const mockDeleteWorkplace = jest.fn();
 
 jest.mock('../../db', () => ({
   adapter: { query: jest.fn(), type: 'sqlite' },
@@ -38,6 +43,11 @@ jest.mock('../../db', () => ({
   getCompanySettings: mockGetCompanySettings,
   replaceSalaryFrom: mockReplaceSalaryFrom,
   listEmployeeSalaryHistory: mockListEmployeeSalaryHistory,
+  listWorkplaces: mockListWorkplaces,
+  getWorkplaceById: mockGetWorkplaceById,
+  createWorkplace: mockCreateWorkplace,
+  updateWorkplace: mockUpdateWorkplace,
+  deleteWorkplace: mockDeleteWorkplace,
   listMerchantTerms: jest.fn(),
   getMerchantTermsById: jest.fn(),
   createMerchantTerms: jest.fn(),
@@ -246,6 +256,121 @@ describe('POST /api/v1/hr/employees', () => {
     expect(mockCreateEmployee.mock.calls[0][0]).not.toHaveProperty(
       'include_next_month'
     );
+  });
+
+  it('accepts identity and contract fields on create', async () => {
+    mockCreateEmployee.mockResolvedValueOnce({
+      ...employeeFixture,
+      employee_type: 'livreur',
+      date_of_birth: '1995-03-12',
+      nationality: 'Camerounaise',
+      national_id: 'CNI123',
+      address: 'Makepe, Douala',
+      workplace_id: 2,
+      workplace_name: 'Entrepôt Makepe',
+      contract_kind: 'cdi',
+      contract_start_date: '2026-10-01',
+      contract_end_date: null,
+      trial_period_days: 90,
+      mission_description: 'Livraisons Douala',
+      personal_email: 'jean.perso@example.com',
+      place_of_birth: 'Douala',
+      gender: 'homme',
+      emergency_contact_name: 'Marie Dupont',
+      emergency_contact_phone: '691111111',
+      emergency_contact_relation: 'Épouse',
+      work_schedule: '8h00–17h00, pause 1h',
+    });
+    mockGetWorkplaceById.mockResolvedValueOnce({
+      id: 2,
+      name: 'Entrepôt Makepe',
+      is_active: true,
+    });
+    const res = await request(app)
+      .post('/api/v1/hr/employees')
+      .set('Authorization', `Bearer ${superToken}`)
+      .send({
+        full_name: 'Jean Dupont',
+        email: 'jean.dupont@example.com',
+        employee_type: 'livreur',
+        date_of_birth: '1995-03-12',
+        nationality: 'Camerounaise',
+        national_id: 'CNI123',
+        address: 'Makepe, Douala',
+        workplace_id: 2,
+        contract_kind: 'cdi',
+        contract_start_date: '2026-10-01',
+        contract_end_date: '2027-01-01',
+        trial_period_days: 90,
+        mission_description: 'Livraisons Douala',
+        personal_email: 'jean.perso@example.com',
+        place_of_birth: 'Douala',
+        gender: 'homme',
+        emergency_contact_name: 'Marie Dupont',
+        emergency_contact_phone: '691111111',
+        emergency_contact_relation: 'Épouse',
+        work_schedule: '8h00–17h00, pause 1h',
+      });
+    expect(res.status).toBe(201);
+    expect(mockCreateEmployee).toHaveBeenCalledWith(
+      expect.objectContaining({
+        employee_type: 'livreur',
+        date_of_birth: '1995-03-12',
+        nationality: 'Camerounaise',
+        national_id: 'CNI123',
+        address: 'Makepe, Douala',
+        workplace_id: 2,
+        contract_kind: 'cdi',
+        contract_start_date: '2026-10-01',
+        contract_end_date: null,
+        trial_period_days: 90,
+        mission_description: 'Livraisons Douala',
+        personal_email: 'jean.perso@example.com',
+        place_of_birth: 'Douala',
+        gender: 'homme',
+        emergency_contact_name: 'Marie Dupont',
+        emergency_contact_phone: '691111111',
+        emergency_contact_relation: 'Épouse',
+        work_schedule: '8h00–17h00, pause 1h',
+      })
+    );
+  });
+
+  it('rejects invalid gender and personal_email on create', async () => {
+    const badGender = await request(app)
+      .post('/api/v1/hr/employees')
+      .set('Authorization', `Bearer ${superToken}`)
+      .send({
+        full_name: 'Jean Dupont',
+        email: 'jean.dupont@example.com',
+        gender: 'other',
+      });
+    expect(badGender.status).toBe(400);
+    expect(mockCreateEmployee).not.toHaveBeenCalled();
+
+    const badEmail = await request(app)
+      .post('/api/v1/hr/employees')
+      .set('Authorization', `Bearer ${superToken}`)
+      .send({
+        full_name: 'Jean Dupont',
+        email: 'jean.dupont@example.com',
+        personal_email: 'not-an-email',
+      });
+    expect(badEmail.status).toBe(400);
+    expect(mockCreateEmployee).not.toHaveBeenCalled();
+  });
+
+  it('rejects invalid employee_type on create', async () => {
+    const res = await request(app)
+      .post('/api/v1/hr/employees')
+      .set('Authorization', `Bearer ${superToken}`)
+      .send({
+        full_name: 'Jean Dupont',
+        email: 'jean.dupont@example.com',
+        employee_type: 'manager',
+      });
+    expect(res.status).toBe(400);
+    expect(mockCreateEmployee).not.toHaveBeenCalled();
   });
 
   it('defers payroll_eligible_from to next month when include_next_month is true', async () => {

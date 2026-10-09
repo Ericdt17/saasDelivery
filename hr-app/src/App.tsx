@@ -5,11 +5,13 @@ import {
   selfEnrollFace,
   submitCheckin,
   verifyEmail,
+  type RegulationStatus,
 } from "./api/checkin";
 import { EmailStep } from "./components/EmailStep";
 import { FaceStep } from "./components/FaceStep";
 import { ResultStep } from "./components/ResultStep";
 import { DayCostReminder } from "./components/DayCostReminder";
+import { RegulationNotice } from "./components/RegulationNotice";
 import { isNetworkErrorMessage, successGreeting } from "./lib/greeting";
 import { getCurrentPosition } from "./lib/geo";
 import {
@@ -57,6 +59,7 @@ export default function App() {
   const [status, setStatus] = useState<"present" | "late" | null>(null);
   const [costLateDay, setCostLateDay] = useState<number | null>(null);
   const [costAbsentDay, setCostAbsentDay] = useState<number | null>(null);
+  const [regulation, setRegulation] = useState<RegulationStatus | null>(null);
   const lastDescriptorRef = useRef<number[] | null>(null);
 
   const reset = useCallback(() => {
@@ -73,6 +76,7 @@ export default function App() {
     setStatus(null);
     setCostLateDay(null);
     setCostAbsentDay(null);
+    setRegulation(null);
     lastDescriptorRef.current = null;
   }, []);
 
@@ -91,6 +95,7 @@ export default function App() {
       setCostAbsentDay(
         typeof data.cost_absent_day === "number" ? data.cost_absent_day : null
       );
+      setRegulation(data.regulation ?? null);
       setStep("face");
     } catch (e) {
       setEmailError(friendlyError(e));
@@ -126,6 +131,7 @@ export default function App() {
       setEmployeeName(result.employee_name);
       setCheckInTime(result.check_in_time);
       setStatus(result.status);
+      setRegulation(result.regulation ?? regulation);
       setStep("confirm");
     } catch (e) {
       const message = checkinPipelineErrorMessage(friendlyError(e), {
@@ -197,6 +203,7 @@ export default function App() {
               costLateDay={costLateDay}
               costAbsentDay={costAbsentDay}
             />
+            <RegulationNotice regulation={regulation} email={email} />
           </div>
         ) : null}
 

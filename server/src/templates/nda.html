@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<title>Accord de confidentialité — NDA</title>
+<style>{{fonts.css}}</style>
+<style>
+  /* Match the Word template: Aptos, title/headings in LivSight blue #1A96D4. */
+  * { box-sizing: border-box; }
+  body {
+    font-family: Aptos, "Aptos Display", "Segoe UI", Calibri, Helvetica, Arial, sans-serif;
+    font-size: 12pt;
+    line-height: 1.4;
+    color: #000;
+    margin: 0;
+  }
+  h1 {
+    font-family: "Aptos Display", Aptos, "Segoe UI", Calibri, Helvetica, Arial, sans-serif;
+    font-size: 20pt;
+    font-weight: bold;
+    color: #1A96D4;
+    text-align: center;
+    text-transform: uppercase;
+    margin: 0 0 14pt;
+  }
+  .heading-center {
+    font-family: "Aptos Display", Aptos, "Segoe UI", Calibri, Helvetica, Arial, sans-serif;
+    font-size: 16pt;
+    font-weight: bold;
+    color: #1A96D4;
+    text-align: center;
+    margin: 0 0 8pt;
+  }
+  h2 {
+    font-family: "Aptos Display", Aptos, "Segoe UI", Calibri, Helvetica, Arial, sans-serif;
+    font-size: 16pt;
+    font-weight: bold;
+    color: #1A96D4;
+    text-transform: uppercase;
+    margin: 14pt 0 5pt;
+  }
+  p { margin: 5pt 0; }
+  ul { margin: 5pt 0; padding-left: 22pt; }
+  li { margin: 2pt 0; }
+  b, strong { font-weight: bold; }
+  .parties p { margin: 5pt 0; }
+  .centered { text-align: center; }
+  .signatures {
+    margin-top: 28pt;
+    width: 100%;
+    page-break-inside: avoid;
+  }
+  .signatures td {
+    width: 50%;
+    vertical-align: top;
+    padding: 0 8pt;
+    text-align: center;
+  }
+  .sig-role {
+    font-weight: bold;
+    color: #1A96D4;
+    font-size: 12pt;
+  }
+  .sig-name { margin-top: 4pt; }
+  .sig-zone {
+    height: 90pt;
+    margin-top: 8pt;
+    position: relative;
+  }
+  .sig-zone img {
+    max-height: 85pt;
+    max-width: 90%;
+    object-fit: contain;
+  }
+  .sig-line {
+    border-top: 1pt solid #000;
+    margin-top: 4pt;
+    padding-top: 3pt;
+  }
+</style>
+</head>
+<body>
+
+<h1>Accord de confidentialité</h1>
+<div class="heading-center" style="font-size: 13pt; color: #595959;">Non-Disclosure Agreement — NDA</div>
+
+<div class="parties">
+  <div class="heading-center">ENTRE LES SOUSSIGNÉS</div>
+  <p>
+    <strong>{{company.legal_name}}</strong>, société à responsabilité limitée, immatriculée au
+    Registre du Commerce et du Crédit Mobilier sous le numéro
+    <strong>{{company.rccm}}</strong>, identifiée sous le NIU
+    <strong>{{company.niu}}</strong>, ayant son siège à {{company.address}}, représentée par son
+    {{company.signer_role}}, <strong>{{company.signer_name}}</strong>,
+  </p>
+  <p>Ci-après dénommée <strong>« LivSight »</strong>,</p>
+  <p><strong>D’une part,</strong></p>
+  <p class="centered"><strong>ET</strong></p>
+  <p>
+    <strong>{{full_name}}</strong>, né(e) le <strong>{{date_of_birth}}</strong> à
+    <strong>{{place_of_birth}}</strong>, de nationalité <strong>{{nationality}}</strong>,
+    titulaire de la CNI ou pièce d’identité n° <strong>{{national_id}}</strong>,
+    domicilié(e) à <strong>{{address}}</strong>, exerçant les fonctions de
+    <strong>{{poste}}</strong>,
+  </p>
+  <p>Ci-après dénommé(e) <strong>« le Collaborateur »</strong>,</p>
+  <p><strong>D’autre part,</strong></p>
+  <p>Il a été convenu ce qui suit :</p>
+</div>
+
+<h2>Article 1 — Objet</h2>
+<p>Le présent accord a pour objet de définir les obligations de confidentialité applicables au Collaborateur concernant les informations auxquelles il/elle peut avoir accès dans le cadre de ses fonctions ou de sa collaboration avec LivSight.</p>
+<p>Le Collaborateur reconnaît que ses fonctions peuvent lui donner accès à des informations confidentielles appartenant à LivSight, à ses clients, commerçants, destinataires, partenaires ou autres collaborateurs.</p>
+
+<h2>Article 2 — Informations confidentielles</h2>
+<p>Sont notamment considérées comme confidentielles toutes les informations non publiques concernant :</p>
+<ul>
+  <li>les clients et commerçants de LivSight ;</li>
+  <li>les destinataires, leurs coordonnées et adresses ;</li>
+  <li>les commandes et livraisons ;</li>
+  <li>les transactions et montants collectés ;</li>
+  <li>les stocks et marchandises confiés à LivSight ;</li>
+  <li>les tarifs et conditions commerciales ;</li>
+  <li>les rapports et statistiques d’activité ;</li>
+  <li>les procédures opérationnelles ;</li>
+  <li>les méthodes de travail et documents internes ;</li>
+  <li>les informations financières et comptables ;</li>
+  <li>les prospects, partenaires et fournisseurs ;</li>
+  <li>les contrats et négociations commerciales ;</li>
+  <li>les stratégies commerciales et marketing ;</li>
+  <li>les projets et développements futurs ;</li>
+  <li>les identifiants, mots de passe et autres moyens d’accès ;</li>
+  <li>les logiciels et applications LivSight ;</li>
+  <li>les API, bases de données et infrastructures techniques ;</li>
+  <li>le code source, les algorithmes et la documentation technique ;</li>
+  <li>l’architecture des systèmes LivSight ;</li>
+  <li>toute autre information identifiée comme confidentielle ou dont le caractère confidentiel peut raisonnablement être compris.</li>
+</ul>
+<p>Ces informations peuvent être communiquées sous forme écrite, orale, numérique, visuelle ou par l’accès à un système informatique.</p>
+
+<h2>Article 3 — Obligations du Collaborateur</h2>
+<p>Le Collaborateur s’engage à utiliser les informations confidentielles uniquement dans le cadre de ses fonctions pour LivSight.</p>
+<p>Il/elle s’engage notamment à :</p>
+<ul>
+  <li>ne pas divulguer les informations confidentielles à une personne non autorisée ;</li>
+  <li>ne pas transmettre de documents ou données LivSight à des tiers sans autorisation ;</li>
+  <li>ne pas copier, télécharger ou exporter inutilement des données professionnelles ;</li>
+  <li>ne pas utiliser les informations LivSight pour son bénéfice personnel ou celui d’un tiers ;</li>
+  <li>ne pas utiliser les fichiers clients, commerçants ou prospects pour une activité extérieure ;</li>
+  <li>ne pas publier d’informations internes sur les réseaux sociaux ou tout autre canal public ;</li>
+  <li>protéger les documents et informations placés sous sa responsabilité ;</li>
+  <li>respecter les procédures de confidentialité et de sécurité établies par LivSight.</li>
+</ul>
+
+<h2>Article 4 — Données des clients, commerçants et destinataires</h2>
+<p>Le Collaborateur reconnaît le caractère sensible des informations relatives aux clients, commerçants, destinataires et partenaires de LivSight.</p>
+<p>Ces informations ne doivent être consultées que lorsque cela est nécessaire à l’exercice de ses fonctions.</p>
+<p>Il est notamment interdit d’utiliser à des fins personnelles ou non autorisées :</p>
+<ul>
+  <li>les numéros de téléphone ;</li>
+  <li>les adresses ;</li>
+  <li>les informations relatives aux commandes ;</li>
+  <li>les historiques de livraison ;</li>
+  <li>les informations financières ;</li>
+  <li>les données commerciales ;</li>
+  <li>toute autre information obtenue grâce aux systèmes LivSight.</li>
+</ul>
+
+<h2>Article 5 — Systèmes, comptes et identifiants</h2>
+<p>Les comptes et accès attribués au Collaborateur sont personnels.</p>
+<p>Le Collaborateur s’engage à :</p>
+<ul>
+  <li>préserver la confidentialité de ses identifiants et mots de passe ;</li>
+  <li>ne pas partager ses accès avec une autre personne ;</li>
+  <li>ne pas utiliser le compte d’un autre collaborateur ;</li>
+  <li>ne pas tenter d’accéder à des données ou fonctionnalités qui ne sont pas nécessaires à ses fonctions ;</li>
+  <li>signaler immédiatement toute perte, compromission ou utilisation suspecte de son compte ou d’un équipement professionnel.</li>
+</ul>
+
+<h2>Article 6 — Informations techniques et logiciels</h2>
+<p>Les logiciels, applications, interfaces, bases de données, API, architectures, configurations, documentations techniques, codes sources, algorithmes et autres éléments techniques non publics relatifs à LivSight sont confidentiels.</p>
+<p>Le Collaborateur ne peut notamment pas, sans autorisation de LivSight :</p>
+<ul>
+  <li>copier ou transmettre du code source ;</li>
+  <li>partager des identifiants techniques ou clés d’accès ;</li>
+  <li>reproduire une partie non publique des systèmes LivSight au bénéfice d’un tiers ;</li>
+  <li>communiquer une documentation technique interne ;</li>
+  <li>utiliser des informations techniques confidentielles pour développer ou contribuer à un système tiers.</li>
+</ul>
+<p>Le présent article porte sur la confidentialité de ces éléments et ne se substitue pas aux éventuelles dispositions spécifiques relatives à la propriété intellectuelle.</p>
+
+<h2>Article 7 — Informations commerciales et opérationnelles</h2>
+<p>Le Collaborateur s’engage à préserver la confidentialité des informations relatives notamment :</p>
+<ul>
+  <li>aux volumes de livraison ;</li>
+  <li>aux performances opérationnelles ;</li>
+  <li>aux revenus et dépenses ;</li>
+  <li>aux marges ;</li>
+  <li>aux conditions négociées avec les clients ou partenaires ;</li>
+  <li>aux méthodes d’acquisition de clients ;</li>
+  <li>aux listes de prospects ;</li>
+  <li>aux projets de partenariat ;</li>
+  <li>aux procédures de stockage, collecte, livraison et reversement ;</li>
+  <li>aux stratégies de développement de LivSight.</li>
+</ul>
+<p>Ces informations ne peuvent être utilisées pour concurrencer LivSight, favoriser un tiers ou détourner une opportunité commerciale obtenue dans le cadre des fonctions du Collaborateur.</p>
+
+<h2>Article 8 — Exceptions</h2>
+<p>Ne sont pas considérées comme confidentielles les informations dont le Collaborateur peut démontrer :</p>
+<ul>
+  <li>qu’elles étaient déjà accessibles au public sans violation du présent accord ;</li>
+  <li>qu’il/elle les détenait légalement avant leur communication par LivSight ;</li>
+  <li>qu’elles lui ont été communiquées légalement par un tiers autorisé ;</li>
+  <li>ou que leur divulgation est imposée par la loi ou par une autorité compétente.</li>
+</ul>
+<p>Lorsque la loi le permet, le Collaborateur informe LivSight de toute demande officielle de divulgation concernant des informations confidentielles.</p>
+
+<h2>Article 9 — Incident de confidentialité</h2>
+<p>Le Collaborateur doit informer LivSight dans les meilleurs délais de tout incident ou suspicion d’incident concernant les informations de l’entreprise.</p>
+<p>Cela comprend notamment :</p>
+<ul>
+  <li>perte ou vol d’un appareil ;</li>
+  <li>document perdu ;</li>
+  <li>message envoyé au mauvais destinataire ;</li>
+  <li>accès non autorisé ;</li>
+  <li>divulgation accidentelle ;</li>
+  <li>compte compromis ;</li>
+  <li>mot de passe exposé ;</li>
+  <li>extraction inhabituelle de données ;</li>
+  <li>toute autre situation susceptible de compromettre une information confidentielle.</li>
+</ul>
+<p>Le Collaborateur s’engage à coopérer avec LivSight afin de limiter les conséquences de l’incident.</p>
+
+<h2>Article 10 — Propriété et restitution</h2>
+<p>Les documents, fichiers, rapports, bases de données, procédures, équipements et autres ressources professionnelles mis à disposition du Collaborateur demeurent la propriété de LivSight ou de leur propriétaire légitime.</p>
+<p>À la demande de LivSight ou à la fin de la relation professionnelle, le Collaborateur doit restituer les éléments appartenant à LivSight.</p>
+<p>Il/elle doit également supprimer les copies non autorisées d’informations LivSight conservées sur des appareils, espaces de stockage ou comptes personnels, sous réserve des obligations légales applicables.</p>
+
+<h2>Article 11 — Durée de l’obligation</h2>
+<p>Les obligations prévues par le présent accord s’appliquent pendant toute la durée de la relation professionnelle entre LivSight et le Collaborateur.</p>
+<p>Elles continuent à s’appliquer après la fin de cette relation aussi longtemps que les informations concernées conservent leur caractère confidentiel, sous réserve des dispositions légales applicables.</p>
+
+<h2>Article 12 — Manquement</h2>
+<p>Toute violation des obligations prévues par le présent accord peut faire l’objet des mesures contractuelles, disciplinaires ou judiciaires légalement applicables selon la nature et la gravité des faits.</p>
+<p>Lorsque la violation cause un préjudice à LivSight, à un client, à un partenaire ou à un tiers, LivSight conserve le droit d’exercer les recours prévus par la législation applicable afin d’obtenir réparation du préjudice subi.</p>
+<p>Le présent article ne constitue pas une autorisation d’appliquer automatiquement une amende ou une retenue sur salaire.</p>
+
+<h2>Article 13 — Indépendance des obligations</h2>
+<p>Le présent accord complète, le cas échéant, le contrat de travail, les procédures internes et les autres engagements contractuels du Collaborateur.</p>
+<p>Il ne modifie pas la rémunération, les horaires de travail ou les droits résultant du contrat de travail.</p>
+<p>La fin de la relation professionnelle n’entraîne pas automatiquement la disparition des obligations de confidentialité prévues par le présent accord.</p>
+
+<h2>Article 14 — Droit applicable</h2>
+<p>Le présent accord est soumis au <strong>droit camerounais</strong>.</p>
+<p>Les parties privilégient, lorsque cela est possible, une résolution amiable de tout différend avant le recours aux procédures prévues par la législation applicable.</p>
+
+<h2>Article 15 — Acceptation</h2>
+<p>Le Collaborateur reconnaît avoir pris connaissance du présent accord, en comprendre la portée et accepter les obligations de confidentialité qui y sont prévues.</p>
+<p><strong>Fait à Yaoundé, le {{contract.date}}, en deux exemplaires.</strong></p>
+
+<table class="signatures">
+  <tr>
+    <td>
+      <div class="sig-role">Pour LivSight</div>
+      <div class="sig-name">{{company.legal_name}}<br/>{{company.signer_name}}, {{company.signer_role}}</div>
+      <div class="sig-name">Signature et cachet :</div>
+      <div class="sig-zone">{{company.signature}}{{company.stamp}}</div>
+      <div class="sig-line">&nbsp;</div>
+    </td>
+    <td>
+      <div class="sig-role">Le Collaborateur</div>
+      <div class="sig-name"><strong>{{full_name}}</strong></div>
+      <div class="sig-name">« Lu et approuvé », signature :</div>
+      <div class="sig-zone">{{employee.signature}}</div>
+      <div class="sig-line">&nbsp;</div>
+    </td>
+  </tr>
+</table>
+
+</body>
+</html>

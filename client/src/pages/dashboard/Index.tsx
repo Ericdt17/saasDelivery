@@ -13,12 +13,14 @@ import {
   Clock,
   Wallet,
   HandCoins,
+  BookOpenCheck,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   useHrAttendances,
   useHrAttendancesSummary,
   useHrEmployees,
+  useHrRegulations,
 } from "@/hooks/useHr";
 import {
   buildHrDashboardStats,
@@ -186,7 +188,38 @@ function HrDashboardContent() {
           />
         </div>
       )}
+
+      <RegulationIndicatorCard />
     </div>
+  );
+}
+
+/** « X employés n'ont pas pris connaissance du règlement » — lien vers le suivi. */
+function RegulationIndicatorCard() {
+  const { data: regulations = [] } = useHrRegulations();
+  const regulation = regulations[0];
+  if (!regulation?.stats || regulation.stats.not_read === 0) return null;
+  return (
+    <Link
+      to="/hr/reglement"
+      className="block max-w-xl rounded-xl border border-orange-200 bg-orange-50 p-4 transition-colors hover:bg-orange-100"
+    >
+      <div className="flex items-start gap-3">
+        <BookOpenCheck className="mt-0.5 h-5 w-5 text-orange-600" />
+        <div>
+          <p className="font-medium text-orange-900">
+            Règlement intérieur {regulation.current_version_label} —{" "}
+            {regulation.stats.not_read}{" "}
+            {regulation.stats.not_read > 1
+              ? "employés n'ont pas encore pris connaissance"
+              : "employé n'a pas encore pris connaissance"}
+          </p>
+          <p className="mt-0.5 text-sm text-orange-700">
+            Voir les employés →
+          </p>
+        </div>
+      </div>
+    </Link>
   );
 }
 

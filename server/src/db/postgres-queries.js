@@ -739,10 +739,17 @@ function createPostgresQueries(pool) {
   }
 
   const EMPLOYEE_PUBLIC_COLUMNS = `
-    id, application_id, job_offer_id, full_name, phone, email, photo_url,
+    id, application_id, job_offer_id, full_name, phone, email, personal_email, photo_url,
     gender, quartier, job_title, job_type, education_level, field_of_study,
     school_name, transport, availability, status, hired_at, notes, salary,
     poste, salary_base, payroll_eligible_from, is_active, enrolled_at,
+    employee_type, date_of_birth, place_of_birth, nationality, national_id, address,
+    workplace_id,
+    (SELECT w.name FROM hr_workplaces w WHERE w.id = employees.workplace_id) AS workplace_name,
+    emergency_contact_name, emergency_contact_phone, emergency_contact_relation,
+    work_schedule,
+    contract_kind, contract_start_date, contract_end_date,
+    trial_period_days, mission_description,
     created_at, updated_at,
     (enrolled_at IS NOT NULL) AS is_enrolled
   `;
@@ -889,28 +896,77 @@ function createPostgresQueries(pool) {
   async function createEmployee({
     full_name,
     email,
+    personal_email = null,
     phone = null,
     poste = null,
     salary_base = null,
     payroll_eligible_from = null,
+    employee_type = null,
+    date_of_birth = null,
+    place_of_birth = null,
+    gender = null,
+    nationality = null,
+    national_id = null,
+    address = null,
+    workplace_id = null,
+    emergency_contact_name = null,
+    emergency_contact_phone = null,
+    emergency_contact_relation = null,
+    work_schedule = null,
+    contract_kind = null,
+    contract_start_date = null,
+    contract_end_date = null,
+    trial_period_days = null,
+    mission_description = null,
   }) {
     const normalizedEmail = String(email).trim().toLowerCase();
+    const normalizedPersonalEmail =
+      personal_email == null || personal_email === ""
+        ? null
+        : String(personal_email).trim().toLowerCase();
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
       const result = await client.query(
         `INSERT INTO employees (
-           full_name, email, phone, poste, salary_base, payroll_eligible_from, application_id
+           full_name, email, personal_email, phone, poste, salary_base, payroll_eligible_from,
+           employee_type, date_of_birth, place_of_birth, gender, nationality, national_id, address,
+           workplace_id, emergency_contact_name, emergency_contact_phone, emergency_contact_relation,
+           work_schedule,
+           contract_kind, contract_start_date, contract_end_date,
+           trial_period_days, mission_description, application_id
          )
-         VALUES ($1, $2, $3, $4, $5, COALESCE($6::date, (date_trunc('month', timezone('Africa/Douala', NOW())))::date), NULL)
+         VALUES (
+           $1, $2, $3, $4, $5, $6,
+           COALESCE($7::date, (date_trunc('month', timezone('Africa/Douala', NOW())))::date),
+           $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, NULL
+         )
          RETURNING ${EMPLOYEE_PUBLIC_COLUMNS}`,
         [
           full_name,
           normalizedEmail,
+          normalizedPersonalEmail,
           phone ?? null,
           poste ?? null,
           salary_base ?? null,
           payroll_eligible_from ?? null,
+          employee_type ?? null,
+          date_of_birth ?? null,
+          place_of_birth ?? null,
+          gender ?? null,
+          nationality ?? null,
+          national_id ?? null,
+          address ?? null,
+          workplace_id ?? null,
+          emergency_contact_name ?? null,
+          emergency_contact_phone ?? null,
+          emergency_contact_relation ?? null,
+          work_schedule ?? null,
+          contract_kind ?? null,
+          contract_start_date ?? null,
+          contract_end_date ?? null,
+          trial_period_days ?? null,
+          mission_description ?? null,
         ]
       );
       const row = result.rows[0] || null;
@@ -941,11 +997,29 @@ function createPostgresQueries(pool) {
     const allowed = [
       "full_name",
       "email",
+      "personal_email",
       "phone",
       "poste",
       "salary_base",
       "payroll_eligible_from",
       "is_active",
+      "employee_type",
+      "date_of_birth",
+      "place_of_birth",
+      "gender",
+      "nationality",
+      "national_id",
+      "address",
+      "workplace_id",
+      "emergency_contact_name",
+      "emergency_contact_phone",
+      "emergency_contact_relation",
+      "work_schedule",
+      "contract_kind",
+      "contract_start_date",
+      "contract_end_date",
+      "trial_period_days",
+      "mission_description",
     ];
     const fields = [];
     const values = [];
@@ -954,7 +1028,7 @@ function createPostgresQueries(pool) {
       if (!allowed.includes(key)) continue;
       if (value === undefined) continue;
       let nextValue = value;
-      if (key === "email" && value != null) {
+      if ((key === "email" || key === "personal_email") && value != null) {
         nextValue = String(value).trim().toLowerCase();
       }
       fields.push(`${key} = $${i++}`);
@@ -1227,6 +1301,450 @@ function createPostgresQueries(pool) {
     return list[0] || null;
   }
 
+  async function listWorkplaces({ activeOnly = false } = {}) {
+    const rows = await query(
+      `SELECT id, name, is_active, created_at, updated_at
+       FROM hr_workplaces
+       ${activeOnly ? "WHERE is_active = true" : ""}
+       ORDER BY name ASC`
+    );
+    return Array.isArray(rows) ? rows : rows ? [rows] : [];
+  }
+
+  async function getWorkplaceById(id) {
+    const row = await query(
+      `SELECT id, name, is_active, created_at, updated_at
+       FROM hr_workplaces
+       WHERE id = $1
+       LIMIT 1`,
+      [id]
+    );
+    return row || null;
+  }
+
+  async function createWorkplace({ name, is_active = true }) {
+    const result = await pool.query(
+      `INSERT INTO hr_workplaces (name, is_active)
+       VALUES ($1, $2)
+       RETURNING id, name, is_active, created_at, updated_at`,
+      [String(name).trim(), is_active !== false]
+    );
+    return result.rows[0] || null;
+  }
+
+  async function updateWorkplace(id, updates = {}) {
+    const allowed = ["name", "is_active"];
+    const fields = [];
+    const values = [];
+    let i = 1;
+    for (const [key, value] of Object.entries(updates)) {
+      if (!allowed.includes(key) || value === undefined) continue;
+      let next = value;
+      if (key === "name" && value != null) next = String(value).trim();
+      fields.push(`${key} = $${i++}`);
+      values.push(next);
+    }
+    if (!fields.length) return getWorkplaceById(id);
+    fields.push("updated_at = NOW()");
+    values.push(id);
+    const result = await pool.query(
+      `UPDATE hr_workplaces SET ${fields.join(", ")} WHERE id = $${i}
+       RETURNING id, name, is_active, created_at, updated_at`,
+      values
+    );
+    return result.rows[0] || null;
+  }
+
+  async function deleteWorkplace(id) {
+    // Soft-deactivate; keep FK history on employees.
+    const result = await pool.query(
+      `UPDATE hr_workplaces
+       SET is_active = false, updated_at = NOW()
+       WHERE id = $1
+       RETURNING id, name, is_active, created_at, updated_at`,
+      [id]
+    );
+    return result.rows[0] || null;
+  }
+
+  // Metadata only — PDF/HTML blobs and snapshot are fetched explicitly.
+  const HR_CONTRACT_META_COLUMNS = `
+    id, employee_id, status, template_key, contract_date,
+    document_file_name, document_sha256,
+    ready_for_signature_at, signature_token, signature_token_expires_at,
+    signed_at, signature_consent, signed_document_sha256,
+    declined_at, decline_reason, created_at, updated_at
+  `;
+
+  async function createHrContract({
+    employee_id,
+    template_key,
+    contract_date,
+    snapshot,
+    document_html,
+    document_pdf,
+    document_file_name,
+    document_sha256,
+  }) {
+    const result = await pool.query(
+      `INSERT INTO hr_contracts (
+         employee_id, status, template_key, contract_date, snapshot,
+         document_html, document_pdf, document_file_name, document_sha256
+       ) VALUES ($1, 'generated', $2, $3::date, $4::jsonb, $5, $6, $7, $8)
+       RETURNING ${HR_CONTRACT_META_COLUMNS}`,
+      [
+        employee_id,
+        template_key,
+        contract_date,
+        JSON.stringify(snapshot),
+        document_html,
+        document_pdf,
+        document_file_name,
+        document_sha256,
+      ]
+    );
+    return result.rows[0] || null;
+  }
+
+  async function listHrContractsByEmployee(employeeId) {
+    const rows = await query(
+      `SELECT ${HR_CONTRACT_META_COLUMNS}
+       FROM hr_contracts
+       WHERE employee_id = $1
+       ORDER BY created_at DESC`,
+      [employeeId]
+    );
+    return Array.isArray(rows) ? rows : rows ? [rows] : [];
+  }
+
+  async function getHrContractById(id, { withDocuments = false } = {}) {
+    const extra = withDocuments
+      ? ", snapshot, document_html, document_pdf, signed_pdf, signature_image_base64"
+      : ", snapshot";
+    const row = await query(
+      `SELECT ${HR_CONTRACT_META_COLUMNS}${extra}
+       FROM hr_contracts
+       WHERE id = $1
+       LIMIT 1`,
+      [id]
+    );
+    return row || null;
+  }
+
+  async function getHrContractByToken(token) {
+    const row = await query(
+      `SELECT ${HR_CONTRACT_META_COLUMNS}, snapshot, document_html, document_pdf, signed_pdf
+       FROM hr_contracts
+       WHERE signature_token = $1
+       LIMIT 1`,
+      [token]
+    );
+    return row || null;
+  }
+
+  async function updateHrContract(id, updates = {}) {
+    const allowed = [
+      "status",
+      "ready_for_signature_at",
+      "signature_token",
+      "signature_token_expires_at",
+      "signed_at",
+      "signature_consent",
+      "signature_ip",
+      "signature_user_agent",
+      "signature_image_base64",
+      "signed_pdf",
+      "signed_document_sha256",
+      "declined_at",
+      "decline_reason",
+    ];
+    const fields = [];
+    const values = [];
+    let i = 1;
+    for (const [key, value] of Object.entries(updates)) {
+      if (!allowed.includes(key) || value === undefined) continue;
+      fields.push(`${key} = $${i++}`);
+      values.push(value);
+    }
+    if (!fields.length) return getHrContractById(id);
+    fields.push("updated_at = NOW()");
+    values.push(id);
+    const result = await pool.query(
+      `UPDATE hr_contracts SET ${fields.join(", ")} WHERE id = $${i}
+       RETURNING ${HR_CONTRACT_META_COLUMNS}`,
+      values
+    );
+    return result.rows[0] || null;
+  }
+
+  // -------------------------------------------------------------------------
+  // Company documents (règlement intérieur) — versions + acknowledgements
+  // -------------------------------------------------------------------------
+
+  const COMPANY_DOC_COLUMNS = `
+    d.id, d.doc_type, d.title, d.slug, d.description, d.status,
+    d.current_version_id, d.created_by, d.created_at, d.updated_at
+  `;
+  const DOC_VERSION_META_COLUMNS = `
+    v.id, v.document_id, v.version_number, v.status,
+    v.created_by, v.published_by, v.published_at, v.created_at, v.updated_at
+  `;
+
+  async function listCompanyDocuments({ docType = null } = {}) {
+    const params = [];
+    let where = "";
+    if (docType) {
+      params.push(docType);
+      where = "WHERE d.doc_type = $1";
+    }
+    const rows = await query(
+      `SELECT ${COMPANY_DOC_COLUMNS},
+              cv.version_number AS current_version_number,
+              cv.published_at AS current_version_published_at
+       FROM hr_company_documents d
+       LEFT JOIN hr_company_document_versions cv ON cv.id = d.current_version_id
+       ${where}
+       ORDER BY d.created_at ASC`,
+      params
+    );
+    return Array.isArray(rows) ? rows : rows ? [rows] : [];
+  }
+
+  async function getCompanyDocumentById(id) {
+    const row = await query(
+      `SELECT ${COMPANY_DOC_COLUMNS},
+              cv.version_number AS current_version_number,
+              cv.published_at AS current_version_published_at
+       FROM hr_company_documents d
+       LEFT JOIN hr_company_document_versions cv ON cv.id = d.current_version_id
+       WHERE d.id = $1
+       LIMIT 1`,
+      [id]
+    );
+    return row || null;
+  }
+
+  async function createCompanyDocument({
+    doc_type = "internal_regulation",
+    title,
+    slug,
+    description = null,
+    created_by = null,
+  }) {
+    const result = await pool.query(
+      `INSERT INTO hr_company_documents (doc_type, title, slug, description, created_by)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id, doc_type, title, slug, description, status,
+                 current_version_id, created_by, created_at, updated_at`,
+      [doc_type, title, slug, description, created_by]
+    );
+    return result.rows[0] || null;
+  }
+
+  async function listCompanyDocumentVersions(documentId) {
+    const rows = await query(
+      `SELECT ${DOC_VERSION_META_COLUMNS},
+              (SELECT COUNT(*)::int FROM hr_company_document_acknowledgements a
+                WHERE a.version_id = v.id) AS acknowledgement_count
+       FROM hr_company_document_versions v
+       WHERE v.document_id = $1
+       ORDER BY v.version_number DESC`,
+      [documentId]
+    );
+    return Array.isArray(rows) ? rows : rows ? [rows] : [];
+  }
+
+  async function getCompanyDocumentVersionById(id) {
+    const row = await query(
+      `SELECT ${DOC_VERSION_META_COLUMNS}, v.content_md
+       FROM hr_company_document_versions v
+       WHERE v.id = $1
+       LIMIT 1`,
+      [id]
+    );
+    return row || null;
+  }
+
+  async function createCompanyDocumentVersion({
+    document_id,
+    content_md = "",
+    created_by = null,
+  }) {
+    const result = await pool.query(
+      `INSERT INTO hr_company_document_versions
+         (document_id, version_number, content_md, created_by)
+       VALUES (
+         $1,
+         COALESCE((SELECT MAX(version_number) FROM hr_company_document_versions
+                   WHERE document_id = $1), 0) + 1,
+         $2, $3
+       )
+       RETURNING id, document_id, version_number, status, content_md,
+                 created_by, published_by, published_at, created_at, updated_at`,
+      [document_id, content_md, created_by]
+    );
+    return result.rows[0] || null;
+  }
+
+  async function updateCompanyDocumentVersionContent(id, content_md) {
+    const result = await pool.query(
+      `UPDATE hr_company_document_versions
+       SET content_md = $1, updated_at = NOW()
+       WHERE id = $2 AND status = 'draft'
+       RETURNING id, document_id, version_number, status, content_md,
+                 created_by, published_by, published_at, created_at, updated_at`,
+      [content_md, id]
+    );
+    return result.rows[0] || null;
+  }
+
+  /**
+   * Publish a draft version atomically: the previous published version is
+   * archived (kept, never mutated in content), the draft becomes published,
+   * and the document points to it as current.
+   */
+  async function publishCompanyDocumentVersion(id, publishedBy = null) {
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const current = await client.query(
+        `SELECT id, document_id, status FROM hr_company_document_versions
+         WHERE id = $1 FOR UPDATE`,
+        [id]
+      );
+      const version = current.rows[0];
+      if (!version || version.status !== "draft") {
+        await client.query("ROLLBACK");
+        return null;
+      }
+      await client.query(
+        `UPDATE hr_company_document_versions
+         SET status = 'archived', updated_at = NOW()
+         WHERE document_id = $1 AND status = 'published'`,
+        [version.document_id]
+      );
+      const published = await client.query(
+        `UPDATE hr_company_document_versions
+         SET status = 'published', published_at = NOW(), published_by = $1,
+             updated_at = NOW()
+         WHERE id = $2
+         RETURNING id, document_id, version_number, status, content_md,
+                   created_by, published_by, published_at, created_at, updated_at`,
+        [publishedBy, id]
+      );
+      await client.query(
+        `UPDATE hr_company_documents
+         SET current_version_id = $1, updated_at = NOW()
+         WHERE id = $2`,
+        [id, version.document_id]
+      );
+      await client.query("COMMIT");
+      return published.rows[0] || null;
+    } catch (err) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
+  /** Current published version (with content) for a doc type. */
+  async function getCurrentCompanyDocument(docType = "internal_regulation") {
+    const row = await query(
+      `SELECT ${COMPANY_DOC_COLUMNS},
+              v.id AS version_id, v.version_number, v.content_md,
+              v.published_at
+       FROM hr_company_documents d
+       INNER JOIN hr_company_document_versions v ON v.id = d.current_version_id
+       WHERE d.doc_type = $1 AND d.status = 'active' AND v.status = 'published'
+       ORDER BY d.created_at ASC
+       LIMIT 1`,
+      [docType]
+    );
+    return row || null;
+  }
+
+  /** Idempotent: returns the existing row when already acknowledged. */
+  async function acknowledgeCompanyDocumentVersion({
+    version_id,
+    employee_id,
+    ip_address = null,
+    user_agent = null,
+  }) {
+    const inserted = await pool.query(
+      `INSERT INTO hr_company_document_acknowledgements
+         (version_id, employee_id, ip_address, user_agent)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (version_id, employee_id) DO NOTHING
+       RETURNING id, version_id, employee_id, acknowledged_at, ip_address, user_agent`,
+      [version_id, employee_id, ip_address, user_agent]
+    );
+    if (inserted.rows[0]) {
+      return { ...inserted.rows[0], already_acknowledged: false };
+    }
+    const existing = await query(
+      `SELECT id, version_id, employee_id, acknowledged_at, ip_address, user_agent
+       FROM hr_company_document_acknowledgements
+       WHERE version_id = $1 AND employee_id = $2
+       LIMIT 1`,
+      [version_id, employee_id]
+    );
+    return existing ? { ...existing, already_acknowledged: true } : null;
+  }
+
+  async function getCompanyDocumentAcknowledgement(versionId, employeeId) {
+    const row = await query(
+      `SELECT id, version_id, employee_id, acknowledged_at
+       FROM hr_company_document_acknowledgements
+       WHERE version_id = $1 AND employee_id = $2
+       LIMIT 1`,
+      [versionId, employeeId]
+    );
+    return row || null;
+  }
+
+  /**
+   * Read/unread status of every active employee for a version — one query
+   * (LEFT JOIN, no N+1); "not read" = absence of an acknowledgement row.
+   */
+  async function listCompanyDocumentReadStatus(versionId) {
+    const rows = await query(
+      `SELECT e.id AS employee_id, e.full_name, e.poste,
+              a.acknowledged_at
+       FROM employees e
+       LEFT JOIN hr_company_document_acknowledgements a
+         ON a.employee_id = e.id AND a.version_id = $1
+       WHERE e.is_active = true
+       ORDER BY e.full_name ASC`,
+      [versionId]
+    );
+    return Array.isArray(rows) ? rows : rows ? [rows] : [];
+  }
+
+  /**
+   * Generating a new document supersedes still-open ones of the same
+   * template_key for the employee (an open work contract survives
+   * generating an NDA, and vice versa).
+   */
+  async function cancelOpenHrContracts(employeeId, templateKey = null) {
+    const params = [employeeId];
+    let keyFilter = "";
+    if (templateKey != null) {
+      params.push(templateKey);
+      keyFilter = "AND template_key = $2";
+    }
+    const result = await pool.query(
+      `UPDATE hr_contracts
+       SET status = 'cancelled', signature_token = NULL, updated_at = NOW()
+       WHERE employee_id = $1
+         AND status IN ('generated', 'ready_for_signature')
+         ${keyFilter}
+       RETURNING id`,
+      params
+    );
+    return result.rows.map((r) => r.id);
+  }
+
   return {
     type: "postgres",
     query,
@@ -1285,6 +1803,29 @@ function createPostgresQueries(pool) {
     summarizeAttendances,
     getCompanySettings,
     upsertCompanySettings,
+    listWorkplaces,
+    getWorkplaceById,
+    createWorkplace,
+    updateWorkplace,
+    deleteWorkplace,
+    createHrContract,
+    listHrContractsByEmployee,
+    getHrContractById,
+    getHrContractByToken,
+    updateHrContract,
+    cancelOpenHrContracts,
+    listCompanyDocuments,
+    getCompanyDocumentById,
+    createCompanyDocument,
+    listCompanyDocumentVersions,
+    getCompanyDocumentVersionById,
+    createCompanyDocumentVersion,
+    updateCompanyDocumentVersionContent,
+    publishCompanyDocumentVersion,
+    getCurrentCompanyDocument,
+    acknowledgeCompanyDocumentVersion,
+    getCompanyDocumentAcknowledgement,
+    listCompanyDocumentReadStatus,
     close: async () => pool.end(),
     getRawDb: () => pool,
     TIME_ZONE,

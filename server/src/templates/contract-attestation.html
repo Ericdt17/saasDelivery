@@ -1,0 +1,49 @@
+<div style="page-break-before: always; font-family: Aptos, 'Segoe UI', Calibri, Helvetica, Arial, sans-serif; font-size: 11pt; line-height: 1.6; color: #1a1a1a;">
+  <h1 style="font-size: 16pt; color: #1A96D4; text-align: center; text-transform: uppercase; letter-spacing: 1px; margin: 24px 0 4px;">
+    Attestation de signature électronique
+  </h1>
+  <p style="text-align: center; color: #555; margin: 0 0 24px;">
+    {{attestation.contractTitle}} n° {{attestation.contractId}} — {{attestation.companyLegalName}}
+  </p>
+
+  <table style="width: 100%; border-collapse: collapse;">
+    <tr>
+      <td style="border: 1px solid #ccc; padding: 7px 10px; width: 38%; background: #f6f6f6; font-weight: bold;">Contrat</td>
+      <td style="border: 1px solid #ccc; padding: 7px 10px;">{{attestation.contractTitle}} n° {{attestation.contractId}}</td>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #ccc; padding: 7px 10px; background: #f6f6f6; font-weight: bold;">Employé(e)</td>
+      <td style="border: 1px solid #ccc; padding: 7px 10px;">{{attestation.employeeName}}</td>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #ccc; padding: 7px 10px; background: #f6f6f6; font-weight: bold;">Téléphone</td>
+      <td style="border: 1px solid #ccc; padding: 7px 10px;">{{attestation.employeePhone}}</td>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #ccc; padding: 7px 10px; background: #f6f6f6; font-weight: bold;">Signé le</td>
+      <td style="border: 1px solid #ccc; padding: 7px 10px;">{{attestation.signedAt}}</td>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #ccc; padding: 7px 10px; background: #f6f6f6; font-weight: bold;">Méthode</td>
+      <td style="border: 1px solid #ccc; padding: 7px 10px;">Signature électronique simple via lien sécurisé à usage unique</td>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #ccc; padding: 7px 10px; background: #f6f6f6; font-weight: bold;">Adresse IP</td>
+      <td style="border: 1px solid #ccc; padding: 7px 10px;">{{attestation.ip}}</td>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #ccc; padding: 7px 10px; background: #f6f6f6; font-weight: bold;">Empreinte SHA-256 du document</td>
+      <td style="border: 1px solid #ccc; padding: 7px 10px; font-family: 'Courier New', monospace; font-size: 9.5px; word-break: break-all;">{{attestation.documentSha256}}</td>
+    </tr>
+  </table>
+
+  <div style="border: 1px solid #ccc; background: #f6f6f6; padding: 10px 12px; margin-top: 18px;">
+    Mention exprimée par le signataire : <strong>« Lu et approuvé »</strong>
+  </div>
+
+  <p style="color: #555; font-size: 10px; margin-top: 18px;">
+    L’empreinte SHA-256 ci-dessus identifie de manière unique la version du contrat présentée au
+    signataire au moment de la signature. Toute modification ultérieure du document produirait une
+    empreinte différente. Cette attestation est jointe au contrat signé et en fait partie intégrante.
+  </p>
+</div>

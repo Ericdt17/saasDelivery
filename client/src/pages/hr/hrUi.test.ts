@@ -32,6 +32,8 @@ import {
   estimateDayPenaltyRates,
   formatDayPenaltyRateLines,
   buildEmployeeDetailStats,
+  contractStatusLabel,
+  contractStatusClassName,
 } from "./hrUi";
 
 describe("enrollmentBadgeLabel", () => {
@@ -76,22 +78,58 @@ describe("buildEmployeeUpdatePayload", () => {
       buildEmployeeUpdatePayload({
         fullName: "  Ada Lovelace  ",
         email: " ada@example.com ",
+        personalEmail: " ada.perso@example.com ",
         phone: " 699 ",
         poste: " Agent ",
         salaryBase: "150000",
         isActive: false,
         includeNextMonth: true,
         salaryApplyThisMonth: false,
+        employeeType: "agent",
+        dateOfBirth: "1990-05-01",
+        placeOfBirth: "  Yaoundé ",
+        gender: "femme",
+        nationality: " Camerounaise ",
+        nationalId: " 123456 ",
+        address: "  Makepe, Douala ",
+        workplaceId: "3",
+        emergencyContactName: "  Charles  ",
+        emergencyContactPhone: " 690 ",
+        emergencyContactRelation: "  Père ",
+        workSchedule: "  8h00–17h00, pause 1h ",
+        contractKind: "cdi",
+        contractStartDate: "2026-10-01",
+        contractEndDate: "2027-01-01",
+        trialPeriodDays: "90",
+        missionDescription: "  Gestion stock  ",
       })
     ).toEqual({
       full_name: "Ada Lovelace",
       email: "ada@example.com",
+      personal_email: "ada.perso@example.com",
       phone: "699",
       poste: "Agent",
       salary_base: 150000,
       is_active: false,
       include_next_month: true,
       salary_apply_this_month: false,
+      employee_type: "agent",
+      date_of_birth: "1990-05-01",
+      place_of_birth: "Yaoundé",
+      gender: "femme",
+      nationality: "Camerounaise",
+      national_id: "123456",
+      address: "Makepe, Douala",
+      workplace_id: 3,
+      emergency_contact_name: "Charles",
+      emergency_contact_phone: "690",
+      emergency_contact_relation: "Père",
+      work_schedule: "8h00–17h00, pause 1h",
+      contract_kind: "cdi",
+      contract_start_date: "2026-10-01",
+      contract_end_date: null,
+      trial_period_days: 90,
+      mission_description: "Gestion stock",
     });
   });
 
@@ -100,22 +138,58 @@ describe("buildEmployeeUpdatePayload", () => {
       buildEmployeeUpdatePayload({
         fullName: "Ada",
         email: "ada@example.com",
+        personalEmail: "",
         phone: "  ",
         poste: "",
         salaryBase: "abc",
         isActive: true,
         includeNextMonth: false,
         salaryApplyThisMonth: true,
+        employeeType: "",
+        dateOfBirth: "",
+        placeOfBirth: "",
+        gender: "",
+        nationality: "",
+        nationalId: "",
+        address: "",
+        workplaceId: "",
+        emergencyContactName: "",
+        emergencyContactPhone: "",
+        emergencyContactRelation: "",
+        workSchedule: "",
+        contractKind: "",
+        contractStartDate: "",
+        contractEndDate: "",
+        trialPeriodDays: "x",
+        missionDescription: "",
       })
     ).toEqual({
       full_name: "Ada",
       email: "ada@example.com",
+      personal_email: null,
       phone: null,
       poste: null,
       salary_base: null,
       is_active: true,
       include_next_month: false,
       salary_apply_this_month: true,
+      employee_type: null,
+      date_of_birth: null,
+      place_of_birth: null,
+      gender: null,
+      nationality: null,
+      national_id: null,
+      address: null,
+      workplace_id: null,
+      emergency_contact_name: null,
+      emergency_contact_phone: null,
+      emergency_contact_relation: null,
+      work_schedule: null,
+      contract_kind: null,
+      contract_start_date: null,
+      contract_end_date: null,
+      trial_period_days: null,
+      mission_description: null,
     });
   });
 });
@@ -795,5 +869,24 @@ describe("buildEmployeeDetailStats", () => {
     expect(stats.penaltyLate).toBe(0);
     expect(stats.penaltyAbsent).toBe(0);
     expect(stats.salaryBase).toBe(150000);
+  });
+});
+
+describe("contractStatusLabel / contractStatusClassName", () => {
+  it("labels every contract status in French", () => {
+    expect(contractStatusLabel("generated")).toBe("Généré");
+    expect(contractStatusLabel("ready_for_signature")).toBe(
+      "En attente de signature"
+    );
+    expect(contractStatusLabel("signed")).toBe("Signé");
+    expect(contractStatusLabel("declined")).toBe("Refusé");
+    expect(contractStatusLabel("expired")).toBe("Lien expiré");
+    expect(contractStatusLabel("cancelled")).toBe("Annulé");
+  });
+
+  it("maps statuses to badge colors", () => {
+    expect(contractStatusClassName("signed")).toContain("green");
+    expect(contractStatusClassName("ready_for_signature")).toContain("orange");
+    expect(contractStatusClassName("declined")).toContain("red");
   });
 });

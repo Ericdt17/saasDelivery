@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Règlement intérieur — LivSight</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #f3f4f6;
+    color: #111827;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    padding: 16px;
+  }
+  .card {
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.08);
+    max-width: 760px;
+    width: 100%;
+    padding: 28px 22px;
+    height: fit-content;
+  }
+  h1.page-title { font-size: 20px; margin-bottom: 2px; color: #0E5A85; }
+  .meta { color: #6b7280; font-size: 13px; margin-bottom: 18px; }
+  .pill {
+    display: inline-block; background: #e0f0fa; color: #0E5A85;
+    border-radius: 999px; padding: 2px 10px; font-size: 12px; font-weight: 600;
+  }
+  label.email-label { display:block; font-size: 14px; font-weight: 600; margin: 14px 0 6px; }
+  input[type=email] {
+    width: 100%; border: 1px solid #d1d5db; border-radius: 8px;
+    padding: 11px 12px; font-size: 15px;
+  }
+  .btn {
+    display: block; width: 100%; text-align: center; border: none; cursor: pointer;
+    border-radius: 8px; padding: 13px 16px; font-size: 15px; font-weight: 600;
+    margin-top: 14px; background: #1A96D4; color: #fff;
+  }
+  .btn:disabled { background: #9ca3af; cursor: not-allowed; }
+  .alert { border-radius: 8px; padding: 12px 14px; font-size: 14px; margin-top: 14px; display: none; }
+  .alert.error { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
+  .ack-banner {
+    background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0;
+    border-radius: 8px; padding: 12px 14px; font-size: 14px; margin-bottom: 16px;
+    display: none;
+  }
+  /* Regulation content — reading-first */
+  .content { font-size: 15px; line-height: 1.7; color: #1f2937; }
+  .content h1 { font-size: 19px; color: #0E5A85; margin: 22px 0 8px; }
+  .content h2 { font-size: 16.5px; color: #0E5A85; margin: 20px 0 6px; }
+  .content h3 { font-size: 15px; color: #111827; margin: 16px 0 4px; }
+  .content p { margin: 8px 0; }
+  .content ul, .content ol { margin: 8px 0 8px 4px; padding-left: 22px; }
+  .content li { margin: 3px 0; }
+  .content hr { border: none; border-top: 1px solid #e5e7eb; margin: 18px 0; }
+  .ack-section {
+    margin-top: 26px; border-top: 2px solid #1A96D4; padding-top: 16px;
+  }
+  .ack-section h2 { font-size: 15px; letter-spacing: 1px; color: #0E5A85; margin-bottom: 10px; }
+  .ack-text { font-size: 14px; color: #374151; line-height: 1.65; margin-bottom: 14px; }
+  label.consent { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; cursor: pointer; }
+  label.consent input { margin-top: 3px; width: 18px; height: 18px; }
+  .hidden { display: none !important; }
+  .state-box { text-align: center; padding: 20px 8px; color: #6b7280; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1 class="page-title">Règlement intérieur LivSight</h1>
+  <div class="meta" id="meta">&nbsp;</div>
+
+  <div id="email-gate">
+    <p style="font-size:14px; color:#374151;">
+      Entrez votre email de pointage pour consulter le règlement intérieur.
+    </p>
+    <label class="email-label" for="email">Email</label>
+    <input type="email" id="email" autocomplete="email" placeholder="prenom@exemple.com" />
+    <div class="alert error" id="gate-error"></div>
+    <button class="btn" id="load-btn">Consulter le règlement</button>
+  </div>
+
+  <div id="loading" class="state-box hidden">Chargement…</div>
+
+  <div id="reader" class="hidden">
+    <div class="ack-banner" id="ack-banner"></div>
+    <div class="content" id="content"></div>
+
+    <div class="ack-section" id="ack-section">
+      <h2>PRISE DE CONNAISSANCE</h2>
+      <p class="ack-text" id="ack-text"></p>
+      <label class="consent">
+        <input type="checkbox" id="consent" />
+        <span>Je confirme avoir pris connaissance du règlement intérieur.</span>
+      </label>
+      <div class="alert error" id="ack-error"></div>
+      <button class="btn" id="ack-btn" disabled>Confirmer la prise de connaissance</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var el = function (id) { return document.getElementById(id); };
+  var state = { email: "", versionId: null };
+
+  function fmtDate(iso) {
+    if (!iso) return "";
+    try {
+      return new Date(iso).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
+    } catch (e) { return iso; }
+  }
+  function fmtDateTime(iso) {
+    if (!iso) return "";
+    try {
+      var d = new Date(iso);
+      return d.toLocaleDateString("fr-FR") + " à " +
+        d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+    } catch (e) { return iso; }
+  }
+  function showError(id, msg) {
+    var box = el(id);
+    box.textContent = msg;
+    box.style.display = "block";
+  }
+  function hideError(id) { el(id).style.display = "none"; }
+
+  function renderAckState(acknowledgedAt) {
+    var banner = el("ack-banner");
+    banner.textContent = "✓ Pris connaissance le " + fmtDateTime(acknowledgedAt);
+    banner.style.display = "block";
+    el("ack-section").classList.add("hidden");
+  }
+
+  function load(email) {
+    hideError("gate-error");
+    el("email-gate").classList.add("hidden");
+    el("loading").classList.remove("hidden");
+    fetch("reglement/current?email=" + encodeURIComponent(email))
+      .then(function (r) { return r.json().then(function (b) { return { ok: r.ok, body: b }; }); })
+      .then(function (res) {
+        el("loading").classList.add("hidden");
+        if (!res.ok) {
+          el("email-gate").classList.remove("hidden");
+          showError("gate-error", (res.body && res.body.message) || "Impossible de charger le règlement.");
+          return;
+        }
+        var d = res.body.data;
+        state.email = email;
+        state.versionId = d.version_id;
+        el("meta").innerHTML =
+          '<span class="pill">Version ' + d.version_label.replace(/^V/, "") + "</span> " +
+          (d.published_at ? " Publié le " + fmtDate(d.published_at) : "") +
+          (d.employee_name ? " · " + d.employee_name : "");
+        el("content").innerHTML = d.content_html;
+        el("ack-text").textContent = d.acknowledgement_text;
+        el("reader").classList.remove("hidden");
+        if (d.acknowledged) {
+          renderAckState(d.acknowledged_at);
+        }
+      })
+      .catch(function () {
+        el("loading").classList.add("hidden");
+        el("email-gate").classList.remove("hidden");
+        showError("gate-error", "Erreur réseau — réessayez.");
+      });
+  }
+
+  el("load-btn").addEventListener("click", function () {
+    var email = el("email").value.trim();
+    if (!email) { showError("gate-error", "Entrez votre email."); return; }
+    load(email);
+  });
+  el("email").addEventListener("keydown", function (e) {
+    if (e.key === "Enter") el("load-btn").click();
+  });
+
+  el("consent").addEventListener("change", function () {
+    el("ack-btn").disabled = !el("consent").checked;
+  });
+
+  el("ack-btn").addEventListener("click", function () {
+    el("ack-btn").disabled = true;
+    hideError("ack-error");
+    fetch("reglement/acknowledge", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: state.email, version_id: state.versionId }),
+    })
+      .then(function (r) { return r.json().then(function (b) { return { ok: r.ok, status: r.status, body: b }; }); })
+      .then(function (res) {
+        if (res.ok) {
+          renderAckState(res.body.data.acknowledged_at || new Date().toISOString());
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        } else if (res.status === 409) {
+          showError("ack-error", (res.body && res.body.message) || "Version obsolète — rechargez la page.");
+          el("ack-btn").disabled = false;
+        } else {
+          showError("ack-error", (res.body && res.body.message) || "La confirmation a échoué. Réessayez.");
+          el("ack-btn").disabled = false;
+        }
+      })
+      .catch(function () {
+        showError("ack-error", "Erreur réseau — réessayez.");
+        el("ack-btn").disabled = false;
+      });
+  });
+
+  // Prefill from ?email= (links from the check-in app)
+  var params = new URLSearchParams(window.location.search);
+  var prefill = params.get("email");
+  if (prefill) {
+    el("email").value = prefill;
+    load(prefill);
+  }
+})();
+</script>
+</body>
+</html>
