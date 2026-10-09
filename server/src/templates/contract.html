@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<title>Contrat de travail LivSight</title>
+<style>{{fonts.css}}</style>
+<style>
+  /* Match the Word template: Aptos, title/headings in LivSight blue #1A96D4. */
+  * { box-sizing: border-box; }
+  body {
+    font-family: Aptos, "Aptos Display", "Segoe UI", Calibri, Helvetica, Arial, sans-serif;
+    font-size: 12pt;
+    line-height: 1.4;
+    color: #000;
+    margin: 0;
+  }
+  h1 {
+    font-family: "Aptos Display", Aptos, "Segoe UI", Calibri, Helvetica, Arial, sans-serif;
+    font-size: 20pt;
+    font-weight: bold;
+    color: #1A96D4;
+    text-align: center;
+    text-transform: uppercase;
+    margin: 0 0 14pt;
+  }
+  .heading-center {
+    font-family: "Aptos Display", Aptos, "Segoe UI", Calibri, Helvetica, Arial, sans-serif;
+    font-size: 16pt;
+    font-weight: bold;
+    color: #1A96D4;
+    text-align: center;
+    margin: 0 0 8pt;
+  }
+  h2 {
+    font-family: "Aptos Display", Aptos, "Segoe UI", Calibri, Helvetica, Arial, sans-serif;
+    font-size: 16pt;
+    font-weight: bold;
+    color: #1A96D4;
+    text-transform: uppercase;
+    margin: 14pt 0 5pt;
+  }
+  p { margin: 5pt 0; }
+  ul { margin: 5pt 0; padding-left: 22pt; }
+  li { margin: 2pt 0; }
+  b, strong { font-weight: bold; }
+  .parties p { margin: 5pt 0; }
+  .centered { text-align: center; }
+  .signatures {
+    margin-top: 28pt;
+    width: 100%;
+    page-break-inside: avoid;
+  }
+  .signatures td {
+    width: 50%;
+    vertical-align: top;
+    padding: 0 8pt;
+    text-align: center;
+  }
+  .sig-role {
+    font-weight: bold;
+    color: #1A96D4;
+    font-size: 12pt;
+  }
+  .sig-name { margin-top: 4pt; }
+  .sig-zone {
+    height: 90pt;
+    margin-top: 8pt;
+    position: relative;
+  }
+  .sig-zone img {
+    max-height: 85pt;
+    max-width: 90%;
+    object-fit: contain;
+  }
+  .sig-line {
+    border-top: 1pt solid #000;
+    margin-top: 4pt;
+    padding-top: 3pt;
+  }
+</style>
+</head>
+<body>
+
+<h1>Contrat de travail LivSight</h1>
+
+<div class="parties">
+  <div class="heading-center">ENTRE LES SOUSSIGNÉS</div>
+  <p>
+    <strong>{{company.legal_name}}</strong>, société à responsabilité limitée, immatriculée au
+    Registre du Commerce et du Crédit Mobilier sous le numéro
+    <strong>{{company.rccm}}</strong>, identifiée sous le NIU
+    <strong>{{company.niu}}</strong>, ayant son siège à {{company.address}}, représentée par son
+    {{company.signer_role}}, <strong>{{company.signer_name}}</strong>,
+  </p>
+  <p>Ci-après dénommée <strong>« l’Employeur »</strong>,</p>
+  <p><strong>D’une part,</strong></p>
+  <p class="centered"><strong>ET</strong></p>
+  <p>
+    <strong>{{full_name}}</strong>, né(e) le <strong>{{date_of_birth}}</strong> à
+    <strong>{{place_of_birth}}</strong>, de nationalité <strong>{{nationality}}</strong>,
+    titulaire de la CNI ou pièce d’identité n° <strong>{{national_id}}</strong>,
+    domicilié(e) à <strong>{{address}}</strong>, téléphone : <strong>{{phone}}</strong>,
+  </p>
+  <p>Ci-après dénommé(e) <strong>« l’Employé(e) »</strong>,</p>
+  <p><strong>D’autre part,</strong></p>
+  <p>Il a été convenu ce qui suit :</p>
+</div>
+
+<h2>Article 1 — Objet du contrat</h2>
+<p>L’Employeur engage <strong>{{full_name}}</strong> en qualité de <strong>{{poste}}</strong>.</p>
+<p>L’Employé(e) est rattaché(e) au type de personnel <strong>{{employee_type}}</strong>.</p>
+<p>L’Employé(e) accepte les fonctions qui lui sont confiées et s’engage à les exercer conformément au présent contrat, aux procédures internes de LivSight ainsi qu’à la législation camerounaise applicable.</p>
+
+<h2>Article 2 — Nature et durée du contrat</h2>
+<p>Le présent contrat est conclu sous la forme suivante :</p>
+<p><strong>Type de contrat : {{contract_kind}}</strong></p>
+<p>Il prend effet à compter du <strong>{{contract_start_date}}</strong>.</p>
+<p>Lorsqu’il s’agit d’un contrat à durée déterminée (CDD), le contrat prend fin le <strong>{{contract_end_date}}</strong>, sous réserve des dispositions légales applicables.</p>
+<p>Lorsqu’il s’agit d’un contrat à durée indéterminée (CDI), aucune date de fin n’est prévue.</p>
+
+<h2>Article 3 — Période d’essai</h2>
+<p>Le présent contrat prévoit une période d’essai de :</p>
+<p><strong>{{trial_period_days}} jours</strong></p>
+<p>La période d’essai ainsi que son éventuel renouvellement sont soumis aux conditions et limites prévues par la réglementation camerounaise applicable.</p>
+<p>Pendant cette période, chacune des parties bénéficie des droits prévus par la législation en vigueur.</p>
+
+<h2>Article 4 — Fonctions et missions</h2>
+<p>L’Employé(e) exerce les fonctions de :</p>
+<p><strong>{{poste}}</strong></p>
+<p>Ses principales missions sont les suivantes :</p>
+<p><strong>{{mission_description}}</strong></p>
+<p>L’Employé(e) peut également être amené(e) à accomplir des tâches connexes compatibles avec ses fonctions, ses compétences et les besoins de l’activité de LivSight.</p>
+<p>Les missions peuvent évoluer en fonction de l’organisation de l’entreprise, sans que cela ne conduise à une modification irrégulière des éléments essentiels du contrat.</p>
+
+<h2>Article 5 — Lieu de travail</h2>
+<p>Le lieu habituel de travail de l’Employé(e) est :</p>
+<p><strong>{{workplace_name}}</strong></p>
+<p>Compte tenu de la nature de certaines activités de LivSight, notamment les opérations logistiques, commerciales et de livraison, l’Employé(e) peut être amené(e) à effectuer des déplacements professionnels dans le cadre de ses fonctions.</p>
+
+<h2>Article 6 — Durée et horaires de travail</h2>
+<p>La durée du travail est organisée conformément à la législation camerounaise applicable.</p>
+<p>L’horaire normalement applicable à l’Employé(e) est :</p>
+<p><strong>{{work_schedule}}</strong></p>
+<p>L’organisation des horaires peut être adaptée en fonction des nécessités du service, dans le respect des dispositions légales relatives à la durée du travail, au repos et, lorsqu’elles sont applicables, aux heures supplémentaires.</p>
+<p>L’Employé(e) s’engage à respecter son planning de travail et à être ponctuel(le).</p>
+
+<h2>Article 7 — Rémunération</h2>
+<p>En contrepartie de l’exécution de ses fonctions, l’Employé(e) percevra un salaire de base de :</p>
+<p><strong>{{salary_base}} FCFA par mois.</strong></p>
+<p>Les cotisations sociales, retenues fiscales et autres prélèvements légalement applicables sont effectués conformément à la réglementation en vigueur.</p>
+<p>Lorsque le poste prévoit des primes, commissions, bonus ou autres éléments variables de rémunération, leurs conditions peuvent être définies séparément par LivSight.</p>
+<p>Toute rémunération variable éventuelle vient en complément du salaire de base et est soumise aux conditions qui lui sont applicables.</p>
+
+<h2>Article 8 — Obligations de l’Employé(e)</h2>
+<p>Dans le cadre de ses fonctions, l’Employé(e) s’engage notamment à :</p>
+<ul>
+  <li>exécuter ses missions avec diligence, sérieux et professionnalisme ;</li>
+  <li>respecter ses horaires et son planning de travail ;</li>
+  <li>respecter les procédures opérationnelles de LivSight ;</li>
+  <li>respecter les instructions professionnelles données dans le cadre de ses fonctions ;</li>
+  <li>utiliser correctement les applications, outils et équipements mis à sa disposition ;</li>
+  <li>saisir des informations exactes dans les systèmes LivSight ;</li>
+  <li>préserver les colis, marchandises, espèces, documents et équipements qui lui sont confiés ;</li>
+  <li>adopter un comportement professionnel envers les clients, commerçants, destinataires, partenaires et autres membres de l’équipe ;</li>
+  <li>signaler rapidement tout incident ou difficulté rencontré dans l’exercice de ses fonctions ;</li>
+  <li>préserver les intérêts légitimes de LivSight dans l’exercice de ses fonctions.</li>
+</ul>
+
+<h2>Article 9 — Confidentialité</h2>
+<p>Dans le cadre de ses fonctions, l’Employé(e) peut avoir accès à des informations confidentielles concernant notamment :</p>
+<ul>
+  <li>les clients et commerçants de LivSight ;</li>
+  <li>les destinataires des livraisons ;</li>
+  <li>les commandes et transactions ;</li>
+  <li>les informations financières et commerciales ;</li>
+  <li>les tarifs ;</li>
+  <li>les procédures opérationnelles ;</li>
+  <li>les données internes ;</li>
+  <li>les logiciels et systèmes informatiques ;</li>
+  <li>les stratégies commerciales ;</li>
+  <li>les partenaires de LivSight.</li>
+</ul>
+<p>L’Employé(e) s’engage à ne pas divulguer ni utiliser ces informations à des fins étrangères à l’exercice de ses fonctions.</p>
+<p>Cette obligation continue à s’appliquer après la fin de la relation de travail pour les informations qui conservent un caractère confidentiel.</p>
+
+<h2>Article 10 — Outils, matériel et biens de LivSight</h2>
+<p>LivSight peut mettre à la disposition de l’Employé(e), selon ses fonctions, des équipements ou ressources nécessaires à l’exercice de son activité.</p>
+<p>Il peut notamment s’agir de téléphones, ordinateurs, équipements professionnels, documents, badges, accès aux locaux, comptes utilisateurs ou autres outils de travail.</p>
+<p>Ces éléments demeurent la propriété de LivSight lorsqu’ils sont fournis par l’entreprise.</p>
+<p>L’Employé(e) s’engage à en faire un usage professionnel et raisonnable, à en prendre soin et à signaler toute perte, détérioration ou incident.</p>
+<p>Les biens appartenant à LivSight doivent être restitués à la fin de la relation de travail ou lorsque l’entreprise en fait légitimement la demande.</p>
+
+<h2>Article 11 — Utilisation des systèmes LivSight</h2>
+<p>Dans le cadre de ses fonctions, l’Employé(e) peut disposer d’un accès aux applications, tableaux de bord et autres systèmes informatiques de LivSight.</p>
+<p>Les identifiants et accès attribués à l’Employé(e) sont personnels.</p>
+<p>L’Employé(e) s’engage à :</p>
+<ul>
+  <li>ne pas communiquer ses identifiants à une personne non autorisée ;</li>
+  <li>ne pas accéder volontairement à des informations auxquelles ses fonctions ne lui donnent pas accès ;</li>
+  <li>respecter les procédures de sécurité informatique ;</li>
+  <li>signaler toute perte d’accès, suspicion de compromission ou utilisation anormale de son compte.</li>
+</ul>
+<p>LivSight peut retirer les accès professionnels lorsque ceux-ci ne sont plus nécessaires.</p>
+
+<h2>Article 12 — Colis, marchandises et espèces</h2>
+<p>Lorsque les fonctions de l’Employé(e) impliquent la manipulation de colis, marchandises ou sommes d’argent appartenant à LivSight, à ses clients ou à des tiers, l’Employé(e) doit respecter les procédures de prise en charge, de traçabilité, de remise et de rapprochement établies par LivSight.</p>
+<p>Toute anomalie, perte, différence de caisse, détérioration ou incident doit être signalé sans délai.</p>
+<p>La responsabilité éventuelle de l’Employé(e) est appréciée conformément aux circonstances et à la législation applicable.</p>
+
+<h2>Article 13 — Absences, retards et congés</h2>
+<p>Toute absence ou tout retard doit être signalé dans les meilleurs délais au responsable compétent.</p>
+<p>Lorsque cela est requis, l’Employé(e) doit fournir les justificatifs nécessaires.</p>
+<p>Les congés, absences autorisées et autres périodes d’indisponibilité sont accordés et gérés conformément à la législation camerounaise applicable et aux procédures internes de LivSight.</p>
+
+<h2>Article 14 — Santé et sécurité au travail</h2>
+<p>L’Employé(e) s’engage à respecter les règles et consignes de sécurité applicables à son activité.</p>
+<p>Il/elle doit notamment signaler toute situation susceptible de présenter un risque pour sa sécurité, celle d’un autre membre du personnel, d’un client ou d’un tiers.</p>
+<p>LivSight s’engage à respecter les obligations qui lui incombent en matière de santé, de sécurité et de conditions de travail.</p>
+<p>Lorsque les fonctions impliquent des déplacements, l’Employé(e) doit respecter les règles de sécurité applicables au moyen de transport utilisé.</p>
+
+<h2>Article 15 — Protection sociale</h2>
+<p>L’Employé(e) bénéficie des droits sociaux prévus par la réglementation camerounaise applicable.</p>
+<p>LivSight accomplit les formalités sociales lui incombant en sa qualité d’employeur et effectue les déclarations et cotisations obligatoires applicables à la relation de travail.</p>
+<p>L’Employé(e) s’engage à communiquer les informations et documents nécessaires à l’accomplissement de ces formalités.</p>
+
+<h2>Article 16 — Discipline et procédures internes</h2>
+<p>L’Employé(e) est tenu(e) de respecter les règles, procédures et instructions professionnelles applicables au sein de LivSight.</p>
+<p>Tout manquement aux obligations professionnelles peut donner lieu aux mesures prévues par la législation applicable, dans le respect des droits de l’Employé(e).</p>
+
+<h2>Article 17 — Fin de la relation de travail</h2>
+<p>La suspension, la rupture ou l’arrivée à terme du présent contrat intervient conformément à la nature du contrat et aux dispositions de la législation camerounaise applicable.</p>
+<p>À la fin de la relation de travail, l’Employé(e) doit notamment :</p>
+<ul>
+  <li>restituer les biens appartenant à LivSight ;</li>
+  <li>restituer les documents professionnels en sa possession ;</li>
+  <li>effectuer, lorsque nécessaire, une passation de ses dossiers ou responsabilités ;</li>
+  <li>restituer toute somme, marchandise ou autre bien dont il/elle assure la garde pour le compte de LivSight ou de ses clients.</li>
+</ul>
+<p>Les accès professionnels de l’Employé(e) aux systèmes LivSight peuvent être désactivés à la fin de la relation de travail.</p>
+
+<h2>Article 18 — Données personnelles</h2>
+<p>Les informations personnelles communiquées par l’Employé(e) peuvent être utilisées par LivSight dans le cadre de la gestion de la relation de travail, notamment pour la gestion administrative, la paie, les obligations sociales, la gestion des accès et la production des documents professionnels.</p>
+<p>Ces informations doivent être utilisées dans le cadre des finalités professionnelles et obligations applicables à LivSight.</p>
+
+<h2>Article 19 — Droit applicable</h2>
+<p>Le présent contrat est soumis au <strong>droit camerounais</strong>, notamment à la loi n°92/007 du 14 août 1992 portant Code du travail ainsi qu’aux textes réglementaires applicables.</p>
+<p>Les parties privilégient, lorsque cela est possible, le règlement amiable des différends avant le recours aux procédures prévues par la législation applicable.</p>
+
+<h2>Article 20 — Acceptation du contrat</h2>
+<p>L’Employé(e) reconnaît avoir pris connaissance du présent contrat et en accepter les dispositions.</p>
+<p>Le présent contrat prend effet dans les conditions prévues à l’Article 2.</p>
+<p><strong>Fait à Yaoundé, le {{contract.date}}, en deux exemplaires.</strong></p>
+
+<table class="signatures">
+  <tr>
+    <td>
+      <div class="sig-role">Pour l’Employeur</div>
+      <div class="sig-name">{{company.legal_name}}<br/>{{company.signer_name}}, {{company.signer_role}}</div>
+      <div class="sig-name">Signature et cachet :</div>
+      <div class="sig-zone">{{company.signature}}{{company.stamp}}</div>
+      <div class="sig-line">&nbsp;</div>
+    </td>
+    <td>
+      <div class="sig-role">L’Employé(e)</div>
+      <div class="sig-name"><strong>{{full_name}}</strong></div>
+      <div class="sig-name">« Lu et approuvé », signature :</div>
+      <div class="sig-zone">{{employee.signature}}</div>
+      <div class="sig-line">&nbsp;</div>
+    </td>
+  </tr>
+</table>
+
+</body>
+</html>

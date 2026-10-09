@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+<title>Signature du contrat — LivSight</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #f3f4f6;
+    color: #111827;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    padding: 16px;
+  }
+  .card {
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.08);
+    max-width: 560px;
+    width: 100%;
+    padding: 24px 20px;
+    height: fit-content;
+  }
+  h1 { font-size: 19px; margin-bottom: 4px; }
+  .sub { color: #6b7280; font-size: 13px; margin-bottom: 18px; }
+  .row { display: flex; justify-content: space-between; gap: 8px; padding: 7px 0; border-bottom: 1px solid #f0f0f0; font-size: 14px; }
+  .row .k { color: #6b7280; }
+  .row .v { font-weight: 600; text-align: right; }
+  .btn {
+    display: block; width: 100%; text-align: center; border: none; cursor: pointer;
+    border-radius: 8px; padding: 13px 16px; font-size: 15px; font-weight: 600;
+    text-decoration: none; margin-top: 12px;
+  }
+  .btn-outline { background: #fff; color: #1d4ed8; border: 1px solid #bfdbfe; }
+  .btn-primary { background: #1d4ed8; color: #fff; }
+  .btn-primary:disabled { background: #9ca3af; cursor: not-allowed; }
+  .btn-danger-link { background: none; color: #b91c1c; font-weight: 500; font-size: 13px; }
+  .section-title { font-size: 14px; font-weight: 600; margin: 22px 0 8px; }
+  #sig-pad {
+    border: 1px dashed #9ca3af; border-radius: 8px; background: #fafafa;
+    width: 100%; height: 170px; touch-action: none; display: block;
+  }
+  .sig-actions { display: flex; justify-content: flex-end; margin-top: 6px; }
+  .sig-actions button { background: none; border: none; color: #1d4ed8; font-size: 13px; cursor: pointer; }
+  label.consent { display: flex; gap: 10px; align-items: flex-start; margin-top: 16px; font-size: 14px; cursor: pointer; }
+  label.consent input { margin-top: 3px; width: 18px; height: 18px; }
+  .alert { border-radius: 8px; padding: 12px 14px; font-size: 14px; margin-top: 14px; display: none; }
+  .alert.error { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
+  .alert.success { background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; }
+  .state-box { text-align: center; padding: 28px 8px; }
+  .state-box .icon { font-size: 40px; margin-bottom: 10px; }
+  .state-box h2 { font-size: 17px; margin-bottom: 6px; }
+  .state-box p { color: #6b7280; font-size: 14px; }
+  #decline-form { display: none; margin-top: 10px; }
+  #decline-form textarea {
+    width: 100%; border: 1px solid #d1d5db; border-radius: 8px; padding: 10px;
+    font-size: 14px; min-height: 80px; font-family: inherit;
+  }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div id="loading" class="state-box"><p>Chargement…</p></div>
+
+  <div id="terminal" class="state-box hidden">
+    <div class="icon" id="terminal-icon"></div>
+    <h2 id="terminal-title"></h2>
+    <p id="terminal-text"></p>
+    <a id="terminal-doc" class="btn btn-outline hidden" target="_blank" rel="noopener">Voir le contrat signé (PDF)</a>
+  </div>
+
+  <div id="main" class="hidden">
+    <h1 id="doc-title">Contrat de travail</h1>
+    <p class="sub" id="company-name">LivSight</p>
+
+    <div class="row"><span class="k">Employé(e)</span><span class="v" id="employee-name">—</span></div>
+    <div class="row"><span class="k">Date du contrat</span><span class="v" id="contract-date">—</span></div>
+    <div class="row"><span class="k">Lien valable jusqu’au</span><span class="v" id="expires-at">—</span></div>
+
+    <a id="view-doc" class="btn btn-outline" target="_blank" rel="noopener">📄 Lire le contrat (PDF)</a>
+
+    <div class="section-title">Votre signature</div>
+    <canvas id="sig-pad"></canvas>
+    <div class="sig-actions"><button type="button" id="sig-clear">Effacer</button></div>
+
+    <label class="consent">
+      <input type="checkbox" id="consent" />
+      <span>J’ai lu le contrat et je l’approuve — mention <strong>« Lu et approuvé »</strong>.</span>
+    </label>
+
+    <div class="alert error" id="error-box"></div>
+
+    <button class="btn btn-primary" id="sign-btn" disabled>Signer le contrat</button>
+    <button class="btn btn-danger-link" id="decline-toggle">Refuser le contrat…</button>
+    <div id="decline-form">
+      <textarea id="decline-reason" maxlength="500" placeholder="Motif du refus (obligatoire)"></textarea>
+      <button class="btn btn-primary" style="background:#b91c1c" id="decline-btn">Confirmer le refus</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var m = window.location.pathname.match(/\/sign\/([A-Za-z0-9]+)/);
+  var token = m ? m[1] : "";
+  var base = window.location.pathname.replace(/\/$/, "");
+  var apiBase = base; // same path prefix: /api/v1/hr/sign/:token
+
+  var el = function (id) { return document.getElementById(id); };
+
+  function show(id) { el(id).classList.remove("hidden"); }
+  function hide(id) { el(id).classList.add("hidden"); }
+
+  function terminalState(icon, title, text, docUrl) {
+    hide("loading"); hide("main"); show("terminal");
+    el("terminal-icon").textContent = icon;
+    el("terminal-title").textContent = title;
+    el("terminal-text").textContent = text;
+    if (docUrl) {
+      el("terminal-doc").href = docUrl;
+      el("terminal-doc").classList.remove("hidden");
+    }
+  }
+
+  function showError(msg) {
+    var box = el("error-box");
+    box.textContent = msg;
+    box.style.display = "block";
+  }
+
+  function fmtDate(iso) {
+    if (!iso) return "—";
+    try {
+      return new Date(iso).toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" });
+    } catch (e) { return iso; }
+  }
+
+  // --- Signature pad -------------------------------------------------------
+  var canvas = el("sig-pad");
+  var ctx = null;
+  var hasInk = false;
+  var drawing = false;
+
+  function setupCanvas() {
+    var ratio = window.devicePixelRatio || 1;
+    var w = canvas.offsetWidth, h = canvas.offsetHeight;
+    canvas.width = w * ratio;
+    canvas.height = h * ratio;
+    ctx = canvas.getContext("2d");
+    ctx.scale(ratio, ratio);
+    ctx.lineWidth = 2.2;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.strokeStyle = "#111827";
+  }
+
+  function pos(e) {
+    var r = canvas.getBoundingClientRect();
+    var t = e.touches && e.touches[0] ? e.touches[0] : e;
+    return { x: t.clientX - r.left, y: t.clientY - r.top };
+  }
+
+  function start(e) { e.preventDefault(); drawing = true; var p = pos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); }
+  function move(e) {
+    if (!drawing) return;
+    e.preventDefault();
+    var p = pos(e);
+    ctx.lineTo(p.x, p.y);
+    ctx.stroke();
+    hasInk = true;
+    updateSignBtn();
+  }
+  function end() { drawing = false; }
+
+  canvas.addEventListener("mousedown", start);
+  canvas.addEventListener("mousemove", move);
+  window.addEventListener("mouseup", end);
+  canvas.addEventListener("touchstart", start, { passive: false });
+  canvas.addEventListener("touchmove", move, { passive: false });
+  canvas.addEventListener("touchend", end);
+
+  el("sig-clear").addEventListener("click", function () {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    hasInk = false;
+    updateSignBtn();
+  });
+
+  function updateSignBtn() {
+    el("sign-btn").disabled = !(hasInk && el("consent").checked);
+  }
+  el("consent").addEventListener("change", updateSignBtn);
+
+  // --- Flow ----------------------------------------------------------------
+  function renderSummary(s) {
+    hide("loading");
+    if (s.status === "signed") {
+      terminalState("✅", "Contrat déjà signé",
+        "Ce contrat a été signé le " + fmtDate(s.signed_at) + ".", apiBase + "/document.pdf");
+      return;
+    }
+    if (s.status === "declined") {
+      terminalState("🚫", "Contrat refusé", "Vous avez refusé ce contrat. Contactez votre employeur pour la suite.");
+      return;
+    }
+    if (s.status !== "ready_for_signature") {
+      terminalState("⏳", "Lien non disponible", "Ce lien de signature n’est plus actif. Contactez votre employeur.");
+      return;
+    }
+    el("doc-title").textContent = s.document_title || "Contrat de travail";
+    el("company-name").textContent = s.company_name || "LivSight";
+    el("employee-name").textContent = s.employee_name || "—";
+    el("contract-date").textContent = fmtDate(s.contract_date);
+    el("expires-at").textContent = fmtDate(s.expires_at);
+    el("view-doc").href = apiBase + "/document.pdf";
+    show("main");
+    setupCanvas();
+  }
+
+  function handleHttpError(status) {
+    if (status === 410) {
+      terminalState("⌛", "Lien expiré", "Ce lien de signature a expiré. Contactez votre employeur pour en recevoir un nouveau.");
+    } else {
+      terminalState("❓", "Lien invalide", "Ce lien de signature est invalide.");
+    }
+  }
+
+  fetch(apiBase + "/summary")
+    .then(function (r) {
+      if (!r.ok) { handleHttpError(r.status); return null; }
+      return r.json();
+    })
+    .then(function (body) { if (body && body.data) renderSummary(body.data); })
+    .catch(function () { terminalState("⚠️", "Erreur", "Impossible de charger le contrat. Réessayez."); });
+
+  el("sign-btn").addEventListener("click", function () {
+    el("sign-btn").disabled = true;
+    el("error-box").style.display = "none";
+    var image = canvas.toDataURL("image/png");
+    fetch(apiBase + "/sign", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ consent: true, signature_image: image }),
+    })
+      .then(function (r) { return r.json().then(function (b) { return { ok: r.ok, status: r.status, body: b }; }); })
+      .then(function (res) {
+        if (res.ok) {
+          terminalState("✅", "Contrat signé",
+            "Merci ! Votre contrat est signé. Vous pouvez télécharger la version signée.",
+            apiBase + "/document.pdf");
+        } else if (res.status === 410) {
+          handleHttpError(410);
+        } else {
+          showError((res.body && res.body.message) || "La signature a échoué. Réessayez.");
+          el("sign-btn").disabled = false;
+        }
+      })
+      .catch(function () {
+        showError("La signature a échoué. Vérifiez votre connexion et réessayez.");
+        el("sign-btn").disabled = false;
+      });
+  });
+
+  el("decline-toggle").addEventListener("click", function () {
+    var f = el("decline-form");
+    f.style.display = f.style.display === "block" ? "none" : "block";
+  });
+
+  el("decline-btn").addEventListener("click", function () {
+    var reason = el("decline-reason").value.trim();
+    if (!reason) { showError("Merci d’indiquer le motif du refus."); return; }
+    el("decline-btn").disabled = true;
+    fetch(apiBase + "/decline", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reason: reason }),
+    })
+      .then(function (r) {
+        if (r.ok) {
+          terminalState("🚫", "Contrat refusé", "Votre refus a été enregistré et transmis à l’employeur.");
+        } else if (r.status === 410) {
+          handleHttpError(410);
+        } else {
+          showError("Le refus a échoué. Réessayez.");
+          el("decline-btn").disabled = false;
+        }
+      })
+      .catch(function () {
+        showError("Le refus a échoué. Vérifiez votre connexion et réessayez.");
+        el("decline-btn").disabled = false;
+      });
+  });
+})();
+</script>
+</body>
+</html>

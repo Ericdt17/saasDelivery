@@ -18,6 +18,11 @@ const {
   listAttendances,
   summarizeAttendances,
   replaceSalaryFrom,
+  listWorkplaces,
+  getWorkplaceById,
+  createWorkplace,
+  updateWorkplace,
+  deleteWorkplace,
 } = require("../../db");
 const {
   isWithinOffice,
@@ -50,6 +55,7 @@ const {
   resolveSalaryEffectiveFrom,
   salariesEqual,
 } = require("../../lib/hrSalary");
+const { regulationStatusForEmployee } = require("./hrRegulation.controller");
 
 function publicEmployeeCheckinPayload(employee) {
   const parts = getDoualaParts(new Date());
@@ -64,14 +70,57 @@ function publicEmployeeCheckinPayload(employee) {
   };
 }
 
+const emptyToNull = (v) => (v === "" || v === undefined ? null : v);
+const optionalDateSchema = z.preprocess(
+  emptyToNull,
+  z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Expected YYYY-MM-DD")
+    .nullable()
+    .optional()
+);
+const optionalTrimmedSchema = z.preprocess(
+  emptyToNull,
+  z.string().trim().min(1).nullable().optional()
+);
+const optionalEmailSchema = z.preprocess(
+  emptyToNull,
+  z.string().trim().email().nullable().optional()
+);
+const optionalGenderSchema = z.preprocess(
+  emptyToNull,
+  z.enum(["homme", "femme"]).nullable().optional()
+);
+
 const createEmployeeSchema = z.object({
   full_name: z.string().trim().min(1),
   email: z.string().trim().email(),
+  personal_email: optionalEmailSchema,
   phone: z.string().trim().min(1).nullable().optional(),
   poste: z.string().trim().min(1).nullable().optional(),
   salary_base: z.number().int().nullable().optional(),
   /** When true, mass salary starts on the 1st of next Douala month. */
   include_next_month: z.boolean().optional().default(false),
+  employee_type: z.enum(["livreur", "agent"]).nullable().optional(),
+  date_of_birth: optionalDateSchema,
+  place_of_birth: optionalTrimmedSchema,
+  gender: optionalGenderSchema,
+  nationality: optionalTrimmedSchema,
+  national_id: optionalTrimmedSchema,
+  address: optionalTrimmedSchema,
+  workplace_id: z.preprocess(
+    (v) => (v === "" || v === undefined ? null : v),
+    z.number().int().positive().nullable().optional()
+  ),
+  emergency_contact_name: optionalTrimmedSchema,
+  emergency_contact_phone: optionalTrimmedSchema,
+  emergency_contact_relation: optionalTrimmedSchema,
+  work_schedule: optionalTrimmedSchema,
+  contract_kind: z.enum(["cdi", "cdd"]).nullable().optional(),
+  contract_start_date: optionalDateSchema,
+  contract_end_date: optionalDateSchema,
+  trial_period_days: z.number().int().min(0).nullable().optional(),
+  mission_description: optionalTrimmedSchema,
 });
 
 const patchEmployeeSchema = createEmployeeSchema
@@ -235,6 +284,18 @@ async function createAdminEmployee(req, res, next) {
       });
     }
     const { include_next_month, ...fields } = parsed.data;
+    if (fields.workplace_id != null) {
+      const workplace = await getWorkplaceById(fields.workplace_id);
+      if (!workplace || workplace.is_active === false) {
+        return res.status(400).json({
+          success: false,
+          error: "Invalid workplace_id",
+        });
+      }
+    }
+    if (fields.contract_kind === "cdi") {
+      fields.contract_end_date = null;
+    }
     const row = await createEmployee({
       ...fields,
       payroll_eligible_from: resolvePayrollEligibleFrom({
@@ -268,6 +329,18 @@ async function patchAdminEmployee(req, res, next) {
     const { include_next_month, salary_apply_this_month, ...fields } =
       parsed.data;
     const updates = { ...fields };
+    if (updates.workplace_id != null) {
+      const workplace = await getWorkplaceById(updates.workplace_id);
+      if (!workplace || workplace.is_active === false) {
+        return res.status(400).json({
+          success: false,
+          error: "Invalid workplace_id",
+        });
+      }
+    }
+    if (updates.contract_kind === "cdi") {
+      updates.contract_end_date = null;
+    }
     if (include_next_month === true) {
       updates.payroll_eligible_from = resolvePayrollEligibleFrom({
         includeNextMonth: true,
@@ -389,9 +462,17 @@ async function verifyCheckinEmail(req, res, next) {
       });
     }
 
+    // Non-blocking indicator: current règlement intérieur to read, if any.
+    let regulation = null;
+    try {
+      regulation = await regulationStatusForEmployee(employee.id);
+    } catch {
+      /* indicator only — never block check-in */
+    }
+
     return res.json({
       success: true,
-      data: publicEmployeeCheckinPayload(employee),
+      data: { ...publicEmployeeCheckinPayload(employee), regulation },
     });
   } catch (err) {
     next(err);
@@ -613,6 +694,9 @@ async function publicCheckin(req, res, next) {
       employee_name: employee.full_name,
       check_in_time: attendance.check_in_time,
       status: attendance.status,
+      regulation: await regulationStatusForEmployee(employee.id).catch(
+        () => null
+      ),
     });
   } catch (err) {
     next(err);
@@ -941,6 +1025,96 @@ async function downloadPayslipByCode(req, res, next) {
   }
 }
 
+const createWorkplaceSchema = z.object({
+  name: z.string().trim().min(1).max(160),
+  is_active: z.boolean().optional().default(true),
+});
+
+const patchWorkplaceSchema = z.object({
+  name: z.string().trim().min(1).max(160).optional(),
+  is_active: z.boolean().optional(),
+});
+
+async function listAdminWorkplaces(req, res, next) {
+  try {
+    const activeOnly = String(req.query.active || "") === "true";
+    const rows = await listWorkplaces({ activeOnly });
+    return res.json({ success: true, data: rows });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function createAdminWorkplace(req, res, next) {
+  try {
+    const parsed = createWorkplaceSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({
+        success: false,
+        error: "Validation failed",
+        details: parsed.error.flatten(),
+      });
+    }
+    const row = await createWorkplace(parsed.data);
+    return res.status(201).json({ success: true, data: row });
+  } catch (err) {
+    if (err.code === "23505") {
+      return res.status(409).json({
+        success: false,
+        error: "A workplace with this name already exists",
+      });
+    }
+    next(err);
+  }
+}
+
+async function patchAdminWorkplace(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) {
+      return res.status(400).json({ success: false, error: "Invalid id" });
+    }
+    const parsed = patchWorkplaceSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({
+        success: false,
+        error: "Validation failed",
+        details: parsed.error.flatten(),
+      });
+    }
+    const existing = await getWorkplaceById(id);
+    if (!existing) {
+      return res.status(404).json({ success: false, error: "Workplace not found" });
+    }
+    const row = await updateWorkplace(id, parsed.data);
+    return res.json({ success: true, data: row });
+  } catch (err) {
+    if (err.code === "23505") {
+      return res.status(409).json({
+        success: false,
+        error: "A workplace with this name already exists",
+      });
+    }
+    next(err);
+  }
+}
+
+async function deleteAdminWorkplace(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) {
+      return res.status(400).json({ success: false, error: "Invalid id" });
+    }
+    const row = await deleteWorkplace(id);
+    if (!row) {
+      return res.status(404).json({ success: false, error: "Workplace not found" });
+    }
+    return res.json({ success: true, data: row });
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   listAdminEmployees,
   createAdminEmployee,
@@ -958,4 +1132,8 @@ module.exports = {
   sendEmployeePayslipWhatsapp,
   downloadPayslipByCode,
   downloadPayslipByToken: downloadPayslipByCode,
+  listAdminWorkplaces,
+  createAdminWorkplace,
+  patchAdminWorkplace,
+  deleteAdminWorkplace,
 };

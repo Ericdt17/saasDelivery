@@ -263,3 +263,36 @@ describe("getAttendancesSummary", () => {
     expect(result.message_id).toBe("msg-1");
   });
 });
+
+describe("contract missing-field errors", () => {
+  it("names missing fields in French", async () => {
+    const { formatMissingContractFields } = await import("@/services/hr");
+    expect(
+      formatMissingContractFields(["nationality", "work_schedule", "national_id"])
+    ).toBe(
+      "Champs manquants sur la fiche employé : Nationalité, Horaires de travail, N° CNI / pièce d'identité"
+    );
+  });
+
+  it("falls back to the raw key for unknown fields", async () => {
+    const { formatMissingContractFields } = await import("@/services/hr");
+    expect(formatMissingContractFields(["mystery_field"])).toContain(
+      "mystery_field"
+    );
+  });
+
+  it("surfaces the French field list when generation returns 422", async () => {
+    const { generateEmployeeContract } = await import("@/services/hr");
+    const { ApiError } = await import("@/types/api");
+    (apiModule.apiPost as unknown as MockInstance).mockRejectedValueOnce(
+      new ApiError("missing_fields", 422, {
+        success: false,
+        error: "missing_fields",
+        missing: ["nationality", "salary_base"],
+      })
+    );
+    await expect(generateEmployeeContract(1)).rejects.toThrow(
+      "Nationalité, Salaire de base"
+    );
+  });
+});

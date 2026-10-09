@@ -16,6 +16,7 @@ import {
   UserCog,
   CalendarCheck,
   BarChart3,
+  BookOpenCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -37,6 +38,7 @@ const allNavItems: NavItem[] = [
   { title: "Tableau de bord", href: "/", icon: LayoutDashboard },
   { title: "Employés", href: "/hr/employees", icon: UserCog, requireSuperAdmin: true },
   { title: "Présences", href: "/hr/attendances", icon: CalendarCheck, requireSuperAdmin: true },
+  { title: "Règlement intérieur", href: "/hr/reglement", icon: BookOpenCheck, requireSuperAdmin: true },
   { title: "Rapports", href: "/rapports", icon: BarChart3, requireSuperAdmin: true },
   { title: "Agences", href: "/agences", icon: Building2, requireSuperAdmin: true },
   { title: "Liste d'attente", href: "/liste-attente", icon: ClipboardList, requireSuperAdmin: true },

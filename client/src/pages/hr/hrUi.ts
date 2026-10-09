@@ -2,6 +2,8 @@
  * Pure UI helpers for HR admin pages (testable without React).
  */
 
+import type { HrEmployee } from "@/services/hr";
+
 export type AttendanceStatus = "present" | "late" | "absent";
 
 export function enrollmentBadgeLabel(isEnrolled: boolean): "Enregistré" | "En attente" {
@@ -67,9 +69,14 @@ export function formatSalary(salaryBase: number | null): string {
   return new Intl.NumberFormat("fr-FR").format(salaryBase);
 }
 
+export type HrEmployeeType = "livreur" | "agent";
+export type HrContractKind = "cdi" | "cdd";
+export type HrGender = "homme" | "femme";
+
 export type EmployeeFormFields = {
   fullName: string;
   email: string;
+  personalEmail: string;
   phone: string;
   poste: string;
   salaryBase: string;
@@ -81,23 +88,73 @@ export type EmployeeFormFields = {
    * Default false → next month.
    */
   salaryApplyThisMonth: boolean;
+  employeeType: HrEmployeeType | "";
+  dateOfBirth: string;
+  placeOfBirth: string;
+  gender: HrGender | "";
+  nationality: string;
+  nationalId: string;
+  address: string;
+  workplaceId: string;
+  emergencyContactName: string;
+  emergencyContactPhone: string;
+  emergencyContactRelation: string;
+  workSchedule: string;
+  contractKind: HrContractKind | "";
+  contractStartDate: string;
+  contractEndDate: string;
+  trialPeriodDays: string;
+  missionDescription: string;
 };
+
+function emptyToNull(value: string): string | null {
+  const trimmed = value.trim();
+  return trimmed === "" ? null : trimmed;
+}
 
 export function buildEmployeeUpdatePayload(fields: EmployeeFormFields): {
   full_name: string;
   email: string;
+  personal_email: string | null;
   phone: string | null;
   poste: string | null;
   salary_base: number | null;
   is_active: boolean;
   include_next_month: boolean;
   salary_apply_this_month: boolean;
+  employee_type: HrEmployeeType | null;
+  date_of_birth: string | null;
+  place_of_birth: string | null;
+  gender: HrGender | null;
+  nationality: string | null;
+  national_id: string | null;
+  address: string | null;
+  workplace_id: number | null;
+  emergency_contact_name: string | null;
+  emergency_contact_phone: string | null;
+  emergency_contact_relation: string | null;
+  work_schedule: string | null;
+  contract_kind: HrContractKind | null;
+  contract_start_date: string | null;
+  contract_end_date: string | null;
+  trial_period_days: number | null;
+  mission_description: string | null;
 } {
   const salaryParsed =
     fields.salaryBase.trim() === "" ? NaN : Number(fields.salaryBase);
+  const trialParsed =
+    fields.trialPeriodDays.trim() === ""
+      ? NaN
+      : Number(fields.trialPeriodDays);
+  const workplaceParsed =
+    fields.workplaceId.trim() === "" ? NaN : Number(fields.workplaceId);
+  const employeeType = emptyToNull(fields.employeeType);
+  const contractKind = emptyToNull(fields.contractKind);
+  const gender = emptyToNull(fields.gender);
   return {
     full_name: fields.fullName.trim(),
     email: fields.email.trim(),
+    personal_email: emptyToNull(fields.personalEmail),
     phone: fields.phone.trim() || null,
     poste: fields.poste.trim() || null,
     salary_base:
@@ -105,6 +162,34 @@ export function buildEmployeeUpdatePayload(fields: EmployeeFormFields): {
     is_active: fields.isActive,
     include_next_month: fields.includeNextMonth === true,
     salary_apply_this_month: fields.salaryApplyThisMonth === true,
+    employee_type:
+      employeeType === "livreur" || employeeType === "agent"
+        ? employeeType
+        : null,
+    date_of_birth: emptyToNull(fields.dateOfBirth),
+    place_of_birth: emptyToNull(fields.placeOfBirth),
+    gender: gender === "homme" || gender === "femme" ? gender : null,
+    nationality: emptyToNull(fields.nationality),
+    national_id: emptyToNull(fields.nationalId),
+    address: emptyToNull(fields.address),
+    workplace_id:
+      Number.isFinite(workplaceParsed) && workplaceParsed > 0
+        ? Math.trunc(workplaceParsed)
+        : null,
+    emergency_contact_name: emptyToNull(fields.emergencyContactName),
+    emergency_contact_phone: emptyToNull(fields.emergencyContactPhone),
+    emergency_contact_relation: emptyToNull(fields.emergencyContactRelation),
+    work_schedule: emptyToNull(fields.workSchedule),
+    contract_kind:
+      contractKind === "cdi" || contractKind === "cdd" ? contractKind : null,
+    contract_start_date: emptyToNull(fields.contractStartDate),
+    contract_end_date:
+      contractKind === "cdi" ? null : emptyToNull(fields.contractEndDate),
+    trial_period_days:
+      Number.isFinite(trialParsed) && trialParsed >= 0
+        ? Math.trunc(trialParsed)
+        : null,
+    mission_description: emptyToNull(fields.missionDescription),
   };
 }
 
@@ -827,3 +912,127 @@ export function buildEmployeeDetailStats(input: {
 }
 
 
+
+export type HrContractUiStatus =
+  | "generated"
+  | "ready_for_signature"
+  | "signed"
+  | "declined"
+  | "expired"
+  | "cancelled";
+
+export function contractStatusLabel(status: HrContractUiStatus): string {
+  switch (status) {
+    case "generated":
+      return "Généré";
+    case "ready_for_signature":
+      return "En attente de signature";
+    case "signed":
+      return "Signé";
+    case "declined":
+      return "Refusé";
+    case "expired":
+      return "Lien expiré";
+    case "cancelled":
+      return "Annulé";
+    default:
+      return status;
+  }
+}
+
+export function contractStatusClassName(status: HrContractUiStatus): string {
+  switch (status) {
+    case "generated":
+      return "bg-blue-600 hover:bg-blue-600";
+    case "ready_for_signature":
+      return "bg-orange-500 hover:bg-orange-500";
+    case "signed":
+      return "bg-green-600 hover:bg-green-600";
+    case "declined":
+      return "bg-red-600 hover:bg-red-600";
+    case "expired":
+      return "bg-gray-500 hover:bg-gray-500";
+    case "cancelled":
+      return "bg-gray-400 hover:bg-gray-400";
+    default:
+      return "";
+  }
+}
+
+export const EMPTY_EMPLOYEE_FORM: EmployeeFormFields = {
+  fullName: "",
+  email: "",
+  personalEmail: "",
+  phone: "",
+  poste: "",
+  salaryBase: "",
+  isActive: true,
+  includeNextMonth: false,
+  salaryApplyThisMonth: false,
+  employeeType: "",
+  dateOfBirth: "",
+  placeOfBirth: "",
+  gender: "",
+  nationality: "Camerounaise",
+  nationalId: "",
+  address: "",
+  workplaceId: "",
+  emergencyContactName: "",
+  emergencyContactPhone: "",
+  emergencyContactRelation: "",
+  workSchedule: "8h00\u201317h00, pause 1h",
+  contractKind: "",
+  contractStartDate: "",
+  contractEndDate: "",
+  trialPeriodDays: "",
+  missionDescription: "",
+};
+
+export function dateInputValue(value: string | null | undefined): string {
+  if (!value) return "";
+  return String(value).slice(0, 10);
+}
+
+function genderFormValue(
+  value: string | null | undefined
+): EmployeeFormFields["gender"] {
+  return value === "homme" || value === "femme" ? value : "";
+}
+
+/** Map an employee row to the form fields (used to open the edit dialog). */
+export function employeeToFormFields(row: HrEmployee): EmployeeFormFields {
+  const { year: cy, month: cm } = currentMonthYearDouala();
+  return {
+    fullName: row.full_name,
+    email: row.email,
+    personalEmail: row.personal_email ?? "",
+    phone: row.phone ?? "",
+    poste: row.poste ?? "",
+    salaryBase: row.salary_base != null ? String(row.salary_base) : "",
+    isActive: row.is_active,
+    includeNextMonth: !isPayrollEligibleForMonth(
+      row.payroll_eligible_from,
+      cy,
+      cm
+    ),
+    salaryApplyThisMonth: false,
+    employeeType: row.employee_type ?? "",
+    dateOfBirth: dateInputValue(row.date_of_birth),
+    placeOfBirth: row.place_of_birth ?? "",
+    gender: genderFormValue(row.gender),
+    nationality: row.nationality ?? "",
+    nationalId: row.national_id ?? "",
+    address: row.address ?? "",
+    workplaceId: row.workplace_id != null ? String(row.workplace_id) : "",
+    emergencyContactName: row.emergency_contact_name ?? "",
+    emergencyContactPhone: row.emergency_contact_phone ?? "",
+    emergencyContactRelation: row.emergency_contact_relation ?? "",
+    workSchedule: row.work_schedule ?? "",
+    contractKind: row.contract_kind ?? "",
+    contractStartDate: dateInputValue(row.contract_start_date),
+    contractEndDate: dateInputValue(row.contract_end_date),
+    trialPeriodDays:
+      row.trial_period_days != null ? String(row.trial_period_days) : "",
+    missionDescription: row.mission_description ?? "",
+  };
+}

@@ -19,6 +19,10 @@ import {
   Eye,
   Download,
   MessageCircle,
+  FileSignature,
+  Copy,
+  Ban,
+  Pencil,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -26,16 +30,28 @@ import {
   useHrAttendances,
   useHrAttendancesSummary,
   useHrEmployees,
+  useHrEmployeeContracts,
+  useGenerateHrContract,
+  useReadyHrContract,
+  useSendHrContractWhatsapp,
+  useCancelHrContract,
 } from "@/hooks/useHr";
 import {
   buildPayslipFileName,
   downloadPayslipPdf,
   previewPayslipPdf,
   sendPayslipWhatsapp,
+  previewContractPdf,
+  downloadContractPdf,
+  HR_DOCUMENT_TEMPLATE_KEYS,
+  type HrContract,
+  type HrDocumentType,
 } from "@/services/hr";
 import {
   attendanceStatusClassName,
   attendanceStatusLabel,
+  contractStatusClassName,
+  contractStatusLabel,
   buildEmployeeDetailStats,
   buildEmployeeMonthDayRows,
   canSetAttendanceStatus,
@@ -77,6 +93,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { EmployeeEditDialog } from "@/pages/hr/EmployeeEditDialog";
 
 export default function EmployeeDetailPage() {
   const { id } = useParams();
@@ -108,6 +125,34 @@ export default function EmployeeDetailPage() {
     objectUrl: string;
     fileName: string;
   } | null>(null);
+
+  const { data: contracts = [], isLoading: loadingContracts } =
+    useHrEmployeeContracts(employeeId);
+  const generateContract = useGenerateHrContract();
+  const readyContract = useReadyHrContract(employeeId);
+  const sendContractWa = useSendHrContractWhatsapp(employeeId);
+  const cancelContractMutation = useCancelHrContract(employeeId);
+  const [contractBusy, setContractBusy] = useState<
+    "preview" | "download" | null
+  >(null);
+  const [contractPreview, setContractPreview] = useState<{
+    objectUrl: string;
+    fileName: string;
+  } | null>(null);
+  const latestByType = useMemo<Record<HrDocumentType, HrContract | null>>(
+    () => ({
+      contrat:
+        contracts.find(
+          (c) => c.template_key === HR_DOCUMENT_TEMPLATE_KEYS.contrat
+        ) ?? null,
+      nda:
+        contracts.find(
+          (c) => c.template_key === HR_DOCUMENT_TEMPLATE_KEYS.nda
+        ) ?? null,
+    }),
+    [contracts]
+  );
+  const [editOpen, setEditOpen] = useState(false);
 
   const employee = useMemo(
     () => employees.find((e) => Number(e.id) === employeeId) ?? null,
@@ -203,6 +248,57 @@ export default function EmployeeDetailPage() {
     }
   }
 
+  async function handleContractPdf(
+    contract: HrContract,
+    mode: "preview" | "download"
+  ) {
+    setContractBusy(mode);
+    try {
+      if (mode === "preview") {
+        const next = await previewContractPdf(contract.id);
+        setContractPreview((prev) => {
+          if (prev?.objectUrl) URL.revokeObjectURL(prev.objectUrl);
+          return next;
+        });
+      } else {
+        await downloadContractPdf(contract.id);
+      }
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Impossible de charger le document"
+      );
+    } finally {
+      setContractBusy(null);
+    }
+  }
+
+  function closeContractPreview() {
+    setContractPreview((prev) => {
+      if (prev?.objectUrl) URL.revokeObjectURL(prev.objectUrl);
+      return null;
+    });
+  }
+
+  function downloadFromContractPreview() {
+    if (!contractPreview) return;
+    const a = document.createElement("a");
+    a.href = contractPreview.objectUrl;
+    a.download = contractPreview.fileName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+
+  async function copySigningLink(contract: HrContract) {
+    if (!contract.signing_url) return;
+    try {
+      await navigator.clipboard.writeText(contract.signing_url);
+      toast.success("Lien de signature copié");
+    } catch {
+      toast.error("Impossible de copier le lien");
+    }
+  }
+
   function closePayslipPreview() {
     setPayslipPreview((prev) => {
       if (prev?.objectUrl) URL.revokeObjectURL(prev.objectUrl);
@@ -223,6 +319,186 @@ export default function EmployeeDetailPage() {
     } finally {
       setPayslipBusy(null);
     }
+  }
+
+  function renderDocumentBlock({
+    type,
+    title,
+    emptyText,
+  }: {
+    type: HrDocumentType;
+    title: string;
+    emptyText: string;
+  }) {
+    const doc = latestByType[type];
+    const generating =
+      generateContract.isPending && generateContract.variables?.type === type;
+    return (
+      <div className="stat-card space-y-3 p-4">
+        <div className="flex items-center gap-2 text-sm font-medium">
+          <FileSignature className="h-4 w-4 text-muted-foreground" />
+          {title}
+        </div>
+        {loadingContracts ? (
+          <Skeleton className="h-16 w-full rounded-lg" />
+        ) : doc ? (
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge className={contractStatusClassName(doc.status)}>
+                {contractStatusLabel(doc.status)}
+              </Badge>
+              <span className="text-sm text-muted-foreground">
+                Généré le{" "}
+                {new Date(doc.contract_date).toLocaleDateString("fr-FR")}
+              </span>
+              {doc.status === "ready_for_signature" &&
+              doc.signature_token_expires_at ? (
+                <span className="text-sm text-muted-foreground">
+                  · lien valable jusqu’au{" "}
+                  {new Date(doc.signature_token_expires_at).toLocaleDateString(
+                    "fr-FR"
+                  )}
+                </span>
+              ) : null}
+              {doc.status === "signed" && doc.signed_at ? (
+                <span className="text-sm text-muted-foreground">
+                  · signé le{" "}
+                  {new Date(doc.signed_at).toLocaleDateString("fr-FR")}
+                </span>
+              ) : null}
+            </div>
+            {doc.status === "declined" && doc.decline_reason ? (
+              <p className="text-sm text-red-600">
+                Motif du refus : {doc.decline_reason}
+              </p>
+            ) : null}
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={contractBusy !== null}
+                onClick={() => void handleContractPdf(doc, "preview")}
+              >
+                <Eye className="mr-1.5 h-4 w-4" />
+                {contractBusy === "preview" ? "Chargement…" : "Prévisualiser"}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={contractBusy !== null}
+                onClick={() => void handleContractPdf(doc, "download")}
+              >
+                <Download className="mr-1.5 h-4 w-4" />
+                {contractBusy === "download" ? "Chargement…" : "Télécharger"}
+              </Button>
+              {["generated", "declined", "expired"].includes(doc.status) ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={readyContract.isPending}
+                  onClick={() => readyContract.mutate(doc.id)}
+                >
+                  <FileSignature className="mr-1.5 h-4 w-4" />
+                  {readyContract.isPending
+                    ? "Préparation…"
+                    : "Créer le lien de signature"}
+                </Button>
+              ) : null}
+              {doc.signing_url ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void copySigningLink(doc)}
+                >
+                  <Copy className="mr-1.5 h-4 w-4" />
+                  Copier le lien
+                </Button>
+              ) : null}
+              {["generated", "ready_for_signature", "declined", "expired"].includes(
+                doc.status
+              ) ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={sendContractWa.isPending || !employee?.phone?.trim()}
+                  title={
+                    employee?.phone?.trim()
+                      ? "Envoyer le lien de signature sur WhatsApp"
+                      : "Numéro de téléphone requis"
+                  }
+                  onClick={() => sendContractWa.mutate(doc.id)}
+                >
+                  <MessageCircle className="mr-1.5 h-4 w-4" />
+                  {sendContractWa.isPending ? "Envoi…" : "Envoyer WhatsApp"}
+                </Button>
+              ) : null}
+              {["generated", "ready_for_signature", "declined", "expired"].includes(
+                doc.status
+              ) ? (
+                <>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={generating}
+                    onClick={() =>
+                      generateContract.mutate({ employeeId, type })
+                    }
+                  >
+                    <FileSignature className="mr-1.5 h-4 w-4" />
+                    {generating ? "Génération…" : "Régénérer"}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="text-red-600 hover:text-red-700"
+                    disabled={cancelContractMutation.isPending}
+                    onClick={() => cancelContractMutation.mutate(doc.id)}
+                  >
+                    <Ban className="mr-1.5 h-4 w-4" />
+                    {cancelContractMutation.isPending
+                      ? "Annulation…"
+                      : "Annuler"}
+                  </Button>
+                </>
+              ) : null}
+              {["signed", "cancelled"].includes(doc.status) ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={generating}
+                  onClick={() => generateContract.mutate({ employeeId, type })}
+                >
+                  <FileSignature className="mr-1.5 h-4 w-4" />
+                  {generating ? "Génération…" : "Générer un nouveau document"}
+                </Button>
+              ) : null}
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <p className="text-sm text-muted-foreground">{emptyText}</p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={generating || !employee}
+              onClick={() => generateContract.mutate({ employeeId, type })}
+            >
+              <FileSignature className="mr-1.5 h-4 w-4" />
+              {generating ? "Génération…" : "Générer"}
+            </Button>
+          </div>
+        )}
+      </div>
+    );
   }
 
   if (!Number.isFinite(employeeId) || employeeId <= 0) {
@@ -298,6 +574,16 @@ export default function EmployeeDetailPage() {
               type="button"
               variant="outline"
               size="sm"
+              disabled={!employee}
+              onClick={() => setEditOpen(true)}
+            >
+              <Pencil className="mr-1.5 h-4 w-4" />
+              Modifier
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
               disabled={!employee || payslipBusy !== null}
               onClick={() => handlePayslip("preview")}
             >
@@ -348,6 +634,20 @@ export default function EmployeeDetailPage() {
           présence, masse salariale). Corrections manuelles désactivées.
         </p>
       )}
+
+      {renderDocumentBlock({
+        type: "contrat",
+        title: "Contrat de travail",
+        emptyText:
+          "Aucun contrat généré pour cet employé. Le contrat est créé à partir des informations de sa fiche (identité, poste, salaire, type de contrat…).",
+      })}
+
+      {renderDocumentBlock({
+        type: "nda",
+        title: "Accord de confidentialité (NDA)",
+        emptyText:
+          "Aucun NDA généré pour cet employé. Le NDA est créé à partir des informations d’identité de sa fiche.",
+      })}
 
       {isLoading ? (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -647,6 +947,52 @@ export default function EmployeeDetailPage() {
           ) : null}
         </DialogContent>
       </Dialog>
+
+      <Dialog
+        open={contractPreview != null}
+        onOpenChange={(open) => {
+          if (!open) closeContractPreview();
+        }}
+      >
+        <DialogContent className="flex h-[90vh] max-h-[90vh] w-[min(960px,95vw)] max-w-[95vw] flex-col gap-3 overflow-hidden p-4 sm:rounded-lg">
+          <DialogHeader className="shrink-0 space-y-1 pr-8">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div className="min-w-0 space-y-1">
+                <DialogTitle>Aperçu du document</DialogTitle>
+                {contractPreview?.fileName ? (
+                  <p className="text-sm font-normal text-muted-foreground truncate">
+                    {contractPreview.fileName}
+                  </p>
+                ) : null}
+              </div>
+              {contractPreview ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0"
+                  onClick={() => downloadFromContractPreview()}
+                >
+                  <Download className="mr-1.5 h-4 w-4" />
+                  Télécharger
+                </Button>
+              ) : null}
+            </div>
+          </DialogHeader>
+          {contractPreview?.objectUrl ? (
+            <iframe
+              title="Aperçu contrat de travail"
+              src={contractPreview.objectUrl}
+              className="min-h-0 w-full flex-1 rounded-md border bg-muted/30"
+            />
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      <EmployeeEditDialog
+        employee={editOpen ? employee : null}
+        onClose={() => setEditOpen(false)}
+      />
     </div>
   );
 }

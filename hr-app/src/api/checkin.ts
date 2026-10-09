@@ -4,6 +4,13 @@ function url(path: string): string {
   return `${API_BASE}${path}`;
 }
 
+/** Current règlement intérieur status for the employee (indicator only). */
+export type RegulationStatus = {
+  to_read: boolean;
+  version_label: string;
+  url: string;
+};
+
 export type VerifyEmailResult = {
   full_name: string;
   email: string;
@@ -12,6 +19,7 @@ export type VerifyEmailResult = {
   cost_late_day: number | null;
   /** Cost of one absent day this month (FCFA). */
   cost_absent_day: number | null;
+  regulation?: RegulationStatus | null;
 };
 
 export type CheckinResult = {
@@ -19,6 +27,7 @@ export type CheckinResult = {
   employee_name: string;
   check_in_time: string;
   status: "present" | "late";
+  regulation?: RegulationStatus | null;
 };
 
 export class CheckinApiError extends Error {

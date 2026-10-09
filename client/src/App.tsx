@@ -17,6 +17,7 @@ import MerchantTermsPage from "./pages/admin/MerchantTermsPage";
 import JobsPage from "./pages/recruitment/JobsPage";
 import ApplicationsPage from "./pages/recruitment/ApplicationsPage";
 import EmployeesPage from "./pages/hr/EmployeesPage";
+import ReglementPage from "./pages/hr/ReglementPage";
 import EmployeeDetailPage from "./pages/hr/EmployeeDetailPage";
 import AttendancesPage from "./pages/hr/AttendancesPage";
 import OpsReportsPage from "./pages/reports/OpsReportsPage";
@@ -143,6 +144,14 @@ const App = () => (
                 element={
                   <ProtectedRoute requireSuperAdmin>
                     <AttendancesPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/hr/reglement"
+                element={
+                  <ProtectedRoute requireSuperAdmin>
+                    <ReglementPage />
                   </ProtectedRoute>
                 }
               />

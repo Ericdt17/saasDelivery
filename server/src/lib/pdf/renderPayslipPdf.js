@@ -93,11 +93,12 @@ async function getBrowser() {
 }
 
 /**
- * @param {Record<string, string|number|null|undefined>} model
+ * Render arbitrary HTML to an A4 PDF using the shared browser instance.
+ * @param {string} html
+ * @param {import('puppeteer').PDFOptions} [pdfOptions]
  * @returns {Promise<Buffer>}
  */
-async function renderPayslipPdf(model) {
-  const html = fillTemplate(loadTemplate(), model);
+async function renderHtmlPdf(html, pdfOptions = {}) {
   const browser = await getBrowser();
   const page = await browser.newPage();
   try {
@@ -106,11 +107,20 @@ async function renderPayslipPdf(model) {
       format: 'A4',
       printBackground: true,
       margin: { top: '12mm', right: '14mm', bottom: '18mm', left: '14mm' },
+      ...pdfOptions,
     });
     return Buffer.from(pdf);
   } finally {
     await page.close().catch(() => {});
   }
+}
+
+/**
+ * @param {Record<string, string|number|null|undefined>} model
+ * @returns {Promise<Buffer>}
+ */
+async function renderPayslipPdf(model) {
+  return renderHtmlPdf(fillTemplate(loadTemplate(), model));
 }
 
 /** @internal test helper */
@@ -120,6 +130,7 @@ function _resetForTests() {
 
 module.exports = {
   renderPayslipPdf,
+  renderHtmlPdf,
   fillTemplate,
   loadTemplate,
   _resetForTests,

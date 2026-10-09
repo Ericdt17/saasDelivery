@@ -8,9 +8,9 @@ import {
   useHrEmployees,
   useHrAttendancesSummary,
   useCreateHrEmployee,
-  useUpdateHrEmployee,
   useDeleteHrEmployee,
   useEnrollHrEmployeeFace,
+  useHrWorkplaces,
 } from "@/hooks/useHr";
 import type { HrEmployee } from "@/services/hr";
 import {
@@ -23,10 +23,15 @@ import {
   formatPenaltyBreakdownLines,
   formatSalary,
   countWorkdaysInMonth,
-  currentMonthYearDouala,
   isPayrollEligibleForMonth,
+  EMPTY_EMPLOYEE_FORM,
+  type EmployeeFormFields,
 } from "@/pages/hr/hrUi";
 import { FaceEnrollDialog } from "@/pages/hr/FaceEnrollDialog";
+import {
+  EmployeeEditDialog,
+  EmployeeFormSections,
+} from "@/pages/hr/EmployeeEditDialog";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import {
   getDateRangeForPreset,
@@ -36,9 +41,6 @@ import {
 } from "@/lib/date-utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -52,8 +54,6 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
-  DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
@@ -66,6 +66,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  FORM_DIALOG_BODY_CLASS,
+  FORM_DIALOG_CLOSE_CLASS,
+  FORM_DIALOG_CONTENT_CLASS,
+  FORM_DIALOG_FOOTER_CLASS,
+  FORM_DIALOG_HEADER_CLASS,
+} from "@/lib/form-dialog-layout";
 import { UserCog, Plus, ScanFace, Pencil, Trash2, Eye } from "lucide-react";
 
 export default function EmployeesPage() {
@@ -81,9 +88,9 @@ export default function EmployeesPage() {
   const { data: monthSummary = [], isLoading: loadingSummary } =
     useHrAttendancesSummary(month, year);
   const createEmployee = useCreateHrEmployee();
-  const updateEmployee = useUpdateHrEmployee();
   const deleteEmployee = useDeleteHrEmployee();
   const enrollFace = useEnrollHrEmployeeFace();
+  const { data: workplaces = [] } = useHrWorkplaces({ activeOnly: true });
 
   const statsByEmployee = useMemo(() => {
     const map = new Map<
@@ -110,26 +117,16 @@ export default function EmployeesPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<HrEmployee | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<HrEmployee | null>(null);
-  const [fullName, setFullName] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
-  const [poste, setPoste] = useState("");
-  const [salaryBase, setSalaryBase] = useState("");
-  const [isActive, setIsActive] = useState(true);
-  const [includeNextMonth, setIncludeNextMonth] = useState(false);
-  const [salaryApplyThisMonth, setSalaryApplyThisMonth] = useState(false);
+  const [form, setForm] = useState<EmployeeFormFields>(EMPTY_EMPLOYEE_FORM);
 
   const [enrollTarget, setEnrollTarget] = useState<HrEmployee | null>(null);
 
+  function patchForm(patch: Partial<EmployeeFormFields>) {
+    setForm((prev) => ({ ...prev, ...patch }));
+  }
+
   function resetForm() {
-    setFullName("");
-    setEmail("");
-    setPhone("");
-    setPoste("");
-    setSalaryBase("");
-    setIsActive(true);
-    setIncludeNextMonth(false);
-    setSalaryApplyThisMonth(false);
+    setForm(EMPTY_EMPLOYEE_FORM);
   }
 
   function openCreate() {
@@ -138,66 +135,46 @@ export default function EmployeesPage() {
   }
 
   function openEdit(row: HrEmployee) {
-    const { year: cy, month: cm } = currentMonthYearDouala();
-    setFullName(row.full_name);
-    setEmail(row.email);
-    setPhone(row.phone ?? "");
-    setPoste(row.poste ?? "");
-    setSalaryBase(row.salary_base != null ? String(row.salary_base) : "");
-    setIsActive(row.is_active);
-    setIncludeNextMonth(
-      !isPayrollEligibleForMonth(row.payroll_eligible_from, cy, cm)
-    );
-    setSalaryApplyThisMonth(false);
     setEditTarget(row);
   }
 
   async function handleCreate() {
-    const name = fullName.trim();
-    const mail = email.trim();
+    const name = form.fullName.trim();
+    const mail = form.email.trim();
     if (!name || !mail) return;
 
     const payload = buildEmployeeUpdatePayload({
-      fullName,
-      email,
-      phone,
-      poste,
-      salaryBase,
+      ...form,
       isActive: true,
-      includeNextMonth,
       salaryApplyThisMonth: false,
     });
     await createEmployee.mutateAsync({
       full_name: payload.full_name,
       email: payload.email,
+      personal_email: payload.personal_email,
       phone: payload.phone,
       poste: payload.poste,
       salary_base: payload.salary_base,
       include_next_month: payload.include_next_month,
+      employee_type: payload.employee_type,
+      date_of_birth: payload.date_of_birth,
+      place_of_birth: payload.place_of_birth,
+      gender: payload.gender,
+      nationality: payload.nationality,
+      national_id: payload.national_id,
+      address: payload.address,
+      workplace_id: payload.workplace_id,
+      emergency_contact_name: payload.emergency_contact_name,
+      emergency_contact_phone: payload.emergency_contact_phone,
+      emergency_contact_relation: payload.emergency_contact_relation,
+      work_schedule: payload.work_schedule,
+      contract_kind: payload.contract_kind,
+      contract_start_date: payload.contract_start_date,
+      contract_end_date: payload.contract_end_date,
+      trial_period_days: payload.trial_period_days,
+      mission_description: payload.mission_description,
     });
     setCreateOpen(false);
-  }
-
-  async function handleUpdate() {
-    if (!editTarget) return;
-    const name = fullName.trim();
-    const mail = email.trim();
-    if (!name || !mail) return;
-
-    await updateEmployee.mutateAsync({
-      id: editTarget.id,
-      data: buildEmployeeUpdatePayload({
-        fullName,
-        email,
-        phone,
-        poste,
-        salaryBase,
-        isActive,
-        includeNextMonth,
-        salaryApplyThisMonth,
-      }),
-    });
-    setEditTarget(null);
   }
 
   async function handleConfirmDelete() {
@@ -207,10 +184,7 @@ export default function EmployeesPage() {
   }
 
   const formDisabled =
-    !fullName.trim() ||
-    !email.trim() ||
-    createEmployee.isPending ||
-    updateEmployee.isPending;
+    !form.fullName.trim() || !form.email.trim() || createEmployee.isPending;
 
   return (
     <div className="space-y-6">
@@ -244,6 +218,7 @@ export default function EmployeesPage() {
             <TableHeader>
               <TableRow className="hover:bg-transparent">
                 <TableHead>Nom</TableHead>
+                <TableHead>Type</TableHead>
                 <TableHead>Poste</TableHead>
                 <TableHead>Salaire base</TableHead>
                 <TableHead className="text-right">Présents</TableHead>
@@ -259,7 +234,7 @@ export default function EmployeesPage() {
               {isLoading || loadingSummary ? (
                 Array.from({ length: 4 }).map((_, i) => (
                   <TableRow key={i}>
-                    {Array.from({ length: 10 }).map((__, j) => (
+                    {Array.from({ length: 11 }).map((__, j) => (
                       <TableCell key={j}>
                         <Skeleton className="h-4 w-24" />
                       </TableCell>
@@ -269,7 +244,7 @@ export default function EmployeesPage() {
               ) : employees.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={10}
+                    colSpan={11}
                     className="p-8 text-center text-muted-foreground"
                   >
                     Aucun employé pour le moment.
@@ -293,6 +268,9 @@ export default function EmployeesPage() {
                         >
                           {row.full_name}
                         </Link>
+                      </TableCell>
+                      <TableCell className="capitalize">
+                        {row.employee_type ?? "—"}
                       </TableCell>
                       <TableCell>{row.poste ?? "—"}</TableCell>
                       <TableCell>
@@ -412,28 +390,26 @@ export default function EmployeesPage() {
       </div>
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Ajouter un employé</DialogTitle>
-            <DialogDescription>
+        <DialogContent
+          className={FORM_DIALOG_CONTENT_CLASS}
+          closeClassName={FORM_DIALOG_CLOSE_CLASS}
+        >
+          <div className={FORM_DIALOG_HEADER_CLASS}>
+            <DialogTitle className="text-base font-semibold leading-tight">
+              Ajouter un employé
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground mt-0.5">
               L’email servira d’identifiant pour le pointage.
             </DialogDescription>
-          </DialogHeader>
-          <EmployeeFormFields
-            fullName={fullName}
-            email={email}
-            phone={phone}
-            poste={poste}
-            salaryBase={salaryBase}
-            includeNextMonth={includeNextMonth}
-            onFullNameChange={setFullName}
-            onEmailChange={setEmail}
-            onPhoneChange={setPhone}
-            onPosteChange={setPoste}
-            onSalaryBaseChange={setSalaryBase}
-            onIncludeNextMonthChange={setIncludeNextMonth}
-          />
-          <DialogFooter>
+          </div>
+          <div className={FORM_DIALOG_BODY_CLASS}>
+            <EmployeeFormSections
+              form={form}
+              onChange={patchForm}
+              workplaces={workplaces}
+            />
+          </div>
+          <div className={FORM_DIALOG_FOOTER_CLASS}>
             <Button variant="outline" onClick={() => setCreateOpen(false)}>
               Annuler
             </Button>
@@ -443,63 +419,14 @@ export default function EmployeesPage() {
             >
               {createEmployee.isPending ? "Création…" : "Créer"}
             </Button>
-          </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
 
-      <Dialog
-        open={editTarget != null}
-        onOpenChange={(open) => {
-          if (!open) setEditTarget(null);
-        }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Modifier l’employé</DialogTitle>
-            <DialogDescription>
-              Mettez à jour les informations. L’email reste l’identifiant de
-              pointage.
-            </DialogDescription>
-          </DialogHeader>
-          <EmployeeFormFields
-            fullName={fullName}
-            email={email}
-            phone={phone}
-            poste={poste}
-            salaryBase={salaryBase}
-            includeNextMonth={includeNextMonth}
-            showSalaryTiming
-            salaryApplyThisMonth={salaryApplyThisMonth}
-            salaryScheduled={editTarget?.salary_scheduled ?? null}
-            onFullNameChange={setFullName}
-            onEmailChange={setEmail}
-            onPhoneChange={setPhone}
-            onPosteChange={setPoste}
-            onSalaryBaseChange={setSalaryBase}
-            onIncludeNextMonthChange={setIncludeNextMonth}
-            onSalaryApplyThisMonthChange={setSalaryApplyThisMonth}
-          />
-          <div className="flex items-center gap-2 py-1">
-            <Checkbox
-              id="hr-active"
-              checked={isActive}
-              onCheckedChange={(v) => setIsActive(v === true)}
-            />
-            <Label htmlFor="hr-active">Employé actif</Label>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditTarget(null)}>
-              Annuler
-            </Button>
-            <Button
-              disabled={formDisabled}
-              onClick={() => void handleUpdate()}
-            >
-              {updateEmployee.isPending ? "Enregistrement…" : "Enregistrer"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <EmployeeEditDialog
+        employee={editTarget}
+        onClose={() => setEditTarget(null)}
+      />
 
       <AlertDialog
         open={deleteTarget != null}
@@ -547,139 +474,6 @@ export default function EmployeesPage() {
           setEnrollTarget(null);
         }}
       />
-    </div>
-  );
-}
-
-function EmployeeFormFields({
-  fullName,
-  email,
-  phone,
-  poste,
-  salaryBase,
-  includeNextMonth,
-  showSalaryTiming = false,
-  salaryApplyThisMonth = false,
-  salaryScheduled = null,
-  onFullNameChange,
-  onEmailChange,
-  onPhoneChange,
-  onPosteChange,
-  onSalaryBaseChange,
-  onIncludeNextMonthChange,
-  onSalaryApplyThisMonthChange,
-}: {
-  fullName: string;
-  email: string;
-  phone: string;
-  poste: string;
-  salaryBase: string;
-  includeNextMonth: boolean;
-  showSalaryTiming?: boolean;
-  salaryApplyThisMonth?: boolean;
-  salaryScheduled?: HrEmployee["salary_scheduled"];
-  onFullNameChange: (v: string) => void;
-  onEmailChange: (v: string) => void;
-  onPhoneChange: (v: string) => void;
-  onPosteChange: (v: string) => void;
-  onSalaryBaseChange: (v: string) => void;
-  onIncludeNextMonthChange: (v: boolean) => void;
-  onSalaryApplyThisMonthChange?: (v: boolean) => void;
-}) {
-  return (
-    <div className="space-y-4 py-2">
-      <div className="space-y-2">
-        <Label htmlFor="hr-name">Nom complet *</Label>
-        <Input
-          id="hr-name"
-          value={fullName}
-          onChange={(e) => onFullNameChange(e.target.value)}
-        />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="hr-email">Email *</Label>
-        <Input
-          id="hr-email"
-          type="email"
-          value={email}
-          onChange={(e) => onEmailChange(e.target.value)}
-        />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="hr-phone">Téléphone</Label>
-        <Input
-          id="hr-phone"
-          value={phone}
-          onChange={(e) => onPhoneChange(e.target.value)}
-        />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="hr-poste">Poste</Label>
-        <Input
-          id="hr-poste"
-          value={poste}
-          onChange={(e) => onPosteChange(e.target.value)}
-        />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="hr-salary">Salaire de base</Label>
-        <Input
-          id="hr-salary"
-          type="number"
-          inputMode="numeric"
-          value={salaryBase}
-          onChange={(e) => onSalaryBaseChange(e.target.value)}
-        />
-        {showSalaryTiming && salaryScheduled ? (
-          <p className="text-xs text-muted-foreground">
-            Déjà programmé : {formatSalary(salaryScheduled.amount)} F dès{" "}
-            {String(salaryScheduled.effective_from).slice(0, 7)}. Une nouvelle
-            modification remplace le planning à partir de la date choisie.
-          </p>
-        ) : null}
-      </div>
-      {showSalaryTiming ? (
-        <div className="flex items-start gap-2 rounded-lg border p-3">
-          <Checkbox
-            id="hr-salary-apply-this-month"
-            checked={salaryApplyThisMonth}
-            onCheckedChange={(v) =>
-              onSalaryApplyThisMonthChange?.(v === true)
-            }
-            className="mt-0.5"
-          />
-          <div className="space-y-1">
-            <Label
-              htmlFor="hr-salary-apply-this-month"
-              className="cursor-pointer"
-            >
-              Appliquer dès ce mois
-            </Label>
-            <p className="text-xs text-muted-foreground">
-              Par défaut, hausse ou baisse prend effet le 1er du mois suivant.
-              Cochez uniquement pour une correction sur le mois en cours
-              (bulletins / masse salariale d’octobre inclus).
-            </p>
-          </div>
-        </div>
-      ) : null}
-      <div className="flex items-start gap-2 rounded-lg border p-3">
-        <Checkbox
-          id="hr-include-next-month"
-          checked={includeNextMonth}
-          onCheckedChange={(v) => onIncludeNextMonthChange(v === true)}
-          className="mt-0.5"
-        />
-        <div className="space-y-1">
-          <Label htmlFor="hr-include-next-month" className="cursor-pointer">
-            Inclure au mois suivant
-          </Label>
-          <p className="text-xs text-muted-foreground">
-            Exclut ce salaire de la masse du mois en cours (rapports /
-            dashboard). Prise en compte à partir du 1er du mois suivant.
-          </p>
-        </div>
-      </div>
     </div>
   );
 }
