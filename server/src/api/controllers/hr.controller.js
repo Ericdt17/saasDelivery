@@ -7,6 +7,7 @@ const { z } = require("zod");
 const {
   listEmployees,
   getEmployeeById,
+  getEmployeeDocuments,
   createEmployee,
   updateEmployee,
   deleteEmployee,
@@ -123,9 +124,26 @@ const createEmployeeSchema = z.object({
   mission_description: optionalTrimmedSchema,
 });
 
+/** Document image (data URL) — stockage pur, hors génération de contrats. */
+const optionalDocumentImageSchema = z.preprocess(
+  (v) => (v === "" || v === undefined ? undefined : v),
+  z
+    .string()
+    .regex(/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/, {
+      message: "Image PNG, JPEG ou WebP attendue",
+    })
+    .max(2_800_000, "Image trop lourde (2 Mo max)")
+    .nullable()
+    .optional()
+);
+
 const patchEmployeeSchema = createEmployeeSchema
   .partial()
   .extend({
+    /** Photos CNI + plan de localisation (images, null pour retirer). */
+    cni_front_base64: optionalDocumentImageSchema,
+    cni_back_base64: optionalDocumentImageSchema,
+    home_location_base64: optionalDocumentImageSchema,
     is_active: z.boolean().optional(),
     /**
      * When salary_base changes: false (default) → effective next Douala month;
@@ -822,6 +840,23 @@ async function getAttendancesSummary(req, res, next) {
   }
 }
 
+/** CNI recto/verso + plan de localisation — images servies à la demande. */
+async function getAdminEmployeeDocuments(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id < 1) {
+      return res.status(400).json({ success: false, error: "Invalid employee id" });
+    }
+    const docs = await getEmployeeDocuments(id);
+    if (!docs) {
+      return res.status(404).json({ success: false, error: "Employee not found" });
+    }
+    return res.json({ success: true, data: docs });
+  } catch (err) {
+    next(err);
+  }
+}
+
 async function getEmployeePayslipPdf(req, res, next) {
   try {
     const id = Number(req.params.id);
@@ -850,6 +885,9 @@ async function getEmployeePayslipPdf(req, res, next) {
     }
 
     res.setHeader("Content-Type", "application/pdf");
+    // no-store: payslip content changes with attendance and settings — a
+    // cached response would show stale amounts or branding.
+    res.setHeader("Cache-Control", "no-store");
     res.setHeader(
       "Content-Disposition",
       `${download ? "attachment" : "inline"}; filename="${result.fileName}"`
@@ -1015,6 +1053,7 @@ async function downloadPayslipByCode(req, res, next) {
     }
 
     res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Cache-Control", "no-store");
     res.setHeader(
       "Content-Disposition",
       `attachment; filename="${result.fileName}"`
@@ -1116,6 +1155,7 @@ async function deleteAdminWorkplace(req, res, next) {
 }
 
 module.exports = {
+  getAdminEmployeeDocuments,
   listAdminEmployees,
   createAdminEmployee,
   patchAdminEmployee,

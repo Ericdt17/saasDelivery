@@ -263,6 +263,9 @@ async function getAdminContractDocument(req, res, next) {
     }
     const download = String(req.query.download || "") === "true";
     res.setHeader("Content-Type", "application/pdf");
+    // no-store: the same URL serves the unsigned then the signed PDF — a
+    // cached pre-signature response would hide the employee's signature.
+    res.setHeader("Cache-Control", "no-store");
     res.setHeader(
       "Content-Disposition",
       `${download ? "attachment" : "inline"}; filename="${contract.document_file_name}"`
@@ -491,6 +494,7 @@ async function getContractSignDocument(req, res, next) {
       return res.status(404).json({ success: false, error: "Document not found" });
     }
     res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Cache-Control", "no-store");
     res.setHeader(
       "Content-Disposition",
       `inline; filename="${contract.document_file_name}"`

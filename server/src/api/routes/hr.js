@@ -73,6 +73,10 @@ router.post(
 router.patch("/employees/:id", controller.patchAdminEmployee);
 router.delete("/employees/:id", controller.deleteAdminEmployee);
 router.post("/employees/:id/enroll", controller.enrollAdminEmployeeFace);
+router.get(
+  "/employees/:id/documents",
+  controller.getAdminEmployeeDocuments
+);
 
 // Employee contracts
 router.get("/employees/:id/contracts", contractController.listEmployeeContracts);

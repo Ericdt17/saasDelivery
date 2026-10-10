@@ -4,6 +4,7 @@
  */
 
 import { useEffect, useState, type ReactNode } from "react";
+import { toast } from "sonner";
 import { useUpdateHrEmployee, useHrWorkplaces } from "@/hooks/useHr";
 import type {
   HrContractKind,
@@ -12,6 +13,8 @@ import type {
   HrGender,
   HrWorkplace,
 } from "@/services/hr";
+import { getEmployeeDocuments } from "@/services/hr";
+import { imageFileToDataUrl } from "@/lib/image-file";
 import {
   buildEmployeeUpdatePayload,
   employeeToFormFields,
@@ -50,10 +53,13 @@ import {
   IdCard,
   FileText,
   Phone,
+  Images,
+  X,
   type LucideIcon,
 } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
 
-function SectionCard({
+export function SectionCard({
   step,
   icon: Icon,
   title,
@@ -82,7 +88,7 @@ function SectionCard({
   );
 }
 
-function Field({
+export function Field({
   label,
   htmlFor,
   children,
@@ -473,6 +479,104 @@ export function EmployeeFormSections({
   );
 }
 
+/** Slot d'upload image (CNI, plan de localisation) — aperçu + remplacer/retirer. */
+function DocumentImageSlot({
+  label,
+  value,
+  onChange,
+  onPreview,
+}: {
+  label: string;
+  value: string | null;
+  onChange: (src: string | null) => void;
+  onPreview: (label: string, src: string) => void;
+}) {
+  async function handleFile(file: File | undefined) {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Choisissez une image (photo du document)");
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error("Image trop lourde (10 Mo max)");
+      return;
+    }
+    try {
+      onChange(await imageFileToDataUrl(file));
+    } catch {
+      toast.error("Impossible de lire cette image");
+    }
+  }
+
+  return (
+    <div className="space-y-1">
+      <Label className="text-[11px] text-muted-foreground">{label}</Label>
+      {value ? (
+        <div className="relative overflow-hidden rounded-md border bg-background/60">
+          <button
+            type="button"
+            className="block w-full cursor-zoom-in"
+            title="Agrandir"
+            onClick={() => onPreview(label, value)}
+          >
+            <img src={value} alt={label} className="h-24 w-full object-cover" />
+          </button>
+          <Button
+            type="button"
+            size="icon"
+            variant="secondary"
+            className="absolute right-1 top-1 h-6 w-6"
+            title="Retirer"
+            onClick={() => onChange(null)}
+          >
+            <X className="h-3.5 w-3.5" />
+          </Button>
+          <label className="absolute bottom-1 right-1 cursor-pointer rounded bg-background/90 px-1.5 py-0.5 text-[10px] font-medium underline-offset-2 hover:underline">
+            Remplacer
+            <input
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                void handleFile(e.target.files?.[0]);
+                e.target.value = "";
+              }}
+            />
+          </label>
+        </div>
+      ) : (
+        <label className="flex h-24 cursor-pointer flex-col items-center justify-center gap-1 rounded-md border border-dashed border-border bg-background/60 text-center">
+          <Images className="h-4 w-4 text-muted-foreground" />
+          <span className="text-[10px] text-muted-foreground">
+            Ajouter la photo
+          </span>
+          <input
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => {
+              void handleFile(e.target.files?.[0]);
+              e.target.value = "";
+            }}
+          />
+        </label>
+      )}
+    </div>
+  );
+}
+
+type EmployeeDocsState = {
+  cniFront: string | null;
+  cniBack: string | null;
+  homeLocation: string | null;
+};
+
+const EMPTY_DOCS: EmployeeDocsState = {
+  cniFront: null,
+  cniBack: null,
+  homeLocation: null,
+};
+
 /**
  * Dialog « Modifier l'employé » — autonome (état du formulaire + mutation).
  * Ouvert tant que `employee` est non nul.
@@ -487,9 +591,39 @@ export function EmployeeEditDialog({
   const updateEmployee = useUpdateHrEmployee();
   const { data: workplaces = [] } = useHrWorkplaces({ activeOnly: true });
   const [form, setForm] = useState<EmployeeFormFields>(EMPTY_EMPLOYEE_FORM);
+  // Documents (CNI, plan de localisation) — stockage pur, hors contrats.
+  const [docs, setDocs] = useState<EmployeeDocsState>(EMPTY_DOCS);
+  const [docsLoaded, setDocsLoaded] = useState<EmployeeDocsState>(EMPTY_DOCS);
+  const [docsLoading, setDocsLoading] = useState(false);
+  const [docPreview, setDocPreview] = useState<{
+    label: string;
+    src: string;
+  } | null>(null);
 
   useEffect(() => {
-    if (employee) setForm(employeeToFormFields(employee));
+    if (!employee) return;
+    setForm(employeeToFormFields(employee));
+    setDocs(EMPTY_DOCS);
+    setDocsLoaded(EMPTY_DOCS);
+    if (
+      employee.has_cni_front ||
+      employee.has_cni_back ||
+      employee.has_home_location
+    ) {
+      setDocsLoading(true);
+      getEmployeeDocuments(employee.id)
+        .then((d) => {
+          const loaded = {
+            cniFront: d.cni_front_base64,
+            cniBack: d.cni_back_base64,
+            homeLocation: d.home_location_base64,
+          };
+          setDocs(loaded);
+          setDocsLoaded(loaded);
+        })
+        .catch(() => toast.error("Impossible de charger les documents"))
+        .finally(() => setDocsLoading(false));
+    }
   }, [employee]);
 
   function patchForm(patch: Partial<EmployeeFormFields>) {
@@ -499,9 +633,16 @@ export function EmployeeEditDialog({
   async function handleUpdate() {
     if (!employee) return;
     if (!form.fullName.trim() || !form.email.trim()) return;
+    const docPatch: Record<string, string | null> = {};
+    if (docs.cniFront !== docsLoaded.cniFront)
+      docPatch.cni_front_base64 = docs.cniFront;
+    if (docs.cniBack !== docsLoaded.cniBack)
+      docPatch.cni_back_base64 = docs.cniBack;
+    if (docs.homeLocation !== docsLoaded.homeLocation)
+      docPatch.home_location_base64 = docs.homeLocation;
     await updateEmployee.mutateAsync({
       id: employee.id,
-      data: buildEmployeeUpdatePayload(form),
+      data: { ...buildEmployeeUpdatePayload(form), ...docPatch },
     });
     onClose();
   }
@@ -553,6 +694,44 @@ export function EmployeeEditDialog({
             showSalaryTiming
             salaryScheduled={employee?.salary_scheduled ?? null}
           />
+          <div className="mt-3">
+            <SectionCard step={6} icon={Images} title="Documents (images)">
+              {docsLoading ? (
+                <Skeleton className="h-24 w-full rounded-md" />
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <DocumentImageSlot
+                    label="CNI — recto"
+                    value={docs.cniFront}
+                    onChange={(src) =>
+                      setDocs((prev) => ({ ...prev, cniFront: src }))
+                    }
+                    onPreview={(label, src) => setDocPreview({ label, src })}
+                  />
+                  <DocumentImageSlot
+                    label="CNI — verso"
+                    value={docs.cniBack}
+                    onChange={(src) =>
+                      setDocs((prev) => ({ ...prev, cniBack: src }))
+                    }
+                    onPreview={(label, src) => setDocPreview({ label, src })}
+                  />
+                  <DocumentImageSlot
+                    label="Plan de localisation du domicile"
+                    value={docs.homeLocation}
+                    onChange={(src) =>
+                      setDocs((prev) => ({ ...prev, homeLocation: src }))
+                    }
+                    onPreview={(label, src) => setDocPreview({ label, src })}
+                  />
+                </div>
+              )}
+              <p className="text-[11px] text-muted-foreground">
+                Stockés sur la fiche uniquement — sans effet sur la génération
+                des contrats.
+              </p>
+            </SectionCard>
+          </div>
         </div>
         <div className={FORM_DIALOG_FOOTER_CLASS}>
           <Button variant="outline" onClick={onClose}>
@@ -563,6 +742,25 @@ export function EmployeeEditDialog({
           </Button>
         </div>
       </DialogContent>
+
+      {/* Visionneuse plein format des documents */}
+      <Dialog
+        open={docPreview != null}
+        onOpenChange={(open) => {
+          if (!open) setDocPreview(null);
+        }}
+      >
+        <DialogContent className="max-w-3xl">
+          <DialogTitle>{docPreview?.label}</DialogTitle>
+          {docPreview ? (
+            <img
+              src={docPreview.src}
+              alt={docPreview.label}
+              className="mx-auto max-h-[75vh] rounded-md object-contain"
+            />
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 }

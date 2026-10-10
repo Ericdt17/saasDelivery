@@ -22,6 +22,7 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import { trimLogoWhitespace } from "@/lib/trimLogo";
 import { WorkplacesSettingsCard } from "@/pages/config/WorkplacesSettingsCard";
+import { ExpenseCategoriesSettingsCard } from "@/pages/config/ExpenseCategoriesSettingsCard";
 
 const Parametres = () => {
   const { user, isSuperAdmin } = useAuth();
@@ -515,6 +516,7 @@ const Parametres = () => {
       </Card>
 
       {isSuperAdmin ? <WorkplacesSettingsCard /> : null}
+      {isSuperAdmin ? <ExpenseCategoriesSettingsCard /> : null}
 
       <div className="flex justify-end">
         <Button
