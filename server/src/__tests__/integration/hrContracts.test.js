@@ -116,7 +116,8 @@ const fullEmployee = {
   contract_start_date: '2026-10-01',
   contract_end_date: null,
   trial_period_days: 30,
-  mission_description: 'Livraison de colis en zone urbaine',
+  mission_description:
+    'Intro générale.\n\n* mission un\n* mission deux',
   work_schedule: '8h00–17h00, pause 1h',
   is_active: true,
 };
@@ -251,6 +252,9 @@ describe('POST /api/v1/hr/employees/:id/contracts', () => {
     expect(payload.document_html).toContain('150');
     expect(payload.document_html).toContain('employee-signature-slot');
     expect(payload.snapshot.employee.full_name).toBe('Jean Dupont');
+    // Multi-line missions render as structured HTML (paragraphs + bullets).
+    expect(payload.document_html).toContain('<li>mission un</li>');
+    expect(payload.document_html).toContain('<li>mission deux</li>');
     // Company/gérant data flows from super-admin settings, like payslips.
     expect(payload.snapshot.company.legal_name).toBe('LIVSIGHT TEST SARL');
     expect(payload.document_html).toContain('LIVSIGHT TEST SARL');

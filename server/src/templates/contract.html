@@ -43,6 +43,9 @@
   ul { margin: 5pt 0; padding-left: 22pt; }
   li { margin: 2pt 0; }
   b, strong { font-weight: bold; }
+  .mission p { margin: 5pt 0; }
+  .mission ul, .mission ol { margin: 5pt 0; padding-left: 22pt; }
+  .mission li { margin: 2pt 0; }
   .parties p { margin: 5pt 0; }
   .centered { text-align: center; }
   .signatures {
@@ -128,7 +131,7 @@
 <p>L’Employé(e) exerce les fonctions de :</p>
 <p><strong>{{poste}}</strong></p>
 <p>Ses principales missions sont les suivantes :</p>
-<p><strong>{{mission_description}}</strong></p>
+<div class="mission">{{mission_description_html}}</div>
 <p>L’Employé(e) peut également être amené(e) à accomplir des tâches connexes compatibles avec ses fonctions, ses compétences et les besoins de l’activité de LivSight.</p>
 <p>Les missions peuvent évoluer en fonction de l’organisation de l’entreprise, sans que cela ne conduise à une modification irrégulière des éléments essentiels du contrat.</p>
 

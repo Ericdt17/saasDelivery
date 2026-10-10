@@ -12,6 +12,7 @@
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
+const { renderMarkdown } = require("./hrMarkdown");
 
 const TEMPLATE_KEY = "contrat_travail_v1";
 
@@ -148,6 +149,8 @@ const RAW_KEYS = new Set([
   "company.signature",
   "company.stamp",
   "fonts.css",
+  // Rendered via renderMarkdown (escape-first — XSS-safe)
+  "mission_description_html",
 ]);
 
 const FONTS_DIR = path.join(__dirname, "../templates/fonts");
@@ -387,6 +390,8 @@ function buildContractValues(snapshot) {
     contract_start_date: formatDateFr(e.contract_start_date),
     contract_end_date: formatDateFr(e.contract_end_date) ?? "—",
     mission_description: e.mission_description,
+    // Multi-line missions keep their structure: paragraphs + '*'/'-' bullets
+    mission_description_html: renderMarkdown(e.mission_description || ""),
     work_schedule: e.work_schedule,
     "contract.date": formatDateFr(snapshot.contract_date),
     "fonts.css": fontFaceCss(),
