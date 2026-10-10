@@ -1,7 +1,7 @@
 /**
- * Dépenses générales — saisies manuelles (loyer, énergie, matériel…),
- * imputées à un mois et déduites du CA dans les Rapports (super_admin).
- * Justificatif image optionnel ; modal au layout « fiche employé ».
+ * Dépenses générales — saisies manuelles, imputées à un mois et déduites du
+ * CA dans les Rapports (super_admin). Catégories dynamiques (Paramètres),
+ * justificatifs multiples ; modal au layout « fiche employé ».
  */
 
 import { useMemo, useState } from "react";
@@ -18,17 +18,18 @@ import {
 import { toast } from "sonner";
 import {
   useExpenses,
+  useExpenseCategories,
   useCreateExpense,
   useUpdateExpense,
   useDeleteExpense,
 } from "@/hooks/useExpenses";
 import {
   getExpense,
-  EXPENSE_CATEGORY_LABELS,
+  MAX_RECEIPTS,
   type CompanyExpense,
-  type ExpenseCategory,
 } from "@/services/expenses";
 import { formatMonthLabelFr } from "@/pages/hr/hrUi";
+import { imageFileToDataUrl } from "@/lib/image-file";
 import { SectionCard, Field } from "@/pages/hr/EmployeeEditDialog";
 import {
   FORM_DIALOG_BODY_CLASS,
@@ -82,10 +83,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-const CATEGORY_KEYS = Object.keys(
-  EXPENSE_CATEGORY_LABELS
-) as ExpenseCategory[];
-
 function fmtXaf(n: number | null | undefined) {
   if (n == null || !Number.isFinite(Number(n))) return "—";
   return `${new Intl.NumberFormat("fr-FR").format(Math.round(Number(n)))} F`;
@@ -105,52 +102,46 @@ function todayIso() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-/** Photo de justificatif → data URL JPEG, redimensionnée (max 1400 px). */
-function receiptFileToDataUrl(file: File): Promise<string> {
+
+function isPdf(src: string) {
+  return src.startsWith("data:application/pdf");
+}
+
+/** Lit un PDF tel quel (pas de recompression) en data URL. */
+function pdfFileToDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(file);
-    const img = new Image();
-    img.onload = () => {
-      URL.revokeObjectURL(url);
-      const max = 1400;
-      const scale = Math.min(1, max / Math.max(img.width, img.height));
-      const canvas = document.createElement("canvas");
-      canvas.width = Math.round(img.width * scale);
-      canvas.height = Math.round(img.height * scale);
-      const ctx = canvas.getContext("2d");
-      if (!ctx) {
-        reject(new Error("Canvas indisponible"));
-        return;
-      }
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      resolve(canvas.toDataURL("image/jpeg", 0.85));
-    };
-    img.onerror = () => {
-      URL.revokeObjectURL(url);
-      reject(new Error("Image illisible"));
-    };
-    img.src = url;
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(new Error("PDF illisible"));
+    reader.readAsDataURL(file);
   });
 }
 
+/** Justificatif dans le formulaire : existant (id serveur) ou nouveau. */
+type FormReceipt =
+  | { kind: "existing"; id: number; src: string }
+  | { kind: "new"; src: string };
+
 interface FormState {
   label: string;
-  category: ExpenseCategory | "";
+  categoryId: string;
   amount: string;
   expense_date: string;
   effective_month: string;
   notes: string;
-  receipt: string | null;
+  receipts: FormReceipt[];
+  removedReceiptIds: number[];
 }
 
 const emptyForm = (effectiveMonth: string): FormState => ({
   label: "",
-  category: "",
+  categoryId: "",
   amount: "",
   expense_date: todayIso(),
   effective_month: effectiveMonth,
   notes: "",
-  receipt: null,
+  receipts: [],
+  removedReceiptIds: [],
 });
 
 export default function ExpensesPage() {
@@ -165,6 +156,7 @@ export default function ExpensesPage() {
   const { data, isLoading } = useExpenses(year, month);
   const expenses = data?.expenses ?? [];
   const summary = data?.summary ?? null;
+  const { data: categories = [] } = useExpenseCategories({ activeOnly: true });
 
   const createMutation = useCreateExpense();
   const updateMutation = useUpdateExpense();
@@ -183,10 +175,10 @@ export default function ExpensesPage() {
   const [editTarget, setEditTarget] = useState<CompanyExpense | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<CompanyExpense | null>(null);
   const [form, setForm] = useState<FormState>(() => emptyForm(currentMonthValue));
-  const [receiptLoading, setReceiptLoading] = useState(false);
+  const [receiptsLoading, setReceiptsLoading] = useState(false);
   const [receiptViewer, setReceiptViewer] = useState<{
     label: string;
-    src: string | null;
+    images: string[] | null;
   } | null>(null);
 
   function patch(p: Partial<FormState>) {
@@ -203,79 +195,145 @@ export default function ExpensesPage() {
     setEditTarget(row);
     setForm({
       label: row.label,
-      category: row.category,
+      categoryId: String(row.category_id),
       amount: String(row.amount),
       expense_date: String(row.expense_date).slice(0, 10),
       effective_month: String(row.effective_month).slice(0, 10),
       notes: row.notes ?? "",
-      receipt: null,
+      receipts: [],
+      removedReceiptIds: [],
     });
     setDialogOpen(true);
-    if (row.has_receipt) {
-      setReceiptLoading(true);
+    if (row.receipt_count > 0) {
+      setReceiptsLoading(true);
       getExpense(row.id)
-        .then((full) => patch({ receipt: full.receipt_base64 ?? null }))
-        .catch(() =>
-          toast.error("Impossible de charger le justificatif existant")
+        .then((full) =>
+          patch({
+            receipts: (full.receipts ?? []).map((r) => ({
+              kind: "existing" as const,
+              id: r.id,
+              src: r.image_base64,
+            })),
+          })
         )
-        .finally(() => setReceiptLoading(false));
+        .catch(() =>
+          toast.error("Impossible de charger les justificatifs existants")
+        )
+        .finally(() => setReceiptsLoading(false));
     }
   }
 
-  async function handleReceiptFile(file: File | undefined) {
-    if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      toast.error("Choisissez une image (photo du reçu)");
+  async function handleReceiptFiles(files: FileList | null) {
+    if (!files?.length) return;
+    const room = MAX_RECEIPTS - form.receipts.length;
+    if (room <= 0) {
+      toast.error(`Maximum ${MAX_RECEIPTS} justificatifs par dépense`);
       return;
     }
-    if (file.size > 10 * 1024 * 1024) {
-      toast.error("Image trop lourde (10 Mo max)");
-      return;
+    const selected = Array.from(files).slice(0, room);
+    if (files.length > room) {
+      toast.error(
+        `Seulement ${room} image${room > 1 ? "s" : ""} ajoutée${room > 1 ? "s" : ""} (max ${MAX_RECEIPTS})`
+      );
     }
-    try {
-      const dataUrl = await receiptFileToDataUrl(file);
-      patch({ receipt: dataUrl });
-    } catch {
-      toast.error("Impossible de lire cette image");
+    for (const file of selected) {
+      const isPdfFile = file.type === "application/pdf";
+      if (!isPdfFile && !file.type.startsWith("image/")) {
+        toast.error(`« ${file.name} » doit être une image ou un PDF`);
+        continue;
+      }
+      // Les PDF partent tels quels (pas de compression possible) : 2 Mo max.
+      if (isPdfFile && file.size > 2 * 1024 * 1024) {
+        toast.error(`« ${file.name} » dépasse 2 Mo (limite PDF)`);
+        continue;
+      }
+      if (!isPdfFile && file.size > 10 * 1024 * 1024) {
+        toast.error(`« ${file.name} » est trop lourde (10 Mo max)`);
+        continue;
+      }
+      try {
+        const dataUrl = isPdfFile
+          ? await pdfFileToDataUrl(file)
+          : await imageFileToDataUrl(file, { maxDimension: 1400 });
+        setForm((prev) => ({
+          ...prev,
+          receipts: [...prev.receipts, { kind: "new", src: dataUrl }],
+        }));
+      } catch {
+        toast.error(`Impossible de lire « ${file.name} »`);
+      }
     }
+  }
+
+  function removeReceipt(index: number) {
+    setForm((prev) => {
+      const target = prev.receipts[index];
+      return {
+        ...prev,
+        receipts: prev.receipts.filter((_, i) => i !== index),
+        removedReceiptIds:
+          target?.kind === "existing"
+            ? [...prev.removedReceiptIds, target.id]
+            : prev.removedReceiptIds,
+      };
+    });
   }
 
   async function openReceiptViewer(row: CompanyExpense) {
-    setReceiptViewer({ label: row.label, src: null });
+    setReceiptViewer({ label: row.label, images: null });
     try {
       const full = await getExpense(row.id);
-      setReceiptViewer({ label: row.label, src: full.receipt_base64 ?? null });
+      setReceiptViewer({
+        label: row.label,
+        images: (full.receipts ?? []).map((r) => r.image_base64),
+      });
     } catch {
-      toast.error("Impossible de charger le justificatif");
+      toast.error("Impossible de charger les justificatifs");
       setReceiptViewer(null);
     }
   }
 
+  const selectedCategory = useMemo(
+    () => categories.find((c) => String(c.id) === form.categoryId) ?? null,
+    [categories, form.categoryId]
+  );
+  const noteRequired = selectedCategory?.requires_note === true;
+
   const amountNumber = Number(form.amount);
-  const noteRequired = form.category === "autre";
   const formValid =
     form.label.trim().length > 0 &&
-    form.category !== "" &&
+    form.categoryId !== "" &&
     Number.isInteger(amountNumber) &&
     amountNumber >= 0 &&
     /^\d{4}-\d{2}-\d{2}$/.test(form.expense_date) &&
     (!noteRequired || form.notes.trim().length > 0);
 
   async function handleSubmit() {
-    if (!formValid || form.category === "") return;
-    const payload = {
+    if (!formValid) return;
+    const common = {
       label: form.label.trim(),
-      category: form.category,
+      category_id: Number(form.categoryId),
       amount: amountNumber,
       expense_date: form.expense_date,
       effective_month: form.effective_month,
       notes: form.notes.trim() || null,
-      receipt_base64: form.receipt,
     };
     if (editTarget) {
-      await updateMutation.mutateAsync({ id: editTarget.id, data: payload });
+      await updateMutation.mutateAsync({
+        id: editTarget.id,
+        data: {
+          ...common,
+          receipts_add: form.receipts
+            .filter((r) => r.kind === "new")
+            .map((r) => r.src),
+          receipt_ids_remove: form.removedReceiptIds,
+        },
+      });
     } else {
-      await createMutation.mutateAsync(payload);
+      await createMutation.mutateAsync({
+        ...common,
+        receipts: form.receipts.map((r) => r.src),
+      });
     }
     setDialogOpen(false);
   }
@@ -312,8 +370,8 @@ export default function ExpensesPage() {
           <div>
             <h1 className="text-3xl font-bold tracking-tight">Dépenses</h1>
             <p className="text-muted-foreground">
-              Dépenses générales saisies ici — hors dépenses opérationnelles
-              (API livraisons) et salaires RH
+              Dépenses générales de l'entreprise — déduites du chiffre
+              d'affaires
             </p>
           </div>
         </div>
@@ -342,8 +400,12 @@ export default function ExpensesPage() {
         {summary && summary.by_category.length > 0 ? (
           <div className="flex flex-wrap gap-2">
             {summary.by_category.map((c) => (
-              <Badge key={c.category} variant="secondary" className="font-normal">
-                {EXPENSE_CATEGORY_LABELS[c.category]} : {fmtXaf(c.total)}
+              <Badge
+                key={c.category_id}
+                variant="secondary"
+                className="font-normal"
+              >
+                {c.category_name} : {fmtXaf(c.total)}
               </Badge>
             ))}
           </div>
@@ -360,7 +422,7 @@ export default function ExpensesPage() {
                 <TableHead>Libellé</TableHead>
                 <TableHead>Catégorie</TableHead>
                 <TableHead>Imputation</TableHead>
-                <TableHead>Justificatif</TableHead>
+                <TableHead>Justificatifs</TableHead>
                 <TableHead className="text-right">Montant</TableHead>
                 <TableHead className="text-right w-[110px]">Actions</TableHead>
               </TableRow>
@@ -386,7 +448,9 @@ export default function ExpensesPage() {
                     <span className="capitalize">
                       {formatMonthLabelFr(year, month)}
                     </span>
-                    .
+                    . Vérifiez le mois sélectionné en haut à droite — les
+                    dépenses imputées à un autre mois s’affichent sous ce
+                    mois-là.
                   </TableCell>
                 </TableRow>
               ) : (
@@ -408,23 +472,23 @@ export default function ExpensesPage() {
                       </TableCell>
                       <TableCell>
                         <Badge variant="secondary" className="font-normal">
-                          {EXPENSE_CATEGORY_LABELS[row.category] ?? row.category}
+                          {row.category_name}
                         </Badge>
                       </TableCell>
                       <TableCell className="capitalize">
                         {formatMonthLabelFr(ey, em)}
                       </TableCell>
                       <TableCell>
-                        {row.has_receipt ? (
+                        {row.receipt_count > 0 ? (
                           <Button
                             size="sm"
                             variant="ghost"
                             className="h-7 px-2 text-primary"
-                            title="Voir le justificatif"
+                            title="Voir les justificatifs"
                             onClick={() => void openReceiptViewer(row)}
                           >
                             <Paperclip className="mr-1 h-3.5 w-3.5" />
-                            Voir
+                            {row.receipt_count}
                           </Button>
                         ) : (
                           <span className="text-xs text-muted-foreground">—</span>
@@ -494,22 +558,25 @@ export default function ExpensesPage() {
                   <div className="grid grid-cols-2 gap-2">
                     <Field label="Catégorie *">
                       <Select
-                        value={form.category || undefined}
-                        onValueChange={(v) =>
-                          patch({ category: v as ExpenseCategory })
-                        }
+                        value={form.categoryId || undefined}
+                        onValueChange={(v) => patch({ categoryId: v })}
                       >
                         <SelectTrigger className="h-8 text-sm">
                           <SelectValue placeholder="Choisir" />
                         </SelectTrigger>
                         <SelectContent>
-                          {CATEGORY_KEYS.map((key) => (
-                            <SelectItem key={key} value={key}>
-                              {EXPENSE_CATEGORY_LABELS[key]}
+                          {categories.map((c) => (
+                            <SelectItem key={c.id} value={String(c.id)}>
+                              {c.name}
                             </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
+                      {categories.length === 0 ? (
+                        <p className="text-[11px] text-muted-foreground mt-1">
+                          Aucune catégorie — ajoutez-en dans Paramètres.
+                        </p>
+                      ) : null}
                     </Field>
                     <Field label="Montant (FCFA) *" htmlFor="exp-amount">
                       <Input
@@ -563,68 +630,9 @@ export default function ExpensesPage() {
                     d’imputation (utile pour les factures reçues en retard).
                   </p>
                 </SectionCard>
-              </div>
-
-              <div className="flex flex-col gap-2.5">
-                <SectionCard step={3} icon={Paperclip} title="Justificatif (image)">
-                  {receiptLoading ? (
-                    <Skeleton className="h-40 w-full rounded-md" />
-                  ) : form.receipt ? (
-                    <div className="space-y-2">
-                      <div className="relative overflow-hidden rounded-md border bg-background/60">
-                        <img
-                          src={form.receipt}
-                          alt="Justificatif"
-                          className="mx-auto max-h-56 object-contain"
-                        />
-                        <Button
-                          type="button"
-                          size="icon"
-                          variant="secondary"
-                          className="absolute right-2 top-2 h-7 w-7"
-                          title="Retirer le justificatif"
-                          onClick={() => patch({ receipt: null })}
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </div>
-                      <label className="block">
-                        <span className="text-[11px] text-muted-foreground cursor-pointer underline underline-offset-2">
-                          Remplacer l’image…
-                        </span>
-                        <input
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={(e) =>
-                            void handleReceiptFile(e.target.files?.[0])
-                          }
-                        />
-                      </label>
-                    </div>
-                  ) : (
-                    <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-md border border-dashed border-border bg-background/60 px-4 py-8 text-center">
-                      <Paperclip className="h-6 w-6 text-muted-foreground" />
-                      <span className="text-sm text-muted-foreground">
-                        Photo du reçu / de la facture
-                      </span>
-                      <span className="text-[11px] text-muted-foreground">
-                        PNG, JPEG ou WebP — cliquez pour choisir
-                      </span>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={(e) =>
-                          void handleReceiptFile(e.target.files?.[0])
-                        }
-                      />
-                    </label>
-                  )}
-                </SectionCard>
 
                 <SectionCard
-                  step={4}
+                  step={3}
                   icon={FileText}
                   title={noteRequired ? "Notes (obligatoire)" : "Notes"}
                 >
@@ -635,15 +643,104 @@ export default function ExpensesPage() {
                     className="text-sm min-h-[72px]"
                     placeholder={
                       noteRequired
-                        ? "Précisez la nature de la dépense (obligatoire pour « Autre »)"
+                        ? `Précisez la nature de la dépense (obligatoire pour « ${selectedCategory?.name} »)`
                         : "Référence facture, précisions…"
                     }
                   />
                   {noteRequired && form.notes.trim().length === 0 ? (
                     <p className="text-[11px] text-orange-600">
-                      Une note est obligatoire pour la catégorie « Autre ».
+                      Une note est obligatoire pour la catégorie «{" "}
+                      {selectedCategory?.name} ».
                     </p>
                   ) : null}
+                </SectionCard>
+              </div>
+
+              <div className="flex flex-col gap-2.5">
+                <SectionCard
+                  step={4}
+                  icon={Paperclip}
+                  title={`Justificatifs (${form.receipts.length}/${MAX_RECEIPTS})`}
+                >
+                  {receiptsLoading ? (
+                    <Skeleton className="h-40 w-full rounded-md" />
+                  ) : (
+                    <div className="space-y-2">
+                      {form.receipts.length > 0 ? (
+                        <div className="grid grid-cols-2 gap-2">
+                          {form.receipts.map((r, index) => (
+                            <div
+                              key={r.kind === "existing" ? `e-${r.id}` : `n-${index}`}
+                              className="relative overflow-hidden rounded-md border bg-background/60"
+                            >
+                              <button
+                                type="button"
+                                className="block w-full cursor-zoom-in"
+                                title="Agrandir"
+                                onClick={() =>
+                                  setReceiptViewer({
+                                    label: form.label || "Justificatif",
+                                    images: [r.src],
+                                  })
+                                }
+                              >
+                                {isPdf(r.src) ? (
+                                  <div className="flex h-28 w-full flex-col items-center justify-center gap-1 bg-muted/40">
+                                    <FileText className="h-8 w-8 text-red-500" />
+                                    <span className="text-[11px] font-medium text-muted-foreground">
+                                      PDF
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <img
+                                    src={r.src}
+                                    alt={`Justificatif ${index + 1}`}
+                                    className="h-28 w-full object-cover"
+                                  />
+                                )}
+                              </button>
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="secondary"
+                                className="absolute right-1 top-1 h-6 w-6"
+                                title="Retirer"
+                                onClick={() => removeReceipt(index)}
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
+                      {form.receipts.length < MAX_RECEIPTS ? (
+                        <label className="flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-md border border-dashed border-border bg-background/60 px-4 py-6 text-center">
+                          <Paperclip className="h-5 w-5 text-muted-foreground" />
+                          <span className="text-sm text-muted-foreground">
+                            Ajouter des justificatifs (reçus, factures…)
+                          </span>
+                          <span className="text-[11px] text-muted-foreground">
+                            Images (PNG, JPEG, WebP) ou PDF — plusieurs fichiers
+                            possibles
+                          </span>
+                          <input
+                            type="file"
+                            accept="image/*,application/pdf"
+                            multiple
+                            className="hidden"
+                            onChange={(e) => {
+                              void handleReceiptFiles(e.target.files);
+                              e.target.value = "";
+                            }}
+                          />
+                        </label>
+                      ) : (
+                        <p className="text-[11px] text-muted-foreground">
+                          Maximum {MAX_RECEIPTS} justificatifs atteint.
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </SectionCard>
               </div>
             </div>
@@ -653,7 +750,7 @@ export default function ExpensesPage() {
               Annuler
             </Button>
             <Button
-              disabled={!formValid || saving || receiptLoading}
+              disabled={!formValid || saving || receiptsLoading}
               onClick={() => void handleSubmit()}
             >
               {saving
@@ -666,23 +763,37 @@ export default function ExpensesPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Visionneuse de justificatif */}
+      {/* Visionneuse de justificatifs */}
       <Dialog
         open={receiptViewer != null}
         onOpenChange={(open) => {
           if (!open) setReceiptViewer(null);
         }}
       >
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Justificatif — {receiptViewer?.label}</DialogTitle>
+            <DialogTitle>Justificatifs — {receiptViewer?.label}</DialogTitle>
           </DialogHeader>
-          {receiptViewer?.src ? (
-            <img
-              src={receiptViewer.src}
-              alt={`Justificatif ${receiptViewer.label}`}
-              className="mx-auto max-h-[70vh] rounded-md object-contain"
-            />
+          {receiptViewer?.images ? (
+            <div className="space-y-3">
+              {receiptViewer.images.map((src, i) =>
+                isPdf(src) ? (
+                  <iframe
+                    key={i}
+                    src={src}
+                    title={`Justificatif PDF ${i + 1}`}
+                    className="h-[60vh] w-full rounded-md border"
+                  />
+                ) : (
+                  <img
+                    key={i}
+                    src={src}
+                    alt={`Justificatif ${i + 1}`}
+                    className="mx-auto max-h-[60vh] rounded-md object-contain"
+                  />
+                )
+              )}
+            </div>
           ) : (
             <Skeleton className="h-64 w-full rounded-md" />
           )}
@@ -701,7 +812,7 @@ export default function ExpensesPage() {
             <AlertDialogTitle>Supprimer cette dépense ?</AlertDialogTitle>
             <AlertDialogDescription>
               « {deleteTarget?.label} » ({fmtXaf(deleteTarget?.amount)}) sera
-              définitivement supprimée — justificatif compris — et ne comptera
+              définitivement supprimée — justificatifs compris — et ne comptera
               plus dans les rapports.
             </AlertDialogDescription>
           </AlertDialogHeader>

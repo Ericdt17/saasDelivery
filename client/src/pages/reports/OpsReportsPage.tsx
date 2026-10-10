@@ -32,7 +32,6 @@ import {
 } from "@/pages/hr/hrUi";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { useExpenses, useExpensesSummary } from "@/hooks/useExpenses";
-import { EXPENSE_CATEGORY_LABELS } from "@/services/expenses";
 import {
   getDateRangeForPreset,
   monthYearFromDateRange,
@@ -362,9 +361,7 @@ function GeneralExpensesTab({ year, month }: { year: number; month: number }) {
                       {new Date(row.expense_date).toLocaleDateString("fr-FR")}
                     </TableCell>
                     <TableCell className="font-medium">{row.label}</TableCell>
-                    <TableCell>
-                      {EXPENSE_CATEGORY_LABELS[row.category] ?? row.category}
-                    </TableCell>
+                    <TableCell>{row.category_name}</TableCell>
                     <TableCell className="text-right tabular-nums">
                       {fmtXaf(row.amount)}
                     </TableCell>
@@ -375,9 +372,9 @@ function GeneralExpensesTab({ year, month }: { year: number; month: number }) {
             {summary && summary.by_category.length > 0 ? (
               <TableFooter>
                 {summary.by_category.map((c) => (
-                  <TableRow key={c.category}>
+                  <TableRow key={c.category_id}>
                     <TableCell colSpan={3} className="text-muted-foreground">
-                      {EXPENSE_CATEGORY_LABELS[c.category] ?? c.category}
+                      {c.category_name}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
                       {fmtXaf(c.total)}

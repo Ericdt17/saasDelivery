@@ -55,6 +55,10 @@ export interface HrEmployee {
   is_active: boolean;
   is_enrolled: boolean;
   enrolled_at: string | null;
+  /** Documents d'identité présents (images servies à la demande). */
+  has_cni_front?: boolean;
+  has_cni_back?: boolean;
+  has_home_location?: boolean;
   /** Latest work-contract / NDA status (roster list only). */
   contract_status?: HrContractStatus | null;
   nda_status?: HrContractStatus | null;
@@ -92,6 +96,10 @@ export interface CreateHrEmployeePayload {
 
 export type UpdateHrEmployeePayload = Partial<CreateHrEmployeePayload> & {
   is_active?: boolean;
+  /** Documents (images data URL) ; null pour retirer. Hors contrats. */
+  cni_front_base64?: string | null;
+  cni_back_base64?: string | null;
+  home_location_base64?: string | null;
   /** When true, salary change applies this Douala month; default next month. */
   salary_apply_this_month?: boolean;
 };
@@ -508,6 +516,23 @@ export async function updateWorkplace(
 export async function deleteWorkplace(id: number): Promise<HrWorkplace> {
   const res = await apiDelete<HrWorkplace>(`${BASE}/workplaces/${id}`);
   return unwrap(res, "Impossible de désactiver le lieu de travail");
+}
+
+export interface HrEmployeeDocuments {
+  id: number;
+  cni_front_base64: string | null;
+  cni_back_base64: string | null;
+  home_location_base64: string | null;
+}
+
+/** CNI recto/verso + plan de localisation — images à la demande. */
+export async function getEmployeeDocuments(
+  employeeId: number
+): Promise<HrEmployeeDocuments> {
+  const res = await apiGet<HrEmployeeDocuments>(
+    `${BASE}/employees/${employeeId}/documents`
+  );
+  return unwrap(res, "Impossible de charger les documents");
 }
 
 export async function enrollEmployeeFace(

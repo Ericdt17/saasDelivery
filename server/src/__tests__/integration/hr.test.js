@@ -9,6 +9,7 @@ const mockListEmployees = jest.fn();
 const mockGetEmployeeById = jest.fn();
 const mockCreateEmployee = jest.fn();
 const mockUpdateEmployee = jest.fn();
+const mockGetEmployeeDocuments = jest.fn();
 const mockDeleteEmployee = jest.fn();
 const mockEnrollEmployeeFace = jest.fn();
 const mockGetEmployeeByEmailWithDescriptor = jest.fn();
@@ -32,6 +33,7 @@ jest.mock('../../db', () => ({
   getEmployeeById: mockGetEmployeeById,
   createEmployee: mockCreateEmployee,
   updateEmployee: mockUpdateEmployee,
+  getEmployeeDocuments: mockGetEmployeeDocuments,
   deleteEmployee: mockDeleteEmployee,
   enrollEmployeeFace: mockEnrollEmployeeFace,
   getEmployeeByEmailWithDescriptor: mockGetEmployeeByEmailWithDescriptor,
@@ -1250,5 +1252,45 @@ describe('GET /api/v1/hr/p/:code', () => {
   it('returns 403 for unknown code', async () => {
     const res = await request(app).get('/api/v1/hr/p/noSuchCode1');
     expect(res.status).toBe(403);
+  });
+});
+
+
+describe('documents employé (CNI + plan de localisation)', () => {
+  const IMG = `data:image/jpeg;base64,${'A'.repeat(200)}`;
+
+  it('PATCH accepte les images de documents et les transmet telles quelles', async () => {
+    mockGetEmployeeById.mockResolvedValue({ ...employeeFixture });
+    mockUpdateEmployee.mockResolvedValue({ ...employeeFixture });
+    const res = await request(app)
+      .patch('/api/v1/hr/employees/1')
+      .set('Authorization', `Bearer ${superToken}`)
+      .send({ cni_front_base64: IMG, home_location_base64: IMG });
+    expect(res.status).toBe(200);
+    const updates = mockUpdateEmployee.mock.calls[0][1];
+    expect(updates.cni_front_base64).toBe(IMG);
+    expect(updates.home_location_base64).toBe(IMG);
+  });
+
+  it('PATCH rejette un document non-image', async () => {
+    const res = await request(app)
+      .patch('/api/v1/hr/employees/1')
+      .set('Authorization', `Bearer ${superToken}`)
+      .send({ cni_front_base64: 'data:application/pdf;base64,AAAA' });
+    expect(res.status).toBe(400);
+  });
+
+  it('GET /employees/:id/documents renvoie les images', async () => {
+    mockGetEmployeeDocuments.mockResolvedValue({
+      id: 1,
+      cni_front_base64: IMG,
+      cni_back_base64: null,
+      home_location_base64: null,
+    });
+    const res = await request(app)
+      .get('/api/v1/hr/employees/1/documents')
+      .set('Authorization', `Bearer ${superToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.data.cni_front_base64).toBe(IMG);
   });
 });

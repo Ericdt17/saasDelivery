@@ -751,7 +751,10 @@ function createPostgresQueries(pool) {
     contract_kind, contract_start_date, contract_end_date,
     trial_period_days, mission_description,
     created_at, updated_at,
-    (enrolled_at IS NOT NULL) AS is_enrolled
+    (enrolled_at IS NOT NULL) AS is_enrolled,
+    (cni_front_base64 IS NOT NULL) AS has_cni_front,
+    (cni_back_base64 IS NOT NULL) AS has_cni_back,
+    (home_location_base64 IS NOT NULL) AS has_home_location
   `;
 
   /**
@@ -1031,6 +1034,9 @@ function createPostgresQueries(pool) {
       "contract_end_date",
       "trial_period_days",
       "mission_description",
+      "cni_front_base64",
+      "cni_back_base64",
+      "home_location_base64",
     ];
     const fields = [];
     const values = [];
@@ -1056,6 +1062,16 @@ function createPostgresQueries(pool) {
       values
     );
     return attachSalaryMeta(result.rows[0] || null);
+  }
+
+  /** Images lourdes servies à la demande (jamais dans les listes). */
+  async function getEmployeeDocuments(id) {
+    const result = await pool.query(
+      `SELECT id, cni_front_base64, cni_back_base64, home_location_base64
+       FROM employees WHERE id = $1`,
+      [id]
+    );
+    return result.rows[0] || null;
   }
 
   async function deleteEmployee(id) {
@@ -1490,27 +1506,88 @@ function createPostgresQueries(pool) {
 
   // -------------------------------------------------------------------------
   // Dépenses générales (company_expenses) — saisies dashboard, hors API ops
+  // Catégories dynamiques (company_expense_categories) + justificatifs
+  // multiples (company_expense_receipts).
   // -------------------------------------------------------------------------
+
+  async function listExpenseCategories({ activeOnly = false } = {}) {
+    const result = await pool.query(
+      `SELECT id, name, requires_note, is_active, created_at, updated_at
+       FROM company_expense_categories
+       ${activeOnly ? "WHERE is_active = true" : ""}
+       ORDER BY name ASC`
+    );
+    return result.rows;
+  }
+
+  async function getExpenseCategoryById(id) {
+    const result = await pool.query(
+      `SELECT id, name, requires_note, is_active, created_at, updated_at
+       FROM company_expense_categories WHERE id = $1`,
+      [id]
+    );
+    return result.rows[0] || null;
+  }
+
+  async function createExpenseCategory({ name, requires_note = false }) {
+    const result = await pool.query(
+      `INSERT INTO company_expense_categories (name, requires_note)
+       VALUES ($1, $2)
+       RETURNING id, name, requires_note, is_active, created_at, updated_at`,
+      [String(name).trim(), requires_note === true]
+    );
+    return result.rows[0] || null;
+  }
+
+  async function updateExpenseCategory(id, updates = {}) {
+    const allowed = ["name", "requires_note", "is_active"];
+    const fields = [];
+    const values = [];
+    let i = 1;
+    for (const [key, value] of Object.entries(updates)) {
+      if (!allowed.includes(key) || value === undefined) continue;
+      fields.push(`${key} = $${i++}`);
+      values.push(key === "name" && value != null ? String(value).trim() : value);
+    }
+    if (!fields.length) return getExpenseCategoryById(id);
+    fields.push("updated_at = NOW()");
+    values.push(id);
+    const result = await pool.query(
+      `UPDATE company_expense_categories SET ${fields.join(", ")} WHERE id = $${i}
+       RETURNING id, name, requires_note, is_active, created_at, updated_at`,
+      values
+    );
+    return result.rows[0] || null;
+  }
+
+  /** Soft-désactivation : les dépenses existantes gardent leur catégorie. */
+  async function deleteExpenseCategory(id) {
+    return updateExpenseCategory(id, { is_active: false });
+  }
 
   // Dates cast to text: pg returns DATE as a JS Date at local midnight,
   // which shifts by one day once serialised to ISO/JSON (UTC+1 → 08-31).
-  // receipt_base64 is heavy — lists expose has_receipt only; the full image
-  // comes from getCompanyExpenseById.
   const COMPANY_EXPENSE_COLUMNS = `
-    id, label, category, amount,
-    expense_date::text AS expense_date,
-    effective_month::text AS effective_month,
-    notes, source, created_by, created_at, updated_at,
-    (receipt_base64 IS NOT NULL) AS has_receipt
+    e.id, e.label, e.category_id, c.name AS category_name,
+    e.amount,
+    e.expense_date::text AS expense_date,
+    e.effective_month::text AS effective_month,
+    e.notes, e.source, e.created_by, e.created_at, e.updated_at,
+    (SELECT COUNT(*)::int FROM company_expense_receipts r
+      WHERE r.expense_id = e.id) AS receipt_count
+  `;
+  const COMPANY_EXPENSE_FROM = `
+    FROM company_expenses e
+    INNER JOIN company_expense_categories c ON c.id = e.category_id
   `;
 
   async function listCompanyExpenses({ year, month }) {
     const first = `${year}-${String(month).padStart(2, "0")}-01`;
     const result = await pool.query(
       `SELECT ${COMPANY_EXPENSE_COLUMNS}
-       FROM company_expenses
-       WHERE effective_month = $1::date
-       ORDER BY expense_date DESC, id DESC`,
+       ${COMPANY_EXPENSE_FROM}
+       WHERE e.effective_month = $1::date
+       ORDER BY e.expense_date DESC, e.id DESC`,
       [first]
     );
     return result.rows;
@@ -1518,44 +1595,69 @@ function createPostgresQueries(pool) {
 
   async function getCompanyExpenseById(id) {
     const result = await pool.query(
-      `SELECT ${COMPANY_EXPENSE_COLUMNS}, receipt_base64
-       FROM company_expenses WHERE id = $1`,
+      `SELECT ${COMPANY_EXPENSE_COLUMNS}
+       ${COMPANY_EXPENSE_FROM}
+       WHERE e.id = $1`,
       [id]
     );
-    return result.rows[0] || null;
+    const expense = result.rows[0] || null;
+    if (!expense) return null;
+    const receipts = await pool.query(
+      `SELECT id, image_base64, created_at
+       FROM company_expense_receipts
+       WHERE expense_id = $1
+       ORDER BY id ASC`,
+      [id]
+    );
+    return { ...expense, receipts: receipts.rows };
   }
 
   async function createCompanyExpense({
     label,
-    category,
+    category_id,
     amount,
     expense_date,
     effective_month,
     notes = null,
-    receipt_base64 = null,
+    receipts = [],
     created_by = null,
   }) {
-    const result = await pool.query(
-      `INSERT INTO company_expenses
-         (label, category, amount, expense_date, effective_month, notes,
-          receipt_base64, created_by)
-       VALUES ($1, $2, $3, $4::date, $5::date, $6, $7, $8)
-       RETURNING ${COMPANY_EXPENSE_COLUMNS}`,
-      [label, category, amount, expense_date, effective_month, notes,
-       receipt_base64, created_by]
-    );
-    return result.rows[0] || null;
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const inserted = await client.query(
+        `INSERT INTO company_expenses
+           (label, category_id, amount, expense_date, effective_month, notes, created_by)
+         VALUES ($1, $2, $3, $4::date, $5::date, $6, $7)
+         RETURNING id`,
+        [label, category_id, amount, expense_date, effective_month, notes, created_by]
+      );
+      const expenseId = inserted.rows[0].id;
+      for (const image of receipts) {
+        await client.query(
+          `INSERT INTO company_expense_receipts (expense_id, image_base64)
+           VALUES ($1, $2)`,
+          [expenseId, image]
+        );
+      }
+      await client.query("COMMIT");
+      return getCompanyExpenseById(expenseId);
+    } catch (err) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw err;
+    } finally {
+      client.release();
+    }
   }
 
   async function updateCompanyExpense(id, updates = {}) {
     const allowed = [
       "label",
-      "category",
+      "category_id",
       "amount",
       "expense_date",
       "effective_month",
       "notes",
-      "receipt_base64",
     ];
     const fields = [];
     const values = [];
@@ -1569,15 +1671,43 @@ function createPostgresQueries(pool) {
     if (!fields.length) return getCompanyExpenseById(id);
     fields.push("updated_at = NOW()");
     values.push(id);
-    const result = await pool.query(
-      `UPDATE company_expenses SET ${fields.join(", ")} WHERE id = $${i}
-       RETURNING ${COMPANY_EXPENSE_COLUMNS}`,
+    await pool.query(
+      `UPDATE company_expenses SET ${fields.join(", ")} WHERE id = $${i}`,
       values
     );
-    return result.rows[0] || null;
+    return getCompanyExpenseById(id);
   }
 
-  /** Hard delete (choix produit : vraie suppression). */
+  async function addExpenseReceipts(expenseId, images = []) {
+    for (const image of images) {
+      await pool.query(
+        `INSERT INTO company_expense_receipts (expense_id, image_base64)
+         VALUES ($1, $2)`,
+        [expenseId, image]
+      );
+    }
+  }
+
+  /** Ne supprime que les justificatifs appartenant bien à la dépense. */
+  async function deleteExpenseReceipts(expenseId, receiptIds = []) {
+    if (!receiptIds.length) return;
+    await pool.query(
+      `DELETE FROM company_expense_receipts
+       WHERE expense_id = $1 AND id = ANY($2::int[])`,
+      [expenseId, receiptIds]
+    );
+  }
+
+  async function countExpenseReceipts(expenseId) {
+    const result = await pool.query(
+      `SELECT COUNT(*)::int AS count FROM company_expense_receipts
+       WHERE expense_id = $1`,
+      [expenseId]
+    );
+    return result.rows[0]?.count ?? 0;
+  }
+
+  /** Hard delete (choix produit : vraie suppression) — reçus en cascade. */
   async function deleteCompanyExpense(id) {
     const result = await pool.query(
       `DELETE FROM company_expenses WHERE id = $1 RETURNING id`,
@@ -1589,23 +1719,25 @@ function createPostgresQueries(pool) {
   async function summarizeCompanyExpenses({ year, month }) {
     const first = `${year}-${String(month).padStart(2, "0")}-01`;
     const result = await pool.query(
-      `SELECT category,
+      `SELECT c.id AS category_id, c.name AS category_name,
               COUNT(*)::int AS count,
-              COALESCE(SUM(amount), 0)::bigint AS total
-       FROM company_expenses
-       WHERE effective_month = $1::date
-       GROUP BY category
+              COALESCE(SUM(e.amount), 0)::bigint AS total
+       FROM company_expenses e
+       INNER JOIN company_expense_categories c ON c.id = e.category_id
+       WHERE e.effective_month = $1::date
+       GROUP BY c.id, c.name
        ORDER BY total DESC`,
       [first]
     );
     const byCategory = result.rows.map((r) => ({
-      category: r.category,
+      category_id: r.category_id,
+      category_name: r.category_name,
       count: r.count,
       total: Number(r.total),
     }));
     return {
-      total: byCategory.reduce((s, r) => s + r.total, 0),
-      count: byCategory.reduce((s, r) => s + r.count, 0),
+      total: byCategory.reduce((sum, r) => sum + r.total, 0),
+      count: byCategory.reduce((sum, r) => sum + r.count, 0),
       by_category: byCategory,
     };
   }
@@ -1925,6 +2057,7 @@ function createPostgresQueries(pool) {
     getEmployeeByEmailWithDescriptor,
     createEmployee,
     updateEmployee,
+    getEmployeeDocuments,
     deleteEmployee,
     enrollEmployeeFace,
     listEmployeeSalaryHistory,
@@ -1947,11 +2080,19 @@ function createPostgresQueries(pool) {
     getHrContractByToken,
     updateHrContract,
     cancelOpenHrContracts,
+    listExpenseCategories,
+    getExpenseCategoryById,
+    createExpenseCategory,
+    updateExpenseCategory,
+    deleteExpenseCategory,
     listCompanyExpenses,
     getCompanyExpenseById,
     createCompanyExpense,
     updateCompanyExpense,
     deleteCompanyExpense,
+    addExpenseReceipts,
+    deleteExpenseReceipts,
+    countExpenseReceipts,
     summarizeCompanyExpenses,
     listCompanyDocuments,
     getCompanyDocumentById,
