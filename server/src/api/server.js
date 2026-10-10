@@ -45,6 +45,13 @@ const corsOptions = {
         ? process.env.ALLOWED_ORIGINS.split(",").map((o) => o.trim())
         : [];
 
+      // Pages served by this API itself (contract signing, règlement
+      // intérieur) post back to the same host — always allow own origin.
+      const selfOrigin = (process.env.PUBLIC_API_BASE_URL || "")
+        .trim()
+        .replace(/\/+$/, "");
+      if (selfOrigin) allowedOrigins.push(selfOrigin);
+
       // If ALLOWED_ORIGINS is set, check against it
       if (allowedOrigins.length > 0) {
         // Normalize origin and allowed origins (remove trailing slashes)
