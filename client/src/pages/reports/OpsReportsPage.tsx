@@ -4,6 +4,7 @@
  */
 
 import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
   Bar,
@@ -30,7 +31,8 @@ import {
   type PayrollByEmployeeResult,
 } from "@/pages/hr/hrUi";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
-import { useExpensesSummary } from "@/hooks/useExpenses";
+import { useExpenses, useExpensesSummary } from "@/hooks/useExpenses";
+import { EXPENSE_CATEGORY_LABELS } from "@/services/expenses";
 import {
   getDateRangeForPreset,
   monthYearFromDateRange,
@@ -281,6 +283,117 @@ function ChiffreAffairesTab({
                 </TableCell>
               </TableRow>
             </TableFooter>
+          </Table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function GeneralExpensesTab({ year, month }: { year: number; month: number }) {
+  const { data, isLoading } = useExpenses(year, month);
+  const expenses = data?.expenses ?? [];
+  const summary = data?.summary ?? null;
+  const monthLabel = formatMonthLabelFr(year, month);
+
+  if (isLoading) return <LoadingBlock rows={3} />;
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm text-muted-foreground">
+          Mois d’imputation :{" "}
+          <span className="font-medium capitalize text-foreground">
+            {monthLabel}
+          </span>{" "}
+          — dépenses saisies dans le dashboard (hors API livraisons, hors
+          salaires)
+        </p>
+        <Link
+          to="/depenses"
+          className="text-sm font-medium text-primary underline-offset-4 hover:underline"
+        >
+          Gérer les dépenses →
+        </Link>
+      </div>
+
+      <div className="rounded-xl border bg-gradient-to-r from-warning/10 via-warning/5 to-transparent border-warning/20 p-5">
+        <p className="text-sm font-medium text-muted-foreground uppercase tracking-wide mb-1">
+          Total dépenses générales
+        </p>
+        <p className="text-3xl md:text-4xl font-bold tabular-nums">
+          {fmtXaf(summary?.total ?? 0)}
+        </p>
+        <p className="text-xs text-muted-foreground mt-2">
+          {summary?.count ?? 0} dépense{(summary?.count ?? 0) > 1 ? "s" : ""} —
+          déduites du revenu net de {monthLabel}
+        </p>
+      </div>
+
+      <div className="rounded-xl border bg-card overflow-hidden">
+        <div className="px-4 pt-4">
+          <h3 className="text-sm font-semibold">Détail du mois</h3>
+        </div>
+        <div className="overflow-x-auto p-4 pt-3">
+          <Table>
+            <TableHeader>
+              <TableRow className="hover:bg-transparent">
+                <TableHead>Date</TableHead>
+                <TableHead>Libellé</TableHead>
+                <TableHead>Catégorie</TableHead>
+                <TableHead className="text-right">Montant</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {expenses.length === 0 ? (
+                <TableRow>
+                  <TableCell
+                    colSpan={4}
+                    className="text-center text-muted-foreground py-6"
+                  >
+                    Aucune dépense générale imputée à {monthLabel} — ajoutez-les
+                    dans l’onglet Dépenses.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                expenses.map((row) => (
+                  <TableRow key={row.id}>
+                    <TableCell>
+                      {new Date(row.expense_date).toLocaleDateString("fr-FR")}
+                    </TableCell>
+                    <TableCell className="font-medium">{row.label}</TableCell>
+                    <TableCell>
+                      {EXPENSE_CATEGORY_LABELS[row.category] ?? row.category}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {fmtXaf(row.amount)}
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+            {summary && summary.by_category.length > 0 ? (
+              <TableFooter>
+                {summary.by_category.map((c) => (
+                  <TableRow key={c.category}>
+                    <TableCell colSpan={3} className="text-muted-foreground">
+                      {EXPENSE_CATEGORY_LABELS[c.category] ?? c.category}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {fmtXaf(c.total)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+                <TableRow>
+                  <TableCell colSpan={3} className="font-semibold">
+                    Total
+                  </TableCell>
+                  <TableCell className="text-right font-semibold tabular-nums">
+                    {fmtXaf(summary.total)}
+                  </TableCell>
+                </TableRow>
+              </TableFooter>
+            ) : null}
           </Table>
         </div>
       </div>
@@ -864,7 +977,10 @@ export default function OpsReportsPage() {
               Chiffre d&apos;affaires
             </TabsTrigger>
             <TabsTrigger value="livraisons">Livraisons</TabsTrigger>
-            <TabsTrigger value="depenses">Dépenses</TabsTrigger>
+            <TabsTrigger value="depenses">Dépenses ops</TabsTrigger>
+            <TabsTrigger value="depenses-generales">
+              Dépenses générales
+            </TabsTrigger>
             <TabsTrigger value="salaires">Salaires</TabsTrigger>
           </TabsList>
 
@@ -918,6 +1034,10 @@ export default function OpsReportsPage() {
                 endDate={endDate}
               />
             )}
+          </TabsContent>
+
+          <TabsContent value="depenses-generales" className="mt-6">
+            <GeneralExpensesTab year={year} month={month} />
           </TabsContent>
 
           <TabsContent value="salaires" className="mt-6">
