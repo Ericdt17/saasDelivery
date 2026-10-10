@@ -6,6 +6,7 @@ const request = require('supertest');
 const { createTestToken, createSuperAdminToken } = require('../helpers/createAuthToken');
 
 const mockGetEmployeeById = jest.fn();
+const mockGetAgencyById = jest.fn();
 const mockGetCompanySettings = jest.fn();
 const mockCreateHrContract = jest.fn();
 const mockListHrContractsByEmployee = jest.fn();
@@ -50,7 +51,7 @@ jest.mock('../../db', () => ({
   getAgencyByEmail: jest.fn(),
   createAgency: jest.fn(),
   getAllAgencies: jest.fn(),
-  getAgencyById: jest.fn(),
+  getAgencyById: mockGetAgencyById,
   updateAgency: jest.fn(),
   deleteAgency: jest.fn(),
   findAgencyByCode: jest.fn(),
@@ -116,7 +117,8 @@ const fullEmployee = {
   contract_start_date: '2026-10-01',
   contract_end_date: null,
   trial_period_days: 30,
-  mission_description: 'Livraison de colis en zone urbaine',
+  mission_description:
+    'Intro générale.\n\n* mission un\n* mission deux',
   work_schedule: '8h00–17h00, pause 1h',
   is_active: true,
 };
@@ -231,12 +233,21 @@ describe('POST /api/v1/hr/employees/:id/contracts', () => {
     });
     mockCancelOpenHrContracts.mockResolvedValue([]);
     mockCreateHrContract.mockResolvedValue(contractRow);
+    // « Mon profil » of the generating admin (id 99) carries a personal stamp.
+    mockGetAgencyById.mockResolvedValue({
+      id: 99,
+      name: 'Admin Test',
+      fonction: 'Gérant',
+      signature_base64: 'U0lHUFJPRklM',
+      stamp_base64: 'U1RBTVBQUk9GSUw=',
+    });
 
     const res = await request(app)
       .post('/api/v1/hr/employees/1/contracts')
       .set('Authorization', `Bearer ${superToken}`);
 
     expect(res.status).toBe(201);
+    expect(mockGetAgencyById).toHaveBeenCalledWith(99);
     expect(res.body.data.status).toBe('generated');
     expect(mockCancelOpenHrContracts).toHaveBeenCalledWith(1, 'contrat_travail_v1');
 
@@ -251,6 +262,9 @@ describe('POST /api/v1/hr/employees/:id/contracts', () => {
     expect(payload.document_html).toContain('150');
     expect(payload.document_html).toContain('employee-signature-slot');
     expect(payload.snapshot.employee.full_name).toBe('Jean Dupont');
+    // Multi-line missions render as structured HTML (paragraphs + bullets).
+    expect(payload.document_html).toContain('<li>mission un</li>');
+    expect(payload.document_html).toContain('<li>mission deux</li>');
     // Company/gérant data flows from super-admin settings, like payslips.
     expect(payload.snapshot.company.legal_name).toBe('LIVSIGHT TEST SARL');
     expect(payload.document_html).toContain('LIVSIGHT TEST SARL');
@@ -258,6 +272,10 @@ describe('POST /api/v1/hr/employees/:id/contracts', () => {
     expect(payload.document_html).toContain('NIU-TEST-456');
     expect(payload.document_html).toContain('M. Signataire Test');
     expect(payload.document_html).toContain('Directeur');
+    // Profile signature/stamp (Mon profil) injected into the employer block.
+    expect(payload.document_html).toContain('U1RBTVBQUk9GSUw=');
+    expect(payload.document_html).toContain('U0lHUFJPRklM');
+    expect(payload.snapshot.signer.stamp_base64).toBe('U1RBTVBQUk9GSUw=');
   });
 });
 

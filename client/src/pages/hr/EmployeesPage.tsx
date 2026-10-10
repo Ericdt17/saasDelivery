@@ -20,7 +20,6 @@ import {
   enrollmentBadgeVariant,
   formatMonthLabelFr,
   formatPayrollAmount,
-  formatPenaltyBreakdownLines,
   formatSalary,
   countWorkdaysInMonth,
   isPayrollEligibleForMonth,
@@ -41,7 +40,15 @@ import {
 } from "@/lib/date-utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -73,7 +80,7 @@ import {
   FORM_DIALOG_FOOTER_CLASS,
   FORM_DIALOG_HEADER_CLASS,
 } from "@/lib/form-dialog-layout";
-import { UserCog, Plus, ScanFace, Pencil, Trash2, Eye } from "lucide-react";
+import { UserCog, Plus, ScanFace, Pencil, Trash2, Eye, Search } from "lucide-react";
 
 export default function EmployeesPage() {
   const [dateRange, setDateRange] = useState<DateRange>(() =>
@@ -113,6 +120,41 @@ export default function EmployeesPage() {
     }
     return map;
   }, [employees, monthSummary, year, month]);
+
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("active");
+  const [typeFilter, setTypeFilter] = useState<"all" | "livreur" | "agent">("all");
+  const [contractFilter, setContractFilter] = useState<
+    "all" | "signed" | "pending" | "none"
+  >("all");
+  const filteredEmployees = useMemo(() => {
+    const q = search
+      .trim()
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
+    const norm = (v: string | null | undefined) =>
+      (v ?? "")
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "");
+    return employees.filter((e) => {
+      if (statusFilter === "active" && !e.is_active) return false;
+      if (statusFilter === "inactive" && e.is_active) return false;
+      if (typeFilter !== "all" && e.employee_type !== typeFilter) return false;
+      if (contractFilter !== "all") {
+        const cs = e.contract_status ?? null;
+        const signed = cs === "signed";
+        const pending = cs != null && cs !== "signed" && cs !== "cancelled";
+        if (contractFilter === "signed" && !signed) return false;
+        if (contractFilter === "pending" && !pending) return false;
+        if (contractFilter === "none" && (signed || pending)) return false;
+      }
+      if (!q) return true;
+      return [e.full_name, e.email, e.poste, e.phone, e.employee_type, e.workplace_name]
+        .some((v) => norm(v).includes(q));
+    });
+  }, [employees, search, statusFilter, typeFilter, contractFilter]);
 
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<HrEmployee | null>(null);
@@ -213,6 +255,60 @@ export default function EmployeesPage() {
       </div>
 
       <div className="stat-card overflow-hidden p-0">
+        <div className="flex flex-wrap items-center gap-2 border-b px-4 py-3">
+          <div className="relative w-full sm:w-64">
+            <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Rechercher (nom, email, poste…)"
+              className="h-9 pl-8"
+            />
+          </div>
+          <Select
+            value={statusFilter}
+            onValueChange={(v) => setStatusFilter(v as typeof statusFilter)}
+          >
+            <SelectTrigger className="h-9 w-[130px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Tous statuts</SelectItem>
+              <SelectItem value="active">Actifs</SelectItem>
+              <SelectItem value="inactive">Inactifs</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select
+            value={typeFilter}
+            onValueChange={(v) => setTypeFilter(v as typeof typeFilter)}
+          >
+            <SelectTrigger className="h-9 w-[130px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Tous types</SelectItem>
+              <SelectItem value="livreur">Livreurs</SelectItem>
+              <SelectItem value="agent">Agents</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select
+            value={contractFilter}
+            onValueChange={(v) => setContractFilter(v as typeof contractFilter)}
+          >
+            <SelectTrigger className="h-9 w-[170px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Contrat : tous</SelectItem>
+              <SelectItem value="signed">Contrat signé</SelectItem>
+              <SelectItem value="pending">Contrat en cours</SelectItem>
+              <SelectItem value="none">Sans contrat</SelectItem>
+            </SelectContent>
+          </Select>
+          <span className="ml-auto text-sm text-muted-foreground">
+            {filteredEmployees.length} employé{filteredEmployees.length > 1 ? "s" : ""}
+          </span>
+        </div>
         <div className="overflow-x-auto">
           <Table>
             <TableHeader>
@@ -224,7 +320,6 @@ export default function EmployeesPage() {
                 <TableHead className="text-right">Présents</TableHead>
                 <TableHead className="text-right">Retards</TableHead>
                 <TableHead className="text-right">À payer</TableHead>
-                <TableHead className="text-right">Pénalités</TableHead>
                 <TableHead className="w-[100px]">Statut</TableHead>
                 <TableHead className="w-[120px]">Enrollment</TableHead>
                 <TableHead className="text-right w-[160px]">Actions</TableHead>
@@ -234,24 +329,29 @@ export default function EmployeesPage() {
               {isLoading || loadingSummary ? (
                 Array.from({ length: 4 }).map((_, i) => (
                   <TableRow key={i}>
-                    {Array.from({ length: 11 }).map((__, j) => (
+                    {Array.from({ length: 10 }).map((__, j) => (
                       <TableCell key={j}>
                         <Skeleton className="h-4 w-24" />
                       </TableCell>
                     ))}
                   </TableRow>
                 ))
-              ) : employees.length === 0 ? (
+              ) : filteredEmployees.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={11}
+                    colSpan={10}
                     className="p-8 text-center text-muted-foreground"
                   >
-                    Aucun employé pour le moment.
+                    {search.trim() ||
+                    statusFilter !== "all" ||
+                    typeFilter !== "all" ||
+                    contractFilter !== "all"
+                      ? "Aucun employé ne correspond aux filtres."
+                      : "Aucun employé pour le moment."}
                   </TableCell>
                 </TableRow>
               ) : (
-                employees.map((row) => {
+                filteredEmployees.map((row) => {
                   const enrolled = Boolean(row.is_enrolled || row.enrolled_at);
                   const stats = statsByEmployee.get(Number(row.id));
                   const payrollEligible = isPayrollEligibleForMonth(
@@ -297,34 +397,6 @@ export default function EmployeesPage() {
                         {row.is_active && payrollEligible
                           ? formatPayrollAmount(stats?.estimatedPay ?? null)
                           : "—"}
-                      </TableCell>
-                      <TableCell className="text-right text-xs tabular-nums">
-                        {row.is_active && payrollEligible && stats ? (
-                          <div className="inline-flex flex-col items-end gap-0.5 leading-snug text-muted-foreground">
-                            {formatPenaltyBreakdownLines(
-                              stats.penalties == null
-                                ? null
-                                : {
-                                    late: stats.penaltyLate ?? 0,
-                                    absent: stats.penaltyAbsent ?? 0,
-                                    total: stats.penalties,
-                                  }
-                            ).map((line) => (
-                              <span
-                                key={line}
-                                className={
-                                  line.startsWith("Total")
-                                    ? "font-medium text-foreground"
-                                    : undefined
-                                }
-                              >
-                                {line}
-                              </span>
-                            ))}
-                          </div>
-                        ) : (
-                          "—"
-                        )}
                       </TableCell>
                       <TableCell>
                         <Badge variant={row.is_active ? "default" : "secondary"}>

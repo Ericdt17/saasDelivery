@@ -862,8 +862,17 @@ function createPostgresQueries(pool) {
    * @param {{ year?: number, month?: number }} [opts]
    */
   async function listEmployees(opts = {}) {
+    // Latest work-contract / NDA status per employee (for roster filters).
     const rows = await query(
-      `SELECT ${EMPLOYEE_PUBLIC_COLUMNS}
+      `SELECT ${EMPLOYEE_PUBLIC_COLUMNS},
+              (SELECT hc.status FROM hr_contracts hc
+                WHERE hc.employee_id = employees.id
+                  AND hc.template_key = 'contrat_travail_v1'
+                ORDER BY hc.created_at DESC LIMIT 1) AS contract_status,
+              (SELECT hc.status FROM hr_contracts hc
+                WHERE hc.employee_id = employees.id
+                  AND hc.template_key = 'nda_v1'
+                ORDER BY hc.created_at DESC LIMIT 1) AS nda_status
        FROM employees
        ORDER BY created_at DESC`
     );

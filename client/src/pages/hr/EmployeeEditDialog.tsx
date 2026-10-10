@@ -458,9 +458,14 @@ export function EmployeeFormSections({
               onChange={(e) =>
                 onChange({ missionDescription: e.target.value })
               }
-              rows={3}
-              className="text-sm min-h-[72px]"
+              rows={5}
+              className="text-sm min-h-[96px]"
+              placeholder={"Phrase d'introduction…\n\n* première mission ;\n* deuxième mission ;"}
             />
+            <p className="text-[11px] text-muted-foreground mt-1">
+              Sur le contrat : chaque ligne commençant par « * » ou « - »
+              devient une puce ; une ligne vide sépare les paragraphes.
+            </p>
           </Field>
         </SectionCard>
       </div>

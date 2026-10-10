@@ -12,6 +12,7 @@
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
+const { renderMarkdown } = require("./hrMarkdown");
 
 const TEMPLATE_KEY = "contrat_travail_v1";
 
@@ -148,6 +149,8 @@ const RAW_KEYS = new Set([
   "company.signature",
   "company.stamp",
   "fonts.css",
+  // Rendered via renderMarkdown (escape-first — XSS-safe)
+  "mission_description_html",
 ]);
 
 const FONTS_DIR = path.join(__dirname, "../templates/fonts");
@@ -264,12 +267,28 @@ function toIsoDateString(value) {
  * formatting happens in buildContractValues). Immutable after generation.
  * @param {{ employee: object, company: object|null, contractDate: string }} input
  */
-function buildContractSnapshot({ employee, company, contractDate, type = "contrat" }) {
+function buildContractSnapshot({
+  employee,
+  company,
+  contractDate,
+  type = "contrat",
+  signer = null,
+}) {
   const c = company || {};
   const cfg = documentTypeConfig(type) || DOCUMENT_TYPES.contrat;
   return {
     template_key: cfg.templateKey,
     contract_date: contractDate,
+    // Admin who generates the contract — their « Mon profil » signature and
+    // stamp take precedence over the company-wide ones in the employer block.
+    signer: signer
+      ? {
+          name: signer.name ?? null,
+          fonction: signer.fonction ?? null,
+          signature_base64: signer.signature_base64 ?? null,
+          stamp_base64: signer.stamp_base64 ?? null,
+        }
+      : null,
     employee: {
       id: employee.id,
       full_name: employee.full_name ?? null,
@@ -387,6 +406,8 @@ function buildContractValues(snapshot) {
     contract_start_date: formatDateFr(e.contract_start_date),
     contract_end_date: formatDateFr(e.contract_end_date) ?? "—",
     mission_description: e.mission_description,
+    // Multi-line missions keep their structure: paragraphs + '*'/'-' bullets
+    mission_description_html: renderMarkdown(e.mission_description || ""),
     work_schedule: e.work_schedule,
     "contract.date": formatDateFr(snapshot.contract_date),
     "fonts.css": fontFaceCss(),
@@ -397,8 +418,14 @@ function buildContractValues(snapshot) {
     "company.signer_name": companyField(c, "signer_name"),
     "company.signer_role": companyField(c, "signer_role"),
     "employee.signature": SIGNATURE_SLOT,
-    "company.signature": imageTag(c.signature_base64, "Signature employeur"),
-    "company.stamp": imageTag(c.stamp_base64, "Cachet"),
+    "company.signature": imageTag(
+      snapshot.signer?.signature_base64 || c.signature_base64,
+      "Signature employeur"
+    ),
+    "company.stamp": imageTag(
+      snapshot.signer?.stamp_base64 || c.stamp_base64,
+      "Cachet"
+    ),
   };
 }
 
