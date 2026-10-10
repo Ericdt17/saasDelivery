@@ -12,6 +12,7 @@ const merchantTermsRouter = require("./routes/merchantTerms");
 const hrRouter = require("./routes/hr");
 const settingsRouter = require("./routes/settings");
 const opsReportsRouter = require("./routes/opsReports");
+const companyExpensesRouter = require("./routes/companyExpenses");
 const errorHandler = require("./middleware/errorHandler");
 
 const app = express();
@@ -136,6 +137,7 @@ app.use("/api/v1/merchant-terms", merchantTermsRouter);
 app.use("/api/v1/hr", hrRouter);
 app.use("/api/v1/settings", settingsRouter);
 app.use("/api/v1/ops-reports", opsReportsRouter);
+app.use("/api/v1/expenses", companyExpensesRouter);
 
 // Health check endpoint
 app.get("/api/v1/health", async (req, res) => {

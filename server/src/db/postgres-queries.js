@@ -1489,6 +1489,121 @@ function createPostgresQueries(pool) {
   }
 
   // -------------------------------------------------------------------------
+  // Dépenses générales (company_expenses) — saisies dashboard, hors API ops
+  // -------------------------------------------------------------------------
+
+  // Dates cast to text: pg returns DATE as a JS Date at local midnight,
+  // which shifts by one day once serialised to ISO/JSON (UTC+1 → 08-31).
+  const COMPANY_EXPENSE_COLUMNS = `
+    id, label, category, amount,
+    expense_date::text AS expense_date,
+    effective_month::text AS effective_month,
+    notes, source, created_by, created_at, updated_at
+  `;
+
+  async function listCompanyExpenses({ year, month }) {
+    const first = `${year}-${String(month).padStart(2, "0")}-01`;
+    const result = await pool.query(
+      `SELECT ${COMPANY_EXPENSE_COLUMNS}
+       FROM company_expenses
+       WHERE effective_month = $1::date
+       ORDER BY expense_date DESC, id DESC`,
+      [first]
+    );
+    return result.rows;
+  }
+
+  async function getCompanyExpenseById(id) {
+    const result = await pool.query(
+      `SELECT ${COMPANY_EXPENSE_COLUMNS}
+       FROM company_expenses WHERE id = $1`,
+      [id]
+    );
+    return result.rows[0] || null;
+  }
+
+  async function createCompanyExpense({
+    label,
+    category,
+    amount,
+    expense_date,
+    effective_month,
+    notes = null,
+    created_by = null,
+  }) {
+    const result = await pool.query(
+      `INSERT INTO company_expenses
+         (label, category, amount, expense_date, effective_month, notes, created_by)
+       VALUES ($1, $2, $3, $4::date, $5::date, $6, $7)
+       RETURNING ${COMPANY_EXPENSE_COLUMNS}`,
+      [label, category, amount, expense_date, effective_month, notes, created_by]
+    );
+    return result.rows[0] || null;
+  }
+
+  async function updateCompanyExpense(id, updates = {}) {
+    const allowed = [
+      "label",
+      "category",
+      "amount",
+      "expense_date",
+      "effective_month",
+      "notes",
+    ];
+    const fields = [];
+    const values = [];
+    let i = 1;
+    for (const [key, value] of Object.entries(updates)) {
+      if (!allowed.includes(key) || value === undefined) continue;
+      const cast = key === "expense_date" || key === "effective_month" ? "::date" : "";
+      fields.push(`${key} = $${i++}${cast}`);
+      values.push(value);
+    }
+    if (!fields.length) return getCompanyExpenseById(id);
+    fields.push("updated_at = NOW()");
+    values.push(id);
+    const result = await pool.query(
+      `UPDATE company_expenses SET ${fields.join(", ")} WHERE id = $${i}
+       RETURNING ${COMPANY_EXPENSE_COLUMNS}`,
+      values
+    );
+    return result.rows[0] || null;
+  }
+
+  /** Hard delete (choix produit : vraie suppression). */
+  async function deleteCompanyExpense(id) {
+    const result = await pool.query(
+      `DELETE FROM company_expenses WHERE id = $1 RETURNING id`,
+      [id]
+    );
+    return result.rows[0] || null;
+  }
+
+  async function summarizeCompanyExpenses({ year, month }) {
+    const first = `${year}-${String(month).padStart(2, "0")}-01`;
+    const result = await pool.query(
+      `SELECT category,
+              COUNT(*)::int AS count,
+              COALESCE(SUM(amount), 0)::bigint AS total
+       FROM company_expenses
+       WHERE effective_month = $1::date
+       GROUP BY category
+       ORDER BY total DESC`,
+      [first]
+    );
+    const byCategory = result.rows.map((r) => ({
+      category: r.category,
+      count: r.count,
+      total: Number(r.total),
+    }));
+    return {
+      total: byCategory.reduce((s, r) => s + r.total, 0),
+      count: byCategory.reduce((s, r) => s + r.count, 0),
+      by_category: byCategory,
+    };
+  }
+
+  // -------------------------------------------------------------------------
   // Company documents (règlement intérieur) — versions + acknowledgements
   // -------------------------------------------------------------------------
 
@@ -1825,6 +1940,12 @@ function createPostgresQueries(pool) {
     getHrContractByToken,
     updateHrContract,
     cancelOpenHrContracts,
+    listCompanyExpenses,
+    getCompanyExpenseById,
+    createCompanyExpense,
+    updateCompanyExpense,
+    deleteCompanyExpense,
+    summarizeCompanyExpenses,
     listCompanyDocuments,
     getCompanyDocumentById,
     createCompanyDocument,
