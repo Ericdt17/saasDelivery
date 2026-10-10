@@ -8,6 +8,7 @@ const { z } = require("zod");
 const {
   getEmployeeById,
   getCompanySettings,
+  getAgencyById,
   createHrContract,
   listHrContractsByEmployee,
   getHrContractById,
@@ -175,8 +176,26 @@ async function generateEmployeeContract(req, res, next) {
     const typeConfig = documentTypeConfig(type);
 
     const company = await getCompanySettings();
+    // « Mon profil » of the generating admin — personal signature/stamp
+    // override the company-wide ones in the employer block (like payslips).
+    let signer = null;
+    if (req.user?.userId != null) {
+      try {
+        const profile = await getAgencyById(req.user.userId);
+        if (profile) {
+          signer = {
+            name: profile.name,
+            fonction: profile.fonction,
+            signature_base64: profile.signature_base64,
+            stamp_base64: profile.stamp_base64,
+          };
+        }
+      } catch {
+        /* profile stamp is optional — fall back to company settings */
+      }
+    }
     const contractDate = getDoualaDateString(new Date());
-    const snapshot = buildContractSnapshot({ employee, company, contractDate, type });
+    const snapshot = buildContractSnapshot({ employee, company, contractDate, type, signer });
 
     const missing = missingContractFields(snapshot.employee, type);
     if (missing.length) {

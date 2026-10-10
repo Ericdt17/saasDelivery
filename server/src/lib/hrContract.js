@@ -267,12 +267,28 @@ function toIsoDateString(value) {
  * formatting happens in buildContractValues). Immutable after generation.
  * @param {{ employee: object, company: object|null, contractDate: string }} input
  */
-function buildContractSnapshot({ employee, company, contractDate, type = "contrat" }) {
+function buildContractSnapshot({
+  employee,
+  company,
+  contractDate,
+  type = "contrat",
+  signer = null,
+}) {
   const c = company || {};
   const cfg = documentTypeConfig(type) || DOCUMENT_TYPES.contrat;
   return {
     template_key: cfg.templateKey,
     contract_date: contractDate,
+    // Admin who generates the contract — their « Mon profil » signature and
+    // stamp take precedence over the company-wide ones in the employer block.
+    signer: signer
+      ? {
+          name: signer.name ?? null,
+          fonction: signer.fonction ?? null,
+          signature_base64: signer.signature_base64 ?? null,
+          stamp_base64: signer.stamp_base64 ?? null,
+        }
+      : null,
     employee: {
       id: employee.id,
       full_name: employee.full_name ?? null,
@@ -402,8 +418,14 @@ function buildContractValues(snapshot) {
     "company.signer_name": companyField(c, "signer_name"),
     "company.signer_role": companyField(c, "signer_role"),
     "employee.signature": SIGNATURE_SLOT,
-    "company.signature": imageTag(c.signature_base64, "Signature employeur"),
-    "company.stamp": imageTag(c.stamp_base64, "Cachet"),
+    "company.signature": imageTag(
+      snapshot.signer?.signature_base64 || c.signature_base64,
+      "Signature employeur"
+    ),
+    "company.stamp": imageTag(
+      snapshot.signer?.stamp_base64 || c.stamp_base64,
+      "Cachet"
+    ),
   };
 }
 

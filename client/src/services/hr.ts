@@ -55,6 +55,9 @@ export interface HrEmployee {
   is_active: boolean;
   is_enrolled: boolean;
   enrolled_at: string | null;
+  /** Latest work-contract / NDA status (roster list only). */
+  contract_status?: HrContractStatus | null;
+  nda_status?: HrContractStatus | null;
   created_at: string;
   updated_at: string;
 }
