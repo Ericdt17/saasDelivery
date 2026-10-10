@@ -850,6 +850,9 @@ async function getEmployeePayslipPdf(req, res, next) {
     }
 
     res.setHeader("Content-Type", "application/pdf");
+    // no-store: payslip content changes with attendance and settings — a
+    // cached response would show stale amounts or branding.
+    res.setHeader("Cache-Control", "no-store");
     res.setHeader(
       "Content-Disposition",
       `${download ? "attachment" : "inline"}; filename="${result.fileName}"`
@@ -1015,6 +1018,7 @@ async function downloadPayslipByCode(req, res, next) {
     }
 
     res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Cache-Control", "no-store");
     res.setHeader(
       "Content-Disposition",
       `attachment; filename="${result.fileName}"`

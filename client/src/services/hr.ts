@@ -178,7 +178,7 @@ async function fetchPayslipPdfBlob(
   params: { month: number; year: number; download?: boolean; fileName?: string }
 ): Promise<{ blob: Blob; fileName: string }> {
   const url = getPayslipPdfUrl(employeeId, params);
-  const response = await fetch(url, { credentials: "include" });
+  const response = await fetch(url, { credentials: "include", cache: "no-store" });
   if (!response.ok) {
     let message = `HTTP ${response.status}`;
     try {
@@ -394,7 +394,8 @@ async function fetchContractPdfBlob(
 ): Promise<{ blob: Blob; fileName: string }> {
   const qs = params?.download ? "?download=true" : "";
   const url = buildApiUrl(`${BASE}/contracts/${contractId}/document.pdf${qs}`);
-  const response = await fetch(url, { credentials: "include" });
+  // no-store: the URL is stable but the PDF changes once the employee signs.
+  const response = await fetch(url, { credentials: "include", cache: "no-store" });
   if (!response.ok) {
     let message = `HTTP ${response.status}`;
     try {
