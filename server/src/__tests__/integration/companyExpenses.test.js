@@ -214,3 +214,41 @@ describe('receipt (justificatif image)', () => {
     expect(mockUpdateCompanyExpense).toHaveBeenCalledWith(1, { receipt_base64: null });
   });
 });
+
+describe('catégorie « autre » — note obligatoire', () => {
+  const base = {
+    label: 'Divers',
+    category: 'autre',
+    amount: 5000,
+    expense_date: '2026-10-10',
+    effective_month: '2026-10-01',
+  };
+
+  it('rejette une dépense « autre » sans note', async () => {
+    const res = await request(app)
+      .post('/api/v1/expenses')
+      .set('Authorization', `Bearer ${superToken}`)
+      .send(base);
+    expect(res.status).toBe(400);
+    expect(mockCreateCompanyExpense).not.toHaveBeenCalled();
+  });
+
+  it('accepte une dépense « autre » avec note', async () => {
+    mockCreateCompanyExpense.mockResolvedValue({ ...expenseRow, category: 'autre' });
+    const res = await request(app)
+      .post('/api/v1/expenses')
+      .set('Authorization', `Bearer ${superToken}`)
+      .send({ ...base, notes: 'Achat de cartons pour le stock' });
+    expect(res.status).toBe(201);
+  });
+
+  it('bloque un passage en « autre » via PATCH si la note reste vide', async () => {
+    mockGetCompanyExpenseById.mockResolvedValue({ ...expenseRow, notes: null });
+    const res = await request(app)
+      .patch('/api/v1/expenses/1')
+      .set('Authorization', `Bearer ${superToken}`)
+      .send({ category: 'autre' });
+    expect(res.status).toBe(400);
+    expect(mockUpdateCompanyExpense).not.toHaveBeenCalled();
+  });
+});

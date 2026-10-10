@@ -252,12 +252,14 @@ export default function ExpensesPage() {
   }
 
   const amountNumber = Number(form.amount);
+  const noteRequired = form.category === "autre";
   const formValid =
     form.label.trim().length > 0 &&
     form.category !== "" &&
     Number.isInteger(amountNumber) &&
     amountNumber >= 0 &&
-    /^\d{4}-\d{2}-\d{2}$/.test(form.expense_date);
+    /^\d{4}-\d{2}-\d{2}$/.test(form.expense_date) &&
+    (!noteRequired || form.notes.trim().length > 0);
 
   async function handleSubmit() {
     if (!formValid || form.category === "") return;
@@ -621,14 +623,27 @@ export default function ExpensesPage() {
                   )}
                 </SectionCard>
 
-                <SectionCard step={4} icon={FileText} title="Notes">
+                <SectionCard
+                  step={4}
+                  icon={FileText}
+                  title={noteRequired ? "Notes (obligatoire)" : "Notes"}
+                >
                   <Textarea
                     rows={3}
                     value={form.notes}
                     onChange={(e) => patch({ notes: e.target.value })}
                     className="text-sm min-h-[72px]"
-                    placeholder="Référence facture, précisions…"
+                    placeholder={
+                      noteRequired
+                        ? "Précisez la nature de la dépense (obligatoire pour « Autre »)"
+                        : "Référence facture, précisions…"
+                    }
                   />
+                  {noteRequired && form.notes.trim().length === 0 ? (
+                    <p className="text-[11px] text-orange-600">
+                      Une note est obligatoire pour la catégorie « Autre ».
+                    </p>
+                  ) : null}
                 </SectionCard>
               </div>
             </div>

@@ -54,7 +54,7 @@ const receiptSchema = z.preprocess(
     .optional()
 );
 
-const createExpenseSchema = z.object({
+const expenseBaseSchema = z.object({
   label: z.string().trim().min(1).max(200),
   category: z.enum(CATEGORIES),
   amount: z.number().int().min(0),
@@ -67,7 +67,20 @@ const createExpenseSchema = z.object({
   receipt_base64: receiptSchema,
 });
 
-const patchExpenseSchema = createExpenseSchema.partial();
+const NOTE_REQUIRED_MSG =
+  "Une note est obligatoire pour la catégorie « Autre » (précisez la dépense)";
+
+const createExpenseSchema = expenseBaseSchema.superRefine((d, ctx) => {
+  if (d.category === "autre" && !(d.notes && d.notes.trim())) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["notes"],
+      message: NOTE_REQUIRED_MSG,
+    });
+  }
+});
+
+const patchExpenseSchema = expenseBaseSchema.partial();
 
 function parseId(value) {
   const id = Number(value);
@@ -149,6 +162,16 @@ async function patchExpenseHandler(req, res, next) {
     const existing = await getCompanyExpenseById(id);
     if (!existing) {
       return res.status(404).json({ success: false, error: "Expense not found" });
+    }
+    const finalCategory = parsed.data.category ?? existing.category;
+    const finalNotes =
+      "notes" in parsed.data ? parsed.data.notes : existing.notes;
+    if (finalCategory === "autre" && !(finalNotes && String(finalNotes).trim())) {
+      return res.status(400).json({
+        success: false,
+        error: "Validation failed",
+        message: NOTE_REQUIRED_MSG,
+      });
     }
     const updated = await updateCompanyExpense(id, parsed.data);
     return res.json({ success: true, data: updated });
