@@ -98,6 +98,7 @@ describe('/api/v1/expenses', () => {
       expense_date: '2026-10-05',
       effective_month: '2026-09-01',
       notes: null,
+      receipt_base64: null,
       created_by: 99,
     });
   });
@@ -154,5 +155,62 @@ describe('/api/v1/expenses', () => {
       .delete('/api/v1/expenses/999')
       .set('Authorization', `Bearer ${superToken}`);
     expect(missing.status).toBe(404);
+  });
+});
+
+describe('receipt (justificatif image)', () => {
+  const RECEIPT = `data:image/jpeg;base64,${'A'.repeat(400)}`;
+
+  it('stores a valid receipt image on create', async () => {
+    mockCreateCompanyExpense.mockResolvedValue({ ...expenseRow, has_receipt: true });
+    const res = await request(app)
+      .post('/api/v1/expenses')
+      .set('Authorization', `Bearer ${superToken}`)
+      .send({
+        label: 'Loyer',
+        category: 'loyer',
+        amount: 1000,
+        expense_date: '2026-10-10',
+        effective_month: '2026-10-01',
+        receipt_base64: RECEIPT,
+      });
+    expect(res.status).toBe(201);
+    expect(mockCreateCompanyExpense.mock.calls[0][0].receipt_base64).toBe(RECEIPT);
+  });
+
+  it('rejects a non-image receipt', async () => {
+    const res = await request(app)
+      .post('/api/v1/expenses')
+      .set('Authorization', `Bearer ${superToken}`)
+      .send({
+        label: 'Loyer',
+        category: 'loyer',
+        amount: 1000,
+        expense_date: '2026-10-10',
+        effective_month: '2026-10-01',
+        receipt_base64: 'data:application/pdf;base64,AAAA',
+      });
+    expect(res.status).toBe(400);
+  });
+
+  it('returns the full receipt via GET /:id and can remove it via PATCH', async () => {
+    mockGetCompanyExpenseById.mockResolvedValue({
+      ...expenseRow,
+      has_receipt: true,
+      receipt_base64: RECEIPT,
+    });
+    const res = await request(app)
+      .get('/api/v1/expenses/1')
+      .set('Authorization', `Bearer ${superToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.data.receipt_base64).toBe(RECEIPT);
+
+    mockUpdateCompanyExpense.mockResolvedValue({ ...expenseRow, has_receipt: false });
+    const patched = await request(app)
+      .patch('/api/v1/expenses/1')
+      .set('Authorization', `Bearer ${superToken}`)
+      .send({ receipt_base64: null });
+    expect(patched.status).toBe(200);
+    expect(mockUpdateCompanyExpense).toHaveBeenCalledWith(1, { receipt_base64: null });
   });
 });

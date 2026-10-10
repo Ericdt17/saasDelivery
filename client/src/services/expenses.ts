@@ -48,6 +48,10 @@ export interface CompanyExpense {
   /** 1er du mois d'imputation (YYYY-MM-01). */
   effective_month: string;
   notes: string | null;
+  /** Justificatif présent (l'image complète vient de getExpense). */
+  has_receipt?: boolean;
+  /** Image data URL — uniquement via getExpense(id). */
+  receipt_base64?: string | null;
   source: "manual" | "system";
   created_by: number | null;
   created_at: string;
@@ -67,6 +71,8 @@ export interface CreateExpensePayload {
   expense_date: string;
   effective_month: string;
   notes?: string | null;
+  /** Image data URL (png/jpeg/webp) ; null pour retirer le justificatif. */
+  receipt_base64?: string | null;
 }
 
 export async function listExpenses(params: {
@@ -77,6 +83,11 @@ export async function listExpenses(params: {
     `${BASE}?year=${params.year}&month=${params.month}`
   );
   return unwrap(res, "Impossible de charger les dépenses");
+}
+
+export async function getExpense(id: number): Promise<CompanyExpense> {
+  const res = await apiGet<CompanyExpense>(`${BASE}/${id}`);
+  return unwrap(res, "Impossible de charger la dépense");
 }
 
 export async function createExpense(

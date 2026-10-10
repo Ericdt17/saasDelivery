@@ -53,7 +53,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-function SectionCard({
+export function SectionCard({
   step,
   icon: Icon,
   title,
@@ -82,7 +82,7 @@ function SectionCard({
   );
 }
 
-function Field({
+export function Field({
   label,
   htmlFor,
   children,

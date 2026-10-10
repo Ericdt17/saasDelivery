@@ -14,6 +14,7 @@ router.use(requireSuperAdmin);
 router.get("/", controller.listExpensesHandler);
 router.post("/", controller.createExpenseHandler);
 router.get("/summary", controller.summaryHandler);
+router.get("/:id", controller.getExpenseHandler);
 router.patch("/:id", controller.patchExpenseHandler);
 router.delete("/:id", controller.deleteExpenseHandler);
 

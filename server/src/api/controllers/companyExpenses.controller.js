@@ -41,6 +41,19 @@ const effectiveMonthSchema = z
   .string()
   .regex(/^\d{4}-\d{2}-01$/, "Expected YYYY-MM-01");
 
+/** Justificatif image (data URL), ~2 Mo max une fois encodé. */
+const receiptSchema = z.preprocess(
+  (v) => (v === "" || v === undefined ? undefined : v),
+  z
+    .string()
+    .regex(/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/, {
+      message: "Image PNG, JPEG ou WebP attendue",
+    })
+    .max(2_800_000, "Image trop lourde (2 Mo max)")
+    .nullable()
+    .optional()
+);
+
 const createExpenseSchema = z.object({
   label: z.string().trim().min(1).max(200),
   category: z.enum(CATEGORIES),
@@ -51,6 +64,7 @@ const createExpenseSchema = z.object({
     (v) => (v === "" || v === undefined ? null : v),
     z.string().trim().max(2000).nullable().optional()
   ),
+  receipt_base64: receiptSchema,
 });
 
 const patchExpenseSchema = createExpenseSchema.partial();
@@ -93,9 +107,26 @@ async function createExpenseHandler(req, res, next) {
     }
     const expense = await createCompanyExpense({
       ...parsed.data,
+      receipt_base64: parsed.data.receipt_base64 ?? null,
       created_by: req.user?.userId ?? null,
     });
     return res.status(201).json({ success: true, data: expense });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function getExpenseHandler(req, res, next) {
+  try {
+    const id = parseId(req.params.id);
+    if (!id) {
+      return res.status(400).json({ success: false, error: "Invalid id" });
+    }
+    const expense = await getCompanyExpenseById(id);
+    if (!expense) {
+      return res.status(404).json({ success: false, error: "Expense not found" });
+    }
+    return res.json({ success: true, data: expense });
   } catch (err) {
     next(err);
   }
@@ -162,6 +193,7 @@ async function summaryHandler(req, res, next) {
 module.exports = {
   CATEGORIES,
   listExpensesHandler,
+  getExpenseHandler,
   createExpenseHandler,
   patchExpenseHandler,
   deleteExpenseHandler,

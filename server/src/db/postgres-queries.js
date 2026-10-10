@@ -1494,11 +1494,14 @@ function createPostgresQueries(pool) {
 
   // Dates cast to text: pg returns DATE as a JS Date at local midnight,
   // which shifts by one day once serialised to ISO/JSON (UTC+1 → 08-31).
+  // receipt_base64 is heavy — lists expose has_receipt only; the full image
+  // comes from getCompanyExpenseById.
   const COMPANY_EXPENSE_COLUMNS = `
     id, label, category, amount,
     expense_date::text AS expense_date,
     effective_month::text AS effective_month,
-    notes, source, created_by, created_at, updated_at
+    notes, source, created_by, created_at, updated_at,
+    (receipt_base64 IS NOT NULL) AS has_receipt
   `;
 
   async function listCompanyExpenses({ year, month }) {
@@ -1515,7 +1518,7 @@ function createPostgresQueries(pool) {
 
   async function getCompanyExpenseById(id) {
     const result = await pool.query(
-      `SELECT ${COMPANY_EXPENSE_COLUMNS}
+      `SELECT ${COMPANY_EXPENSE_COLUMNS}, receipt_base64
        FROM company_expenses WHERE id = $1`,
       [id]
     );
@@ -1529,14 +1532,17 @@ function createPostgresQueries(pool) {
     expense_date,
     effective_month,
     notes = null,
+    receipt_base64 = null,
     created_by = null,
   }) {
     const result = await pool.query(
       `INSERT INTO company_expenses
-         (label, category, amount, expense_date, effective_month, notes, created_by)
-       VALUES ($1, $2, $3, $4::date, $5::date, $6, $7)
+         (label, category, amount, expense_date, effective_month, notes,
+          receipt_base64, created_by)
+       VALUES ($1, $2, $3, $4::date, $5::date, $6, $7, $8)
        RETURNING ${COMPANY_EXPENSE_COLUMNS}`,
-      [label, category, amount, expense_date, effective_month, notes, created_by]
+      [label, category, amount, expense_date, effective_month, notes,
+       receipt_base64, created_by]
     );
     return result.rows[0] || null;
   }
@@ -1549,6 +1555,7 @@ function createPostgresQueries(pool) {
       "expense_date",
       "effective_month",
       "notes",
+      "receipt_base64",
     ];
     const fields = [];
     const values = [];

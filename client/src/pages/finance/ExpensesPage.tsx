@@ -1,10 +1,21 @@
 /**
  * Dépenses générales — saisies manuelles (loyer, énergie, matériel…),
  * imputées à un mois et déduites du CA dans les Rapports (super_admin).
+ * Justificatif image optionnel ; modal au layout « fiche employé ».
  */
 
 import { useMemo, useState } from "react";
-import { Receipt, Plus, Pencil, Trash2 } from "lucide-react";
+import {
+  Receipt,
+  Plus,
+  Pencil,
+  Trash2,
+  CalendarDays,
+  FileText,
+  Paperclip,
+  X,
+} from "lucide-react";
+import { toast } from "sonner";
 import {
   useExpenses,
   useCreateExpense,
@@ -12,11 +23,20 @@ import {
   useDeleteExpense,
 } from "@/hooks/useExpenses";
 import {
+  getExpense,
   EXPENSE_CATEGORY_LABELS,
   type CompanyExpense,
   type ExpenseCategory,
 } from "@/services/expenses";
 import { formatMonthLabelFr } from "@/pages/hr/hrUi";
+import { SectionCard, Field } from "@/pages/hr/EmployeeEditDialog";
+import {
+  FORM_DIALOG_BODY_CLASS,
+  FORM_DIALOG_CLOSE_CLASS,
+  FORM_DIALOG_CONTENT_CLASS,
+  FORM_DIALOG_FOOTER_CLASS,
+  FORM_DIALOG_HEADER_CLASS,
+} from "@/lib/form-dialog-layout";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import {
   getDateRangeForPreset,
@@ -27,7 +47,6 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -41,7 +60,6 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -87,6 +105,34 @@ function todayIso() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+/** Photo de justificatif → data URL JPEG, redimensionnée (max 1400 px). */
+function receiptFileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const max = 1400;
+      const scale = Math.min(1, max / Math.max(img.width, img.height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        reject(new Error("Canvas indisponible"));
+        return;
+      }
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL("image/jpeg", 0.85));
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("Image illisible"));
+    };
+    img.src = url;
+  });
+}
+
 interface FormState {
   label: string;
   category: ExpenseCategory | "";
@@ -94,6 +140,7 @@ interface FormState {
   expense_date: string;
   effective_month: string;
   notes: string;
+  receipt: string | null;
 }
 
 const emptyForm = (effectiveMonth: string): FormState => ({
@@ -103,6 +150,7 @@ const emptyForm = (effectiveMonth: string): FormState => ({
   expense_date: todayIso(),
   effective_month: effectiveMonth,
   notes: "",
+  receipt: null,
 });
 
 export default function ExpensesPage() {
@@ -135,6 +183,11 @@ export default function ExpensesPage() {
   const [editTarget, setEditTarget] = useState<CompanyExpense | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<CompanyExpense | null>(null);
   const [form, setForm] = useState<FormState>(() => emptyForm(currentMonthValue));
+  const [receiptLoading, setReceiptLoading] = useState(false);
+  const [receiptViewer, setReceiptViewer] = useState<{
+    label: string;
+    src: string | null;
+  } | null>(null);
 
   function patch(p: Partial<FormState>) {
     setForm((prev) => ({ ...prev, ...p }));
@@ -155,8 +208,47 @@ export default function ExpensesPage() {
       expense_date: String(row.expense_date).slice(0, 10),
       effective_month: String(row.effective_month).slice(0, 10),
       notes: row.notes ?? "",
+      receipt: null,
     });
     setDialogOpen(true);
+    if (row.has_receipt) {
+      setReceiptLoading(true);
+      getExpense(row.id)
+        .then((full) => patch({ receipt: full.receipt_base64 ?? null }))
+        .catch(() =>
+          toast.error("Impossible de charger le justificatif existant")
+        )
+        .finally(() => setReceiptLoading(false));
+    }
+  }
+
+  async function handleReceiptFile(file: File | undefined) {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Choisissez une image (photo du reçu)");
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error("Image trop lourde (10 Mo max)");
+      return;
+    }
+    try {
+      const dataUrl = await receiptFileToDataUrl(file);
+      patch({ receipt: dataUrl });
+    } catch {
+      toast.error("Impossible de lire cette image");
+    }
+  }
+
+  async function openReceiptViewer(row: CompanyExpense) {
+    setReceiptViewer({ label: row.label, src: null });
+    try {
+      const full = await getExpense(row.id);
+      setReceiptViewer({ label: row.label, src: full.receipt_base64 ?? null });
+    } catch {
+      toast.error("Impossible de charger le justificatif");
+      setReceiptViewer(null);
+    }
   }
 
   const amountNumber = Number(form.amount);
@@ -176,6 +268,7 @@ export default function ExpensesPage() {
       expense_date: form.expense_date,
       effective_month: form.effective_month,
       notes: form.notes.trim() || null,
+      receipt_base64: form.receipt,
     };
     if (editTarget) {
       await updateMutation.mutateAsync({ id: editTarget.id, data: payload });
@@ -265,6 +358,7 @@ export default function ExpensesPage() {
                 <TableHead>Libellé</TableHead>
                 <TableHead>Catégorie</TableHead>
                 <TableHead>Imputation</TableHead>
+                <TableHead>Justificatif</TableHead>
                 <TableHead className="text-right">Montant</TableHead>
                 <TableHead className="text-right w-[110px]">Actions</TableHead>
               </TableRow>
@@ -273,7 +367,7 @@ export default function ExpensesPage() {
               {isLoading ? (
                 Array.from({ length: 3 }).map((_, i) => (
                   <TableRow key={i}>
-                    {Array.from({ length: 6 }).map((__, j) => (
+                    {Array.from({ length: 7 }).map((__, j) => (
                       <TableCell key={j}>
                         <Skeleton className="h-4 w-20" />
                       </TableCell>
@@ -283,7 +377,7 @@ export default function ExpensesPage() {
               ) : expenses.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={6}
+                    colSpan={7}
                     className="p-8 text-center text-muted-foreground"
                   >
                     Aucune dépense imputée à{" "}
@@ -305,7 +399,7 @@ export default function ExpensesPage() {
                       <TableCell className="font-medium">
                         {row.label}
                         {row.notes ? (
-                          <p className="text-xs font-normal text-muted-foreground truncate max-w-[280px]">
+                          <p className="text-xs font-normal text-muted-foreground truncate max-w-[240px]">
                             {row.notes}
                           </p>
                         ) : null}
@@ -317,6 +411,22 @@ export default function ExpensesPage() {
                       </TableCell>
                       <TableCell className="capitalize">
                         {formatMonthLabelFr(ey, em)}
+                      </TableCell>
+                      <TableCell>
+                        {row.has_receipt ? (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 px-2 text-primary"
+                            title="Voir le justificatif"
+                            onClick={() => void openReceiptViewer(row)}
+                          >
+                            <Paperclip className="mr-1 h-3.5 w-3.5" />
+                            Voir
+                          </Button>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
                       </TableCell>
                       <TableCell className="text-right font-medium tabular-nums">
                         {fmtXaf(row.amount)}
@@ -351,109 +461,216 @@ export default function ExpensesPage() {
         </div>
       </div>
 
-      {/* Dialog création / édition */}
+      {/* Dialog création / édition — layout « fiche employé » */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>
+        <DialogContent
+          className={FORM_DIALOG_CONTENT_CLASS}
+          closeClassName={FORM_DIALOG_CLOSE_CLASS}
+        >
+          <div className={FORM_DIALOG_HEADER_CLASS}>
+            <DialogTitle className="text-base font-semibold leading-tight">
               {editTarget ? "Modifier la dépense" : "Ajouter une dépense"}
             </DialogTitle>
-            <DialogDescription>
-              Dépense générale de l’entreprise — elle sera déduite du chiffre
-              d’affaires du mois d’imputation choisi.
+            <DialogDescription className="text-xs text-muted-foreground mt-0.5">
+              Dépense générale — déduite du chiffre d’affaires du mois
+              d’imputation choisi.
             </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="exp-label">Libellé *</Label>
-              <Input
-                id="exp-label"
-                value={form.label}
-                onChange={(e) => patch({ label: e.target.value })}
-                placeholder="Ex. Loyer bureau, facture ENEO…"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label>Catégorie *</Label>
-                <Select
-                  value={form.category || undefined}
-                  onValueChange={(v) => patch({ category: v as ExpenseCategory })}
+          </div>
+          <div className={FORM_DIALOG_BODY_CLASS}>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 lg:gap-4">
+              <div className="flex flex-col gap-2.5">
+                <SectionCard step={1} icon={Receipt} title="Informations">
+                  <Field label="Libellé *" htmlFor="exp-label">
+                    <Input
+                      id="exp-label"
+                      value={form.label}
+                      onChange={(e) => patch({ label: e.target.value })}
+                      className="h-8 text-sm"
+                      placeholder="Ex. Loyer bureau, facture ENEO…"
+                    />
+                  </Field>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Field label="Catégorie *">
+                      <Select
+                        value={form.category || undefined}
+                        onValueChange={(v) =>
+                          patch({ category: v as ExpenseCategory })
+                        }
+                      >
+                        <SelectTrigger className="h-8 text-sm">
+                          <SelectValue placeholder="Choisir" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {CATEGORY_KEYS.map((key) => (
+                            <SelectItem key={key} value={key}>
+                              {EXPENSE_CATEGORY_LABELS[key]}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </Field>
+                    <Field label="Montant (FCFA) *" htmlFor="exp-amount">
+                      <Input
+                        id="exp-amount"
+                        type="number"
+                        inputMode="numeric"
+                        min={0}
+                        value={form.amount}
+                        onChange={(e) => patch({ amount: e.target.value })}
+                        className="h-8 text-sm"
+                      />
+                    </Field>
+                  </div>
+                </SectionCard>
+
+                <SectionCard
+                  step={2}
+                  icon={CalendarDays}
+                  title="Dates & imputation"
                 >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Choisir" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {CATEGORY_KEYS.map((key) => (
-                      <SelectItem key={key} value={key}>
-                        {EXPENSE_CATEGORY_LABELS[key]}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Field label="Date de la dépense *" htmlFor="exp-date">
+                      <Input
+                        id="exp-date"
+                        type="date"
+                        value={form.expense_date}
+                        onChange={(e) => patch({ expense_date: e.target.value })}
+                        className="h-8 text-sm"
+                      />
+                    </Field>
+                    <Field label="Mois d'imputation *">
+                      <Select
+                        value={form.effective_month}
+                        onValueChange={(v) => patch({ effective_month: v })}
+                      >
+                        <SelectTrigger className="h-8 text-sm">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {imputationOptions.map((o) => (
+                            <SelectItem key={o.value} value={o.value}>
+                              <span className="capitalize">{o.label}</span>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </Field>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    La dépense sera déduite du chiffre d’affaires du mois
+                    d’imputation (utile pour les factures reçues en retard).
+                  </p>
+                </SectionCard>
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="exp-amount">Montant (FCFA) *</Label>
-                <Input
-                  id="exp-amount"
-                  type="number"
-                  inputMode="numeric"
-                  min={0}
-                  value={form.amount}
-                  onChange={(e) => patch({ amount: e.target.value })}
-                />
+
+              <div className="flex flex-col gap-2.5">
+                <SectionCard step={3} icon={Paperclip} title="Justificatif (image)">
+                  {receiptLoading ? (
+                    <Skeleton className="h-40 w-full rounded-md" />
+                  ) : form.receipt ? (
+                    <div className="space-y-2">
+                      <div className="relative overflow-hidden rounded-md border bg-background/60">
+                        <img
+                          src={form.receipt}
+                          alt="Justificatif"
+                          className="mx-auto max-h-56 object-contain"
+                        />
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="secondary"
+                          className="absolute right-2 top-2 h-7 w-7"
+                          title="Retirer le justificatif"
+                          onClick={() => patch({ receipt: null })}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      <label className="block">
+                        <span className="text-[11px] text-muted-foreground cursor-pointer underline underline-offset-2">
+                          Remplacer l’image…
+                        </span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) =>
+                            void handleReceiptFile(e.target.files?.[0])
+                          }
+                        />
+                      </label>
+                    </div>
+                  ) : (
+                    <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-md border border-dashed border-border bg-background/60 px-4 py-8 text-center">
+                      <Paperclip className="h-6 w-6 text-muted-foreground" />
+                      <span className="text-sm text-muted-foreground">
+                        Photo du reçu / de la facture
+                      </span>
+                      <span className="text-[11px] text-muted-foreground">
+                        PNG, JPEG ou WebP — cliquez pour choisir
+                      </span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) =>
+                          void handleReceiptFile(e.target.files?.[0])
+                        }
+                      />
+                    </label>
+                  )}
+                </SectionCard>
+
+                <SectionCard step={4} icon={FileText} title="Notes">
+                  <Textarea
+                    rows={3}
+                    value={form.notes}
+                    onChange={(e) => patch({ notes: e.target.value })}
+                    className="text-sm min-h-[72px]"
+                    placeholder="Référence facture, précisions…"
+                  />
+                </SectionCard>
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="exp-date">Date de la dépense *</Label>
-                <Input
-                  id="exp-date"
-                  type="date"
-                  value={form.expense_date}
-                  onChange={(e) => patch({ expense_date: e.target.value })}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Mois d’imputation *</Label>
-                <Select
-                  value={form.effective_month}
-                  onValueChange={(v) => patch({ effective_month: v })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {imputationOptions.map((o) => (
-                      <SelectItem key={o.value} value={o.value}>
-                        <span className="capitalize">{o.label}</span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="exp-notes">Notes</Label>
-              <Textarea
-                id="exp-notes"
-                rows={2}
-                value={form.notes}
-                onChange={(e) => patch({ notes: e.target.value })}
-                placeholder="Référence facture, précisions…"
-              />
             </div>
           </div>
-          <DialogFooter>
+          <div className={FORM_DIALOG_FOOTER_CLASS}>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>
               Annuler
             </Button>
-            <Button disabled={!formValid || saving} onClick={() => void handleSubmit()}>
+            <Button
+              disabled={!formValid || saving || receiptLoading}
+              onClick={() => void handleSubmit()}
+            >
               {saving
                 ? "Enregistrement…"
                 : editTarget
                   ? "Enregistrer"
                   : "Ajouter"}
             </Button>
-          </DialogFooter>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Visionneuse de justificatif */}
+      <Dialog
+        open={receiptViewer != null}
+        onOpenChange={(open) => {
+          if (!open) setReceiptViewer(null);
+        }}
+      >
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Justificatif — {receiptViewer?.label}</DialogTitle>
+          </DialogHeader>
+          {receiptViewer?.src ? (
+            <img
+              src={receiptViewer.src}
+              alt={`Justificatif ${receiptViewer.label}`}
+              className="mx-auto max-h-[70vh] rounded-md object-contain"
+            />
+          ) : (
+            <Skeleton className="h-64 w-full rounded-md" />
+          )}
         </DialogContent>
       </Dialog>
 
@@ -469,7 +686,8 @@ export default function ExpensesPage() {
             <AlertDialogTitle>Supprimer cette dépense ?</AlertDialogTitle>
             <AlertDialogDescription>
               « {deleteTarget?.label} » ({fmtXaf(deleteTarget?.amount)}) sera
-              définitivement supprimée et ne comptera plus dans les rapports.
+              définitivement supprimée — justificatif compris — et ne comptera
+              plus dans les rapports.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
