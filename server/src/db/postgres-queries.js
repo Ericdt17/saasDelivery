@@ -863,7 +863,10 @@ function createPostgresQueries(pool) {
    */
   async function listEmployees(opts = {}) {
     // Latest work-contract / NDA status per employee (for roster filters).
-    const rows = await query(
+    // pool.query directly: the query() helper treats ANY sql containing
+    // "LIMIT 1" (here: inside the subselects) as single-row and would
+    // silently drop every employee but the first.
+    const result = await pool.query(
       `SELECT ${EMPLOYEE_PUBLIC_COLUMNS},
               (SELECT hc.status FROM hr_contracts hc
                 WHERE hc.employee_id = employees.id
@@ -876,8 +879,7 @@ function createPostgresQueries(pool) {
        FROM employees
        ORDER BY created_at DESC`
     );
-    const list = Array.isArray(rows) ? rows : rows ? [rows] : [];
-    return Promise.all(list.map((row) => attachSalaryMeta(row, opts)));
+    return Promise.all(result.rows.map((row) => attachSalaryMeta(row, opts)));
   }
 
   async function getEmployeeById(id, opts = {}) {
