@@ -18,6 +18,7 @@ import JobsPage from "./pages/recruitment/JobsPage";
 import ApplicationsPage from "./pages/recruitment/ApplicationsPage";
 import EmployeesPage from "./pages/hr/EmployeesPage";
 import ReglementPage from "./pages/hr/ReglementPage";
+import ExpensesPage from "./pages/finance/ExpensesPage";
 import EmployeeDetailPage from "./pages/hr/EmployeeDetailPage";
 import AttendancesPage from "./pages/hr/AttendancesPage";
 import OpsReportsPage from "./pages/reports/OpsReportsPage";
@@ -152,6 +153,14 @@ const App = () => (
                 element={
                   <ProtectedRoute requireSuperAdmin>
                     <ReglementPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/depenses"
+                element={
+                  <ProtectedRoute requireSuperAdmin>
+                    <ExpensesPage />
                   </ProtectedRoute>
                 }
               />

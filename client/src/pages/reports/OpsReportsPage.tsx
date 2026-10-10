@@ -30,6 +30,7 @@ import {
   type PayrollByEmployeeResult,
 } from "@/pages/hr/hrUi";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
+import { useExpensesSummary } from "@/hooks/useExpenses";
 import {
   getDateRangeForPreset,
   monthYearFromDateRange,
@@ -127,6 +128,7 @@ function ChiffreAffairesTab({
   expenses,
   payroll,
   payrollMonthLabel,
+  generalExpensesTotal,
   isLoading,
   startDate,
   endDate,
@@ -135,6 +137,8 @@ function ChiffreAffairesTab({
   expenses: ExpenseReport | undefined;
   payroll: PayrollByEmployeeResult | undefined;
   payrollMonthLabel: string;
+  /** Dépenses générales saisies dans le dashboard (mois d'imputation). */
+  generalExpensesTotal: number;
   isLoading: boolean;
   startDate: string;
   endDate: string;
@@ -145,7 +149,8 @@ function ChiffreAffairesTab({
     expenses?.par_charge_type ?? revenue?.expenses_par_type ?? [];
   const salariesTotal = payroll?.estimatedPayroll ?? 0;
   const revenues = revenue?.total_delivery_fees ?? 0;
-  const netRevenue = revenues - expenseTotal - salariesTotal;
+  const netRevenue =
+    revenues - expenseTotal - salariesTotal - generalExpensesTotal;
 
   if (isLoading) return <LoadingBlock rows={4} />;
 
@@ -161,11 +166,12 @@ function ChiffreAffairesTab({
           {fmtXaf(netRevenue)}
         </p>
         <p className="text-xs text-muted-foreground mt-2">
-          Revenus − dépenses − salaires
+          Revenus − dépenses ops (API) − salaires (RH) − dépenses générales
+          (saisies)
         </p>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-xl border bg-card p-4">
           <p className="text-xs text-muted-foreground mb-1">Revenus</p>
           <p className="text-2xl font-semibold tabular-nums">
@@ -176,12 +182,15 @@ function ChiffreAffairesTab({
           </p>
         </div>
         <div className="rounded-xl border bg-card p-4">
-          <p className="text-xs text-muted-foreground mb-1">Dépenses</p>
+          <p className="text-xs text-muted-foreground mb-1">
+            Dépenses ops (API)
+          </p>
           <p className="text-2xl font-semibold tabular-nums">
             {fmtXaf(expenseTotal)}
           </p>
           <p className="text-xs text-muted-foreground mt-1">
-            {expenses?.expense_count ?? revenue?.expense_count ?? 0} lignes
+            {expenses?.expense_count ?? revenue?.expense_count ?? 0} lignes —
+            API livraisons
           </p>
         </div>
         <div className="rounded-xl border bg-card p-4">
@@ -196,6 +205,17 @@ function ChiffreAffairesTab({
             {payroll != null
               ? ` · ${payroll.activeCount} actif${payroll.activeCount !== 1 ? "s" : ""}`
               : ""}
+          </p>
+        </div>
+        <div className="rounded-xl border bg-card p-4">
+          <p className="text-xs text-muted-foreground mb-1">
+            Dépenses générales (saisies)
+          </p>
+          <p className="text-2xl font-semibold tabular-nums">
+            {fmtXaf(generalExpensesTotal)}
+          </p>
+          <p className="text-xs text-muted-foreground mt-1">
+            {payrollMonthLabel} — onglet Dépenses
           </p>
         </div>
       </div>
@@ -242,14 +262,22 @@ function ChiffreAffairesTab({
                   {formatPayrollAmount(payroll?.estimatedPayroll ?? null)}
                 </TableCell>
               </TableRow>
+              <TableRow>
+                <TableCell className="font-medium">
+                  Dépenses générales (saisies dashboard)
+                </TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {fmtXaf(generalExpensesTotal)}
+                </TableCell>
+              </TableRow>
             </TableBody>
             <TableFooter>
               <TableRow>
                 <TableCell className="font-semibold">
-                  Total coûts (dépenses + salaires)
+                  Total coûts (ops + salaires + générales)
                 </TableCell>
                 <TableCell className="text-right font-semibold tabular-nums">
-                  {fmtXaf(expenseTotal + salariesTotal)}
+                  {fmtXaf(expenseTotal + salariesTotal + generalExpensesTotal)}
                 </TableCell>
               </TableRow>
             </TableFooter>
@@ -645,7 +673,7 @@ function SalairesTab({
         </span>
       </p>
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           title="Net estimé"
           value={formatPayrollAmount(estimated)}
@@ -750,6 +778,10 @@ export default function OpsReportsPage() {
     [year, month]
   );
 
+  // Dépenses générales saisies dans l'onglet Dépenses (mois d'imputation)
+  const generalExpensesQuery = useExpensesSummary(year, month);
+  const generalExpensesTotal = generalExpensesQuery.data?.total ?? 0;
+
   const revenueQuery = useQuery({
     queryKey: ["ops-reports", "revenue", startDate, endDate],
     queryFn: () => fetchRevenueReport(startDate, endDate),
@@ -848,6 +880,7 @@ export default function OpsReportsPage() {
                 expenses={expenseQuery.data}
                 payroll={payrollError ? undefined : payroll}
                 payrollMonthLabel={payrollMonthLabel}
+                generalExpensesTotal={generalExpensesTotal}
                 isLoading={caLoading}
                 startDate={startDate}
                 endDate={endDate}
